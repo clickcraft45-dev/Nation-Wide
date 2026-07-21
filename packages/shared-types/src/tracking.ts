@@ -17,8 +17,11 @@ export interface TrackingEventDto {
 
 export interface TrackingResultDto {
   internalTrackingNumber: string;
-  currentStatus: TrackingStatusCode;
+  // null when the shipment exists but no carrier tracking number has been mapped yet
+  currentStatus: TrackingStatusCode | null;
   currentStatusLabel: string;
-  lastUpdated: string; // ISO 8601 — always present, even when served from cache
+  // null when the shipment has never successfully synced; otherwise the last successful sync,
+  // even if this particular response came from a fallback after a failed live call
+  lastUpdated: string | null; // ISO 8601
   events: TrackingEventDto[];
 }

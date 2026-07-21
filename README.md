@@ -49,6 +49,11 @@ defaults to `ICL`) creates an order and auto-creates a linked shipment with a ge
 tracking number (`NW-XXXXXXXXXX`). `GET /api/v1/orders`, `GET /api/v1/orders/:id`,
 `PATCH /api/v1/orders/:id` (status transitions).
 
+Tracking (public, no auth): `GET /api/v1/tracking/:internalTrackingNumber` — cache-first (Redis,
+key `tracking:<internal_id>`), falls back to last-known data on provider failure, returns
+"Tracking not yet available" (200, not an error) if no carrier tracking number is mapped yet.
+Try it locally with the seeded demo shipment: `NW-DEMOTRACK1`.
+
 Note: this machine also runs an unrelated project's Postgres/Redis containers on the default ports
 (5432/6379), so this repo's `docker-compose.yml` maps to 5433/6380 instead. Adjust if that's not the
 case in your environment.
@@ -84,6 +89,13 @@ Phase 4 (Order system) complete: Order module with order-to-shipment linkage —
 validates the customer exists, resolves a shipping provider (defaults to the seeded `ICL` row),
 and auto-creates a `Shipment` with a generated, provider-agnostic internal tracking number.
 
-Next: Phase 5 (Tracking core, built against a stub provider adapter). Phase 6 (real ICL adapter)
-is still blocked on full API details from ICL — see `docs/architecture-research.docx` Section 31
-for the outstanding checklist.
+Phase 5 (Tracking core) complete: cache-first Tracking module (Redis, rule-based TTL — short for
+active shipments, long for `DELIVERED`), a `ShippingProvider` interface + `ProviderAdapterRegistry`
+resolving by `shipping_providers.adapter_class` (the core pattern the whole ICL/DHL/FedEx
+swap-without-rewrite design depends on), and a deterministic `StubShippingProviderAdapter` standing
+in for ICL until Phase 6. Verified end-to-end in a real browser against the live stack (Postgres +
+Redis + NestJS + Next.js), not just via tests.
+
+Next: Phase 6 (real ICL adapter) — still blocked on full API details from ICL (endpoint, auth,
+exact status schema); see `docs/architecture-research.docx` Section 31 for the outstanding
+checklist. Phases 1-5 and 7-11 can proceed in parallel per Section 29.

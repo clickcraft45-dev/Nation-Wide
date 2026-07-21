@@ -38,6 +38,21 @@ class EnvironmentVariables {
   @IsOptional()
   @IsString()
   FRONTEND_URL?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  TRACKING_PROVIDER_TIMEOUT_MS?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  TRACKING_CACHE_TTL_ACTIVE_SECONDS?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  TRACKING_CACHE_TTL_TERMINAL_SECONDS?: number;
 }
 
 export function validateEnv(

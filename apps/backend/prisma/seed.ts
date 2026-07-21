@@ -26,20 +26,89 @@ async function main() {
       : 'Password set from SEED_ADMIN_PASSWORD env var.',
   );
 
-  // Real ICL API details aren't wired up yet (see Section 12/31) — this row lets orders
-  // and shipments reference a provider today, ahead of the real ICLAdapter landing in Phase 6.
+  // Real ICL API details aren't wired up yet (see Section 12/31), so this row points at the
+  // stub adapter for now. Phase 6 flips adapterClass to 'ICLAdapter' once that adapter exists
+  // and is registered — that's the only change needed; no other module touches this.
   const iclProvider = await prisma.shippingProvider.upsert({
     where: { code: 'ICL' },
-    update: {},
+    update: { adapterClass: 'StubShippingProviderAdapter' },
     create: {
       code: 'ICL',
       name: 'ICL',
-      adapterClass: 'ICLAdapter',
+      adapterClass: 'StubShippingProviderAdapter',
       isActive: true,
     },
   });
 
-  console.log(`Seeded shipping provider: ${iclProvider.code} (${iclProvider.name})`);
+  console.log(
+    `Seeded shipping provider: ${iclProvider.code} (adapter: ${iclProvider.adapterClass})`,
+  );
+
+  const TRACKING_STATUSES: Array<{ code: string; displayLabel: string }> = [
+    { code: 'PICKED_UP', displayLabel: 'Picked Up' },
+    { code: 'IN_TRANSIT', displayLabel: 'In Transit' },
+    { code: 'OUT_FOR_DELIVERY', displayLabel: 'Out for Delivery' },
+    { code: 'DELIVERED', displayLabel: 'Delivered' },
+    { code: 'EXCEPTION', displayLabel: 'Delivery Exception' },
+  ];
+
+  for (const status of TRACKING_STATUSES) {
+    await prisma.trackingStatus.upsert({
+      where: { code: status.code },
+      update: { displayLabel: status.displayLabel },
+      create: status,
+    });
+  }
+  console.log(`Seeded ${TRACKING_STATUSES.length} canonical tracking statuses.`);
+
+  // Local-dev-only demo data so the /track page has a real tracking number to look up.
+  const demoCustomer = await prisma.customer.upsert({
+    where: { phone: '+911234500000' },
+    update: {},
+    create: {
+      name: 'Demo Customer',
+      phone: '+911234500000',
+      consentSource: 'staff_entry',
+      consentGivenAt: new Date(),
+    },
+  });
+
+  const demoOrder = await prisma.order.upsert({
+    where: { id: '00000000-0000-0000-0000-000000000001' },
+    update: {},
+    create: {
+      id: '00000000-0000-0000-0000-000000000001',
+      customerId: demoCustomer.id,
+      status: 'CONFIRMED',
+    },
+  });
+
+  const demoInternalTrackingNumber = 'NW-DEMOTRACK1';
+  const demoShipment = await prisma.shipment.upsert({
+    where: { internalTrackingNumber: demoInternalTrackingNumber },
+    update: {},
+    create: {
+      orderId: demoOrder.id,
+      providerId: iclProvider.id,
+      internalTrackingNumber: demoInternalTrackingNumber,
+    },
+  });
+
+  await prisma.externalTrackingNumber.upsert({
+    where: {
+      // no natural unique constraint on (shipmentId, providerId) alone, so key off a fixed id
+      id: '00000000-0000-0000-0000-000000000002',
+    },
+    update: {},
+    create: {
+      id: '00000000-0000-0000-0000-000000000002',
+      shipmentId: demoShipment.id,
+      providerId: iclProvider.id,
+      externalTrackingNumber: 'ICL-DEMO-000001',
+    },
+  });
+
+  console.log(`Seeded demo shipment for local testing: ${demoInternalTrackingNumber}`);
 }
 
 main()

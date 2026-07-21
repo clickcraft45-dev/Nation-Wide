@@ -7,9 +7,11 @@ export function TrackingTimeline({ result }: { result: TrackingResultDto }) {
         <p className="text-sm text-zinc-500">Tracking number</p>
         <p className="font-mono text-lg">{result.internalTrackingNumber}</p>
         <p className="mt-2 text-sm font-medium">{result.currentStatusLabel}</p>
-        <p className="text-xs text-zinc-500">
-          Last updated {new Date(result.lastUpdated).toLocaleString()}
-        </p>
+        {result.lastUpdated && (
+          <p className="text-xs text-zinc-500">
+            Last updated {new Date(result.lastUpdated).toLocaleString()}
+          </p>
+        )}
       </div>
       <ol className="space-y-3">
         {result.events.map((event, i) => (
