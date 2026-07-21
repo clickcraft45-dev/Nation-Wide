@@ -44,6 +44,11 @@ Customers (staff/admin only): `POST /api/v1/customers` (name, phone in E.164, op
 email/address, required `consentSource`), `GET /api/v1/customers`, `GET /api/v1/customers/:id`,
 `PATCH /api/v1/customers/:id`.
 
+Orders (staff/admin only): `POST /api/v1/orders` (`customerId`, optional `providerCode` —
+defaults to `ICL`) creates an order and auto-creates a linked shipment with a generated internal
+tracking number (`NW-XXXXXXXXXX`). `GET /api/v1/orders`, `GET /api/v1/orders/:id`,
+`PATCH /api/v1/orders/:id` (status transitions).
+
 Note: this machine also runs an unrelated project's Postgres/Redis containers on the default ports
 (5432/6379), so this repo's `docker-compose.yml` maps to 5433/6380 instead. Adjust if that's not the
 case in your environment.
@@ -75,5 +80,10 @@ Phase 3 (Customer system) complete: Customer CRUD (staff/admin only), E.164 phon
 DPDP-compliant consent capture (`consentGivenAt`/`consentSource` stamped server-side at creation,
 never client-supplied).
 
-Next: Phase 4 (Order system). Phase 6 (real ICL adapter) is still blocked on full API details from
-ICL — see `docs/architecture-research.docx` Section 31 for the outstanding checklist.
+Phase 4 (Order system) complete: Order module with order-to-shipment linkage — creating an order
+validates the customer exists, resolves a shipping provider (defaults to the seeded `ICL` row),
+and auto-creates a `Shipment` with a generated, provider-agnostic internal tracking number.
+
+Next: Phase 5 (Tracking core, built against a stub provider adapter). Phase 6 (real ICL adapter)
+is still blocked on full API details from ICL — see `docs/architecture-research.docx` Section 31
+for the outstanding checklist.
