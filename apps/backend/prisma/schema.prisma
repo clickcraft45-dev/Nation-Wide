@@ -185,12 +185,13 @@ model ApiRequestLog {
 // ---------------------------------------------------------------------------
 
 model AdminUser {
-  id           String    @id @default(uuid())
-  email        String    @unique
-  passwordHash String    @map("password_hash")
-  role         AdminRole @default(STAFF)
-  createdAt    DateTime  @default(now()) @map("created_at")
-  updatedAt    DateTime  @updatedAt @map("updated_at")
+  id                  String    @id @default(uuid())
+  email               String    @unique
+  passwordHash        String    @map("password_hash")
+  role                AdminRole @default(STAFF)
+  hashedRefreshToken  String?   @map("hashed_refresh_token")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
 
   auditLogs AuditLog[]
 

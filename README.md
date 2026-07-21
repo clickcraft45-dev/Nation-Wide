@@ -24,13 +24,21 @@ npm install
 # 3. set up env files
 cp apps/backend/.env.example apps/backend/.env
 
-# 4. run the initial migration (already applied if you're continuing this repo)
+# 4. run migrations (already applied if you're continuing this repo)
 cd apps/backend && npx prisma migrate dev
 
-# 5. run both apps
+# 5. seed a dev admin user (admin@nationwide.dev / ChangeMe123! by default)
+npm run db:seed
+
+# 6. run both apps
 npm run dev:backend    # http://localhost:4000
 npm run dev:frontend   # http://localhost:3000
 ```
+
+All backend routes are versioned under `/api/v1`. Auth: `POST /api/v1/auth/login` (email/password,
+returns a short-lived access token and sets an httpOnly refresh cookie), `POST /api/v1/auth/refresh`,
+`POST /api/v1/auth/logout`. RBAC via `@Roles(...)` + `JwtAuthGuard`/`RolesGuard` — see
+`GET /api/v1/admin/ping` for a working example.
 
 Note: this machine also runs an unrelated project's Postgres/Redis containers on the default ports
 (5432/6379), so this repo's `docker-compose.yml` maps to 5433/6380 instead. Adjust if that's not the
@@ -52,7 +60,11 @@ See Section 14 of the architecture doc. Summary:
 
 ## Status
 
-Phase 1 (Foundation) complete: monorepo scaffold, Docker Compose, CI skeleton, base apps deployed
-to staging is pending. Core Prisma schema (Section 10 entities) is in place and migrated.
+Phase 1 (Foundation) complete: monorepo scaffold, Docker Compose, CI skeleton, core Prisma schema
+(Section 10 entities) migrated. Staging deployment still pending.
 
-Next: Phase 2 (Authentication).
+Phase 2 (Authentication) complete: JWT access/refresh tokens with rotation, RBAC guards
+(customer/staff/admin), a seeded dev admin user, and a CI pipeline that runs migrations + e2e
+tests against a real Postgres service container.
+
+Next: Phase 3 (Customer system).
