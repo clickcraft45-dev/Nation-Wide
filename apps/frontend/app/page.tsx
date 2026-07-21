@@ -1,0 +1,20 @@
+import Link from "next/link";
+
+export default function Home() {
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center gap-6 bg-zinc-50 px-6 py-32 text-center dark:bg-black">
+      <h1 className="text-3xl font-semibold tracking-tight text-black dark:text-zinc-50">
+        NationWide
+      </h1>
+      <p className="max-w-md text-zinc-600 dark:text-zinc-400">
+        Track your shipment with your NationWide tracking number.
+      </p>
+      <Link
+        href="/track"
+        className="rounded-full bg-black px-6 py-3 text-sm font-medium text-white dark:bg-white dark:text-black"
+      >
+        Track a shipment
+      </Link>
+    </div>
+  );
+}

@@ -1,0 +1,237 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+enum AdminRole {
+  CUSTOMER
+  STAFF
+  ADMIN
+}
+
+enum NotificationChannel {
+  WHATSAPP
+  SMS
+  VOICE
+}
+
+enum NotificationStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+// ---------------------------------------------------------------------------
+// Core domain
+// ---------------------------------------------------------------------------
+
+model Customer {
+  id        String   @id @default(uuid())
+  name      String
+  phone     String   @unique // E.164 normalized
+  email     String?
+  address   String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  orders        Order[]
+  notifications Notification[]
+
+  @@map("customers")
+}
+
+model Order {
+  id         String      @id @default(uuid())
+  customerId String      @map("customer_id")
+  status     OrderStatus @default(PENDING)
+  createdAt  DateTime    @default(now()) @map("created_at")
+  updatedAt  DateTime    @updatedAt @map("updated_at")
+
+  customer  Customer   @relation(fields: [customerId], references: [id])
+  shipments Shipment[] // 1:many — a single order can produce split shipments
+
+  @@index([customerId])
+  @@map("orders")
+}
+
+model ShippingProvider {
+  id          String   @id @default(uuid())
+  code        String   @unique // e.g. 'ICL'
+  name        String
+  adapterClass String  @map("adapter_class") // e.g. 'ICLAdapter'
+  isActive    Boolean  @default(true) @map("is_active")
+  config      Json     @default("{}") // provider-specific config (base URLs, etc.)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  shipments              Shipment[]
+  externalTrackingNumbers ExternalTrackingNumber[]
+  trackingEvents         TrackingEvent[]
+  apiRequestLogs         ApiRequestLog[]
+
+  @@map("shipping_providers")
+}
+
+model Shipment {
+  id                    String    @id @default(uuid())
+  orderId               String    @map("order_id")
+  internalTrackingNumber String   @unique @map("internal_tracking_number")
+  providerId            String    @map("provider_id")
+  currentStatus         String?   @map("current_status") // denormalized cache of latest canonical status code
+  lastSyncedAt          DateTime? @map("last_synced_at")
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+
+  order                   Order                     @relation(fields: [orderId], references: [id])
+  provider                ShippingProvider          @relation(fields: [providerId], references: [id])
+  externalTrackingNumbers ExternalTrackingNumber[]
+  trackingEvents          TrackingEvent[]
+  apiRequestLogs          ApiRequestLog[]
+
+  @@index([orderId])
+  @@index([providerId])
+  @@map("shipments")
+}
+
+/// One Shipment can map to many ExternalTrackingNumbers (one per provider/leg used),
+/// even though today it is effectively 1:1 with ICL. See architecture doc Section 10.
+model ExternalTrackingNumber {
+  id                     String   @id @default(uuid())
+  shipmentId             String   @map("shipment_id")
+  providerId             String   @map("provider_id")
+  externalTrackingNumber String   @map("external_tracking_number")
+  rawMetadata            Json?    @map("raw_metadata")
+  createdAt              DateTime @default(now()) @map("created_at")
+
+  shipment       Shipment        @relation(fields: [shipmentId], references: [id])
+  provider       ShippingProvider @relation(fields: [providerId], references: [id])
+  trackingEvents TrackingEvent[]
+
+  @@index([shipmentId])
+  @@index([providerId, externalTrackingNumber])
+  @@map("external_tracking_numbers")
+}
+
+model TrackingStatus {
+  id           String @id @default(uuid())
+  code         String @unique // PICKED_UP, IN_TRANSIT, OUT_FOR_DELIVERY, DELIVERED, EXCEPTION, ...
+  displayLabel String @map("display_label")
+
+  trackingEvents TrackingEvent[]
+
+  @@map("tracking_statuses")
+}
+
+/// Append-only permanent tracking history for a shipment.
+model TrackingEvent {
+  id                       String   @id @default(uuid())
+  shipmentId               String   @map("shipment_id")
+  providerId               String   @map("provider_id")
+  externalTrackingNumberId String?  @map("external_tracking_number_id")
+  rawStatus                String   @map("raw_status")
+  canonicalStatusId        String   @map("canonical_status_id")
+  eventTime                DateTime @map("event_time")
+  location                 String?
+  rawPayload               Json?    @map("raw_payload")
+  createdAt                DateTime @default(now()) @map("created_at")
+
+  shipment               Shipment                @relation(fields: [shipmentId], references: [id])
+  provider               ShippingProvider         @relation(fields: [providerId], references: [id])
+  externalTrackingNumber ExternalTrackingNumber?  @relation(fields: [externalTrackingNumberId], references: [id])
+  canonicalStatus        TrackingStatus           @relation(fields: [canonicalStatusId], references: [id])
+
+  @@index([shipmentId, createdAt])
+  @@map("tracking_events")
+}
+
+/// Audit/debug trail for every outbound call to a shipping provider.
+model ApiRequestLog {
+  id              String   @id @default(uuid())
+  providerId      String   @map("provider_id")
+  shipmentId      String?  @map("shipment_id")
+  requestUrl      String   @map("request_url")
+  requestPayload  Json?    @map("request_payload")
+  responseStatus  Int?     @map("response_status")
+  responsePayload Json?    @map("response_payload")
+  latencyMs       Int?     @map("latency_ms")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  provider ShippingProvider @relation(fields: [providerId], references: [id])
+  shipment Shipment?        @relation(fields: [shipmentId], references: [id])
+
+  @@index([providerId, createdAt])
+  @@map("api_request_logs")
+}
+
+// ---------------------------------------------------------------------------
+// Auth / staff
+// ---------------------------------------------------------------------------
+
+model AdminUser {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  passwordHash String    @map("password_hash")
+  role         AdminRole @default(STAFF)
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  auditLogs AuditLog[]
+
+  @@map("admin_users")
+}
+
+// ---------------------------------------------------------------------------
+// Notifications
+// ---------------------------------------------------------------------------
+
+model Notification {
+  id         String              @id @default(uuid())
+  customerId String              @map("customer_id")
+  channel    NotificationChannel
+  template   String
+  status     NotificationStatus  @default(QUEUED)
+  sentAt     DateTime?           @map("sent_at")
+  createdAt  DateTime            @default(now()) @map("created_at")
+
+  customer Customer @relation(fields: [customerId], references: [id])
+
+  @@index([customerId, createdAt])
+  @@map("notifications")
+}
+
+// ---------------------------------------------------------------------------
+// Audit
+// ---------------------------------------------------------------------------
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  actorId   String   @map("actor_id")
+  action    String
+  entity    String
+  entityId  String   @map("entity_id")
+  before    Json?
+  after     Json?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  actor AdminUser @relation(fields: [actorId], references: [id])
+
+  @@index([entity, entityId])
+  @@map("audit_logs")
+}
