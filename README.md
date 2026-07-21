@@ -40,6 +40,10 @@ returns a short-lived access token and sets an httpOnly refresh cookie), `POST /
 `POST /api/v1/auth/logout`. RBAC via `@Roles(...)` + `JwtAuthGuard`/`RolesGuard` — see
 `GET /api/v1/admin/ping` for a working example.
 
+Customers (staff/admin only): `POST /api/v1/customers` (name, phone in E.164, optional
+email/address, required `consentSource`), `GET /api/v1/customers`, `GET /api/v1/customers/:id`,
+`PATCH /api/v1/customers/:id`.
+
 Note: this machine also runs an unrelated project's Postgres/Redis containers on the default ports
 (5432/6379), so this repo's `docker-compose.yml` maps to 5433/6380 instead. Adjust if that's not the
 case in your environment.
@@ -67,4 +71,9 @@ Phase 2 (Authentication) complete: JWT access/refresh tokens with rotation, RBAC
 (customer/staff/admin), a seeded dev admin user, and a CI pipeline that runs migrations + e2e
 tests against a real Postgres service container.
 
-Next: Phase 3 (Customer system).
+Phase 3 (Customer system) complete: Customer CRUD (staff/admin only), E.164 phone validation,
+DPDP-compliant consent capture (`consentGivenAt`/`consentSource` stamped server-side at creation,
+never client-supplied).
+
+Next: Phase 4 (Order system). Phase 6 (real ICL adapter) is still blocked on full API details from
+ICL — see `docs/architecture-research.docx` Section 31 for the outstanding checklist.

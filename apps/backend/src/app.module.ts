@@ -6,6 +6,7 @@ import { PrismaModule } from './database/prisma.module';
 import { validateEnv } from './common/config/env.validation';
 import { AuthModule } from './modules/auth/auth.module';
 import { AdminModule } from './modules/admin/admin.module';
+import { CustomersModule } from './modules/customers/customers.module';
 
 @Module({
   imports: [
@@ -13,6 +14,7 @@ import { AdminModule } from './modules/admin/admin.module';
     PrismaModule,
     AuthModule,
     AdminModule,
+    CustomersModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -43,13 +43,15 @@ enum NotificationStatus {
 // ---------------------------------------------------------------------------
 
 model Customer {
-  id        String   @id @default(uuid())
-  name      String
-  phone     String   @unique // E.164 normalized
-  email     String?
-  address   String?
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id               String    @id @default(uuid())
+  name             String
+  phone            String    @unique // E.164 normalized
+  email            String?
+  address          String?
+  consentGivenAt   DateTime  @map("consent_given_at") // DPDP Act: when the customer consented to data collection
+  consentSource    String    @map("consent_source") // e.g. 'signup_form', 'staff_entry'
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
 
   orders        Order[]
   notifications Notification[]
