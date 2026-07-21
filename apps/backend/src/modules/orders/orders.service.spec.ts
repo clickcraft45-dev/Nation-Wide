@@ -29,6 +29,7 @@ describe('OrdersService', () => {
   };
   let customersService: { findOne: jest.Mock };
   let shipmentsService: { createForOrder: jest.Mock };
+  let notificationsService: { enqueue: jest.Mock };
   let service: OrdersService;
 
   beforeEach(() => {
@@ -47,13 +48,18 @@ describe('OrdersService', () => {
       findOne: jest.fn().mockResolvedValue({ id: 'customer-1' }),
     };
     shipmentsService = {
-      createForOrder: jest.fn().mockResolvedValue({ id: 'shipment-1' }),
+      createForOrder: jest.fn().mockResolvedValue({
+        id: 'shipment-1',
+        internalTrackingNumber: 'NW-1',
+      }),
     };
+    notificationsService = { enqueue: jest.fn().mockResolvedValue(undefined) };
 
     service = new OrdersService(
       prisma as never,
       customersService as never,
       shipmentsService as never,
+      notificationsService as never,
     );
   });
 
@@ -97,6 +103,12 @@ describe('OrdersService', () => {
         'provider-1',
       );
       expect(result).toEqual(orderWithShipments);
+      expect(notificationsService.enqueue).toHaveBeenCalledWith(
+        'customer-1',
+        'WHATSAPP',
+        'order_confirmation',
+        { trackingNumber: 'NW-1' },
+      );
     });
   });
 

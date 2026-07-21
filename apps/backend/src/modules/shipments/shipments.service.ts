@@ -4,6 +4,8 @@ import type { TrackingStatusCode } from '@nationwide/shared-types';
 import { PrismaService } from '../../database/prisma.service';
 import { RedisService } from '../../database/redis.service';
 import { trackingCacheKey } from '../tracking/tracking-cache-key';
+import { NotificationsService } from '../notifications/notifications.service';
+import { templateForTrackingStatus } from '../notifications/templates';
 import { generateInternalTrackingNumber } from './tracking-number';
 
 const UNIQUE_CONSTRAINT_VIOLATION = 'P2002';
@@ -18,6 +20,7 @@ const withAdminDetail = {
       include: { canonicalStatus: true },
       orderBy: { eventTime: 'asc' as const },
     },
+    order: { select: { customerId: true } },
   },
 };
 export type ShipmentAdminDetail = Prisma.ShipmentGetPayload<
@@ -29,6 +32,7 @@ export class ShipmentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly redis: RedisService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async createForOrder(orderId: string, providerId: string): Promise<Shipment> {
@@ -179,6 +183,13 @@ export class ShipmentsService {
     ]);
 
     await this.redis.del(trackingCacheKey(internalTrackingNumber));
+
+    await this.notificationsService.enqueue(
+      shipment.order.customerId,
+      'WHATSAPP',
+      templateForTrackingStatus(input.status),
+      { trackingNumber: internalTrackingNumber },
+    );
 
     return this.findByInternalTrackingNumber(internalTrackingNumber);
   }

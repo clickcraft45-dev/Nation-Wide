@@ -128,6 +128,32 @@ giving shared-types its own `tsc` build step; CI now also runs a production-runt
 again. (2) The frontend's 401-retry logic would recurse forever if `/auth/refresh` itself returned
 401 (e.g. an expired session) — fixed by excluding the refresh endpoint from its own retry handler.
 
+Phase 8 (WhatsApp notifications) complete: a `MessagingProvider` interface + `MessagingAdapterRegistry`
+(same swap-without-rewrite pattern as the shipping-provider adapter) resolving a `StubWhatsAppAdapter`
+for the `WHATSAPP` channel until real Meta Business/WABA credentials are available. A BullMQ-backed
+notifications queue/worker sends templated messages with retry/backoff (3 attempts, exponential),
+triggered from order creation (`order_confirmation`) and every tracking-status change — both the
+automatic kind (via `TrackingService.persistNewEvents`) and manual staff overrides
+(`ShipmentsService.overrideTrackingStatus`) — mapped to per-status templates
+(`pickup_confirmation`, `in_transit_update`, `out_for_delivery`, `delivered`, `delivery_exception`).
+A `GET/POST /api/v1/webhooks/whatsapp` endpoint (no auth — Meta calls it directly) handles the Meta
+verification handshake and delivery-status callbacks, updating `Notification.status`/`deliveredAt`/
+`readAt` by `providerMessageId`; unknown or malformed payloads are ignored (200) rather than erroring.
+
+Three genuine production-readiness bugs were found and fixed while building this, not just test
+artifacts: (1) BullMQ's `Worker` and `Queue` each hold a Redis connection and each emit an `error`
+event (e.g. on a transient Redis blip) — Node's default behavior for an unlistened `error` event is
+to crash the whole process, so both now have explicit listeners. (2) The queue's Redis connection
+was originally a manually-constructed `ioredis` instance with no NestJS lifecycle hook, so
+`app.close()` never disconnected it; fixed by passing plain connection options instead so
+`@nestjs/bullmq` manages the connection lifecycle itself. (3) The worker could race against deleted
+data (e.g. a notification row removed after being queued) and throw `P2025`; the processor now treats
+a missing row as a no-op instead of an error. Verified via a real running server (order creation →
+`SENT` with a `stub-wamid-...` id in ~20ms; webhook callback → `DELIVERED`; manual override →
+correct per-status template sent) and a dedicated `notifications.e2e-spec.ts` covering the webhook
+handshake, both notification trigger paths, and both webhook callback edge cases (unknown id,
+malformed payload).
+
 Next: Phase 6 (real ICL adapter) — still blocked on full API details from ICL (endpoint, auth,
 exact status schema); see `docs/architecture-research.docx` Section 31 for the outstanding
-checklist. Phases 8-11 can proceed in parallel per Section 29.
+checklist. Phases 9-11 can proceed in parallel per Section 29.

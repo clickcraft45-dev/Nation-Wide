@@ -115,6 +115,9 @@ describe('Admin (e2e)', () => {
     await prisma.order.deleteMany({
       where: { customer: { phone: TEST_CUSTOMER_PHONE } },
     });
+    await prisma.notification.deleteMany({
+      where: { customer: { phone: TEST_CUSTOMER_PHONE } },
+    });
     await prisma.customer.deleteMany({ where: { phone: TEST_CUSTOMER_PHONE } });
     const customer = await prisma.customer.create({
       data: {
@@ -143,6 +146,7 @@ describe('Admin (e2e)', () => {
     });
     await prisma.shipment.deleteMany({ where: { order: { customerId } } });
     await prisma.order.deleteMany({ where: { customerId } });
+    await prisma.notification.deleteMany({ where: { customerId } });
     await prisma.customer.deleteMany({ where: { id: customerId } });
     await prisma.adminUser.deleteMany({ where: { email: TEST_STAFF_EMAIL } });
     await app.close();

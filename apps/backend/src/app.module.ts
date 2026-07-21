@@ -12,6 +12,7 @@ import { OrdersModule } from './modules/orders/orders.module';
 import { ShipmentsModule } from './modules/shipments/shipments.module';
 import { ProviderIntegrationModule } from './modules/provider-integration/provider-integration.module';
 import { TrackingModule } from './modules/tracking/tracking.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { TrackingModule } from './modules/tracking/tracking.module';
     OrdersModule,
     ProviderIntegrationModule,
     TrackingModule,
+    NotificationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

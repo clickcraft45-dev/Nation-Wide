@@ -71,6 +71,9 @@ describe('Orders (e2e)', () => {
       },
     );
 
+    await prisma.notification.deleteMany({
+      where: { customer: { phone: TEST_CUSTOMER_PHONE } },
+    });
     await prisma.shipment.deleteMany({
       where: { order: { customer: { phone: TEST_CUSTOMER_PHONE } } },
     });
@@ -90,6 +93,7 @@ describe('Orders (e2e)', () => {
   });
 
   afterAll(async () => {
+    await prisma.notification.deleteMany({ where: { customerId } });
     await prisma.shipment.deleteMany({ where: { order: { customerId } } });
     await prisma.order.deleteMany({ where: { customerId } });
     await prisma.customer.deleteMany({ where: { id: customerId } });

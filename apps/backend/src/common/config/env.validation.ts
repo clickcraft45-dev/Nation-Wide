@@ -53,6 +53,10 @@ class EnvironmentVariables {
   @IsInt()
   @Min(1)
   TRACKING_CACHE_TTL_TERMINAL_SECONDS?: number;
+
+  @IsOptional()
+  @IsString()
+  WHATSAPP_WEBHOOK_VERIFY_TOKEN?: string;
 }
 
 export function validateEnv(

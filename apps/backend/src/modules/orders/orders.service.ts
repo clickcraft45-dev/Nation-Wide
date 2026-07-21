@@ -7,6 +7,8 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { CustomersService } from '../customers/customers.service';
 import { ShipmentsService } from '../shipments/shipments.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NOTIFICATION_TEMPLATES } from '../notifications/templates';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
 
@@ -23,6 +25,7 @@ export class OrdersService {
     private readonly prisma: PrismaService,
     private readonly customersService: CustomersService,
     private readonly shipmentsService: ShipmentsService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async create(dto: CreateOrderDto): Promise<OrderWithShipments> {
@@ -33,7 +36,17 @@ export class OrdersService {
     const order = await this.prisma.order.create({
       data: { customerId: dto.customerId },
     });
-    await this.shipmentsService.createForOrder(order.id, provider.id);
+    const shipment = await this.shipmentsService.createForOrder(
+      order.id,
+      provider.id,
+    );
+
+    await this.notificationsService.enqueue(
+      dto.customerId,
+      'WHATSAPP',
+      NOTIFICATION_TEMPLATES.ORDER_CONFIRMATION,
+      { trackingNumber: shipment.internalTrackingNumber },
+    );
 
     return this.findOne(order.id);
   }

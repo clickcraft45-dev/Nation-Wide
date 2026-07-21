@@ -30,6 +30,7 @@ const baseShipmentDetail = {
     externalTrackingNumber: string;
   }>,
   trackingEvents: [],
+  order: { customerId: 'customer-1' },
 };
 
 interface AuditLogCallArgs {
@@ -53,6 +54,7 @@ describe('ShipmentsService', () => {
     $transaction: jest.Mock;
   };
   let redis: { del: jest.Mock };
+  let notificationsService: { enqueue: jest.Mock };
   let service: ShipmentsService;
   let auditLogCalls: AuditLogCallArgs[];
 
@@ -82,7 +84,12 @@ describe('ShipmentsService', () => {
         .mockImplementation((ops: unknown[]) => Promise.all(ops)),
     };
     redis = { del: jest.fn() };
-    service = new ShipmentsService(prisma as never, redis as never);
+    notificationsService = { enqueue: jest.fn().mockResolvedValue(undefined) };
+    service = new ShipmentsService(
+      prisma as never,
+      redis as never,
+      notificationsService as never,
+    );
   });
 
   describe('createForOrder', () => {
@@ -269,6 +276,12 @@ describe('ShipmentsService', () => {
       });
 
       expect(redis.del).toHaveBeenCalledWith('tracking:NW-1');
+      expect(notificationsService.enqueue).toHaveBeenCalledWith(
+        'customer-1',
+        'WHATSAPP',
+        'in_transit_update',
+        { trackingNumber: 'NW-1' },
+      );
     });
   });
 });

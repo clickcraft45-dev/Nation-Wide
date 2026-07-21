@@ -205,13 +205,17 @@ model AdminUser {
 // ---------------------------------------------------------------------------
 
 model Notification {
-  id         String              @id @default(uuid())
-  customerId String              @map("customer_id")
-  channel    NotificationChannel
-  template   String
-  status     NotificationStatus  @default(QUEUED)
-  sentAt     DateTime?           @map("sent_at")
-  createdAt  DateTime            @default(now()) @map("created_at")
+  id                String              @id @default(uuid())
+  customerId        String              @map("customer_id")
+  channel           NotificationChannel
+  template          String
+  status            NotificationStatus  @default(QUEUED)
+  providerMessageId String?             @unique @map("provider_message_id")
+  errorMessage      String?             @map("error_message")
+  sentAt            DateTime?           @map("sent_at")
+  deliveredAt       DateTime?           @map("delivered_at")
+  readAt            DateTime?           @map("read_at")
+  createdAt         DateTime            @default(now()) @map("created_at")
 
   customer Customer @relation(fields: [customerId], references: [id])
 

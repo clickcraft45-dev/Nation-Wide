@@ -11,6 +11,7 @@ const baseShipment = {
   id: 'shipment-1',
   providerId: 'provider-1',
   provider: { id: 'provider-1', adapterClass: 'StubShippingProviderAdapter' },
+  order: { customerId: 'customer-1' },
 };
 
 describe('TrackingService', () => {
@@ -33,6 +34,7 @@ describe('TrackingService', () => {
   let redis: { get: jest.Mock; set: jest.Mock };
   let providerRegistry: { resolve: jest.Mock };
   let configService: { get: jest.Mock };
+  let notificationsService: { enqueue: jest.Mock };
   let service: TrackingService;
 
   beforeEach(() => {
@@ -61,12 +63,14 @@ describe('TrackingService', () => {
     redis = { get: jest.fn().mockResolvedValue(null), set: jest.fn() };
     providerRegistry = { resolve: jest.fn() };
     configService = { get: jest.fn().mockReturnValue(undefined) };
+    notificationsService = { enqueue: jest.fn().mockResolvedValue(undefined) };
 
     service = new TrackingService(
       prisma as never,
       redis as never,
       providerRegistry as never,
       configService as never,
+      notificationsService as never,
     );
   });
 
@@ -221,6 +225,12 @@ describe('TrackingService', () => {
       shipmentId: 'shipment-1',
       responseStatus: 200,
     });
+    expect(notificationsService.enqueue).toHaveBeenCalledWith(
+      'customer-1',
+      'WHATSAPP',
+      'pickup_confirmation',
+      { trackingNumber: 'NW-1' },
+    );
   });
 
   it('does not persist events that are not newer than the latest known event', async () => {

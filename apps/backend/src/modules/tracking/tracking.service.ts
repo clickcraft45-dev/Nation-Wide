@@ -15,6 +15,8 @@ import { PrismaService } from '../../database/prisma.service';
 import { RedisService } from '../../database/redis.service';
 import { ProviderAdapterRegistry } from '../provider-integration/provider-adapter.registry';
 import type { NormalizedTrackingEvent } from '../provider-integration/interfaces/shipping-provider.interface';
+import { NotificationsService } from '../notifications/notifications.service';
+import { templateForTrackingStatus } from '../notifications/templates';
 import { trackingCacheKey } from './tracking-cache-key';
 
 const DEFAULT_PROVIDER_TIMEOUT_MS = 6000;
@@ -31,12 +33,17 @@ export class TrackingService {
     private readonly redis: RedisService,
     private readonly providerRegistry: ProviderAdapterRegistry,
     private readonly configService: ConfigService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async getStatus(internalTrackingNumber: string): Promise<TrackingResultDto> {
     const shipment = await this.prisma.shipment.findUnique({
       where: { internalTrackingNumber },
-      include: { provider: true, externalTrackingNumbers: true },
+      include: {
+        provider: true,
+        externalTrackingNumbers: true,
+        order: { select: { customerId: true } },
+      },
     });
     if (!shipment) {
       throw new NotFoundException(
@@ -83,6 +90,8 @@ export class TrackingService {
         shipment.providerId,
         externalTrackingNumber.id,
         result.events,
+        shipment.order.customerId,
+        internalTrackingNumber,
       );
     } catch (error) {
       await this.logApiRequest({
@@ -128,6 +137,8 @@ export class TrackingService {
     providerId: string,
     externalTrackingNumberId: string,
     events: NormalizedTrackingEvent[],
+    customerId: string,
+    internalTrackingNumber: string,
   ): Promise<void> {
     if (events.length === 0) {
       return;
@@ -180,6 +191,13 @@ export class TrackingService {
         },
       }),
     ]);
+
+    await this.notificationsService.enqueue(
+      customerId,
+      'WHATSAPP',
+      templateForTrackingStatus(newEvents[newEvents.length - 1].status),
+      { trackingNumber: internalTrackingNumber },
+    );
   }
 
   private async buildDtoFromDb(
