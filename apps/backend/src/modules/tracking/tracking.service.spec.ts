@@ -27,6 +27,7 @@ describe('TrackingService', () => {
       createMany: jest.Mock;
     };
     trackingStatus: { findMany: jest.Mock };
+    apiRequestLog: { create: jest.Mock };
     $transaction: jest.Mock;
   };
   let redis: { get: jest.Mock; set: jest.Mock };
@@ -54,6 +55,7 @@ describe('TrackingService', () => {
       trackingStatus: {
         findMany: jest.fn().mockResolvedValue(CANONICAL_STATUSES),
       },
+      apiRequestLog: { create: jest.fn().mockResolvedValue(undefined) },
       $transaction: jest.fn().mockResolvedValue(undefined),
     };
     redis = { get: jest.fn().mockResolvedValue(null), set: jest.fn() };
@@ -167,6 +169,28 @@ describe('TrackingService', () => {
       },
     );
 
+    let apiRequestLogArgs:
+      | {
+          data: {
+            providerId: string;
+            shipmentId: string;
+            responseStatus: number | null;
+          };
+        }
+      | undefined;
+    prisma.apiRequestLog.create.mockImplementation(
+      (args: {
+        data: {
+          providerId: string;
+          shipmentId: string;
+          responseStatus: number | null;
+        };
+      }) => {
+        apiRequestLogArgs = args;
+        return Promise.resolve(args);
+      },
+    );
+
     const result = await service.getStatus('NW-1');
 
     expect(providerRegistry.resolve).toHaveBeenCalledWith(
@@ -192,6 +216,11 @@ describe('TrackingService', () => {
       'EX',
       300, // default active TTL
     );
+    expect(apiRequestLogArgs?.data).toMatchObject({
+      providerId: 'provider-1',
+      shipmentId: 'shipment-1',
+      responseStatus: 200,
+    });
   });
 
   it('does not persist events that are not newer than the latest known event', async () => {
@@ -250,10 +279,20 @@ describe('TrackingService', () => {
       },
     ]);
 
+    let apiRequestLogArgs:
+      { data: { responseStatus: number | null } } | undefined;
+    prisma.apiRequestLog.create.mockImplementation(
+      (args: { data: { responseStatus: number | null } }) => {
+        apiRequestLogArgs = args;
+        return Promise.resolve(args);
+      },
+    );
+
     const result = await service.getStatus('NW-1');
 
     expect(result.currentStatus).toBe('IN_TRANSIT');
     expect(redis.set).not.toHaveBeenCalled();
+    expect(apiRequestLogArgs?.data.responseStatus).toBeNull();
   });
 
   it('throws ServiceUnavailableException when the provider call fails and there is no prior data', async () => {

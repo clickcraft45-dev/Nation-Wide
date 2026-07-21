@@ -25,6 +25,16 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
     env:
       DATABASE_URL: "postgresql://nationwide:nationwide_ci@localhost:5432/nationwide?schema=public"
       REDIS_URL: "redis://localhost:6379"
@@ -47,6 +57,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Build shared-types
+        run: npm run build --workspace=packages/shared-types
+
       - name: Generate Prisma Client
         run: npx prisma generate --schema=apps/backend/prisma/schema.prisma
 
@@ -63,7 +76,28 @@ jobs:
         run: npm run test:e2e --workspace=apps/backend
 
       - name: Build
-        run: npm run build --workspaces --if-present
+        run: npm run build --workspace=apps/backend && npm run build --workspace=apps/frontend
+
+      - name: Seed database
+        run: npm run db:seed --workspace=apps/backend
+
+      - name: Production runtime smoke test
+        working-directory: apps/backend
+        run: |
+          node dist/main.js &
+          SERVER_PID=$!
+          for i in $(seq 1 20); do
+            if curl -sf http://localhost:4000/api/v1 > /dev/null; then
+              echo "Backend responded successfully"
+              curl -sf http://localhost:4000/api/v1/tracking/NW-DEMOTRACK1 | grep -q internalTrackingNumber
+              kill $SERVER_PID
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Backend did not respond in time"
+          kill $SERVER_PID
+          exit 1
 
       - name: Security scan (npm audit)
         run: npm audit --audit-level=high

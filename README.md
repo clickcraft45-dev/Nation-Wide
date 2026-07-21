@@ -30,10 +30,19 @@ cd apps/backend && npx prisma migrate dev
 # 5. seed a dev admin user (admin@nationwide.dev / ChangeMe123! by default)
 npm run db:seed
 
-# 6. run both apps
+# 6. build shared-types (required before running backend/frontend — see note below)
+npm run build --workspace=packages/shared-types
+
+# 7. run both apps
 npm run dev:backend    # http://localhost:4000
 npm run dev:frontend   # http://localhost:3000
 ```
+
+**`packages/shared-types` must be built before `apps/backend` or `apps/frontend` will resolve it
+correctly** — its `package.json` points `main`/`types` at compiled `dist/` output, not the raw
+`.ts` source. Re-run the build above whenever you change anything under `packages/shared-types/src`.
+The root `npm run build` handles this ordering automatically; `npm run dev:*` does not, since Nest's
+watch mode and Next's dev server both just read whatever is currently in `dist/`.
 
 All backend routes are versioned under `/api/v1`. Auth: `POST /api/v1/auth/login` (email/password,
 returns a short-lived access token and sets an httpOnly refresh cookie), `POST /api/v1/auth/refresh`,
@@ -53,6 +62,13 @@ Tracking (public, no auth): `GET /api/v1/tracking/:internalTrackingNumber` — c
 key `tracking:<internal_id>`), falls back to last-known data on provider failure, returns
 "Tracking not yet available" (200, not an error) if no carrier tracking number is mapped yet.
 Try it locally with the seeded demo shipment: `NW-DEMOTRACK1`.
+
+Admin (staff/admin only, `/admin/*` in the frontend): `GET /api/v1/admin/shipments/:internalTrackingNumber`
+(raw + normalized view), `POST .../external-tracking-number` (map/re-map the carrier tracking
+number), `POST .../override` (manually correct status — always append-only, invalidates the public
+cache immediately), `GET /api/v1/admin/integrations/:providerCode/health` (error rate/latency from
+`api_request_logs`), `GET /api/v1/admin/audit-logs`. Frontend pages: `/admin/login`,
+`/admin/shipments`, `/admin/integrations`, `/admin/audit-logs`.
 
 Note: this machine also runs an unrelated project's Postgres/Redis containers on the default ports
 (5432/6379), so this repo's `docker-compose.yml` maps to 5433/6380 instead. Adjust if that's not the
@@ -96,6 +112,22 @@ swap-without-rewrite design depends on), and a deterministic `StubShippingProvid
 in for ICL until Phase 6. Verified end-to-end in a real browser against the live stack (Postgres +
 Redis + NestJS + Next.js), not just via tests.
 
+Phase 7 (Admin dashboard) complete: staff can fully operate the tracking mapping workflow without
+touching the DB — map/re-map carrier tracking numbers, manually override status (audit-logged,
+append-only, invalidates the public cache immediately), view integration health (error rate/latency
+from `api_request_logs`, now actually populated — Phase 5 built the table but nothing wrote to it
+until now), and view the audit log. Full Next.js admin UI (login, session restore via the httpOnly
+refresh cookie, RBAC-gated `/admin/*` routes) backs the API, verified end-to-end in a real browser.
+
+Two real bugs were caught and fixed doing this the honest way (build → verify in a real browser,
+not just green tests): (1) `packages/shared-types` pointed `main`/`types` at raw `.ts` source, which
+works for type-only imports (erased at compile time) but breaks at runtime the moment any code
+imports a real value from it — exactly what `OverrideTrackingStatusDto` started doing. Fixed by
+giving shared-types its own `tsc` build step; CI now also runs a production-runtime smoke test
+(`node dist/main.js` + a real request) so this class of bug can't hide behind passing unit/e2e tests
+again. (2) The frontend's 401-retry logic would recurse forever if `/auth/refresh` itself returned
+401 (e.g. an expired session) — fixed by excluding the refresh endpoint from its own retry handler.
+
 Next: Phase 6 (real ICL adapter) — still blocked on full API details from ICL (endpoint, auth,
 exact status schema); see `docs/architecture-research.docx` Section 31 for the outstanding
-checklist. Phases 1-5 and 7-11 can proceed in parallel per Section 29.
+checklist. Phases 8-11 can proceed in parallel per Section 29.

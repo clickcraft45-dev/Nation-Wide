@@ -15,6 +15,7 @@ import { PrismaService } from '../../database/prisma.service';
 import { RedisService } from '../../database/redis.service';
 import { ProviderAdapterRegistry } from '../provider-integration/provider-adapter.registry';
 import type { NormalizedTrackingEvent } from '../provider-integration/interfaces/shipping-provider.interface';
+import { trackingCacheKey } from './tracking-cache-key';
 
 const DEFAULT_PROVIDER_TIMEOUT_MS = 6000;
 const DEFAULT_ACTIVE_TTL_SECONDS = 300;
@@ -57,6 +58,7 @@ export class TrackingService {
     }
 
     const correlationId = randomUUID();
+    const startedAt = Date.now();
     try {
       const adapter = this.providerRegistry.resolve(
         shipment.provider.adapterClass,
@@ -67,6 +69,15 @@ export class TrackingService {
           DEFAULT_PROVIDER_TIMEOUT_MS,
       );
 
+      await this.logApiRequest({
+        providerId: shipment.providerId,
+        shipmentId: shipment.id,
+        adapterClass: shipment.provider.adapterClass,
+        latencyMs: Date.now() - startedAt,
+        responseStatus: 200,
+        responsePayload: result as unknown as Prisma.InputJsonValue,
+      });
+
       await this.persistNewEvents(
         shipment.id,
         shipment.providerId,
@@ -74,6 +85,16 @@ export class TrackingService {
         result.events,
       );
     } catch (error) {
+      await this.logApiRequest({
+        providerId: shipment.providerId,
+        shipmentId: shipment.id,
+        adapterClass: shipment.provider.adapterClass,
+        latencyMs: Date.now() - startedAt,
+        responseStatus: null,
+        responsePayload: {
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
       this.logger.error(
         `Provider lookup failed for ${internalTrackingNumber} [correlationId=${correlationId}]`,
         error instanceof Error ? error.stack : String(error),
@@ -222,7 +243,34 @@ export class TrackingService {
   }
 
   private cacheKeyFor(internalTrackingNumber: string): string {
-    return `tracking:${internalTrackingNumber}`;
+    return trackingCacheKey(internalTrackingNumber);
+  }
+
+  private async logApiRequest(entry: {
+    providerId: string;
+    shipmentId: string;
+    adapterClass: string;
+    latencyMs: number;
+    responseStatus: number | null;
+    responsePayload: Prisma.InputJsonValue;
+  }): Promise<void> {
+    // Observability logging must never break the actual tracking lookup — swallow failures.
+    try {
+      await this.prisma.apiRequestLog.create({
+        data: {
+          providerId: entry.providerId,
+          shipmentId: entry.shipmentId,
+          requestUrl: `adapter:${entry.adapterClass}#trackShipment`,
+          responseStatus: entry.responseStatus,
+          responsePayload: entry.responsePayload,
+          latencyMs: entry.latencyMs,
+        },
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Failed to write api_request_logs entry: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
 
   private async withTimeout<T>(
