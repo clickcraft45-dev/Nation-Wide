@@ -110,6 +110,30 @@ export class AuthService {
     });
   }
 
+  async changePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<void> {
+    const user = await this.prisma.adminUser.findUniqueOrThrow({
+      where: { id: userId },
+    });
+
+    const currentMatches = await bcrypt.compare(
+      currentPassword,
+      user.passwordHash,
+    );
+    if (!currentMatches) {
+      throw new UnauthorizedException('Current password is incorrect');
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    await this.prisma.adminUser.update({
+      where: { id: userId },
+      data: { passwordHash },
+    });
+  }
+
   private async storeHashedRefreshToken(
     userId: string,
     refreshToken: string,

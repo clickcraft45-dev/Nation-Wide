@@ -3,6 +3,7 @@ import {
   Controller,
   HttpCode,
   HttpStatus,
+  Patch,
   Post,
   Res,
   UseGuards,
@@ -13,6 +14,7 @@ import ms from 'ms';
 import type { LoginResponseDto } from '@nationwide/shared-types';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { JwtRefreshGuard } from '../../common/guards/jwt-refresh.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -75,6 +77,20 @@ export class AuthController {
   ): Promise<void> {
     await this.authService.revokeRefreshToken(user.sub);
     res.clearCookie(REFRESH_TOKEN_COOKIE);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Patch('change-password')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async changePassword(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: ChangePasswordDto,
+  ): Promise<void> {
+    await this.authService.changePassword(
+      user.sub,
+      dto.currentPassword,
+      dto.newPassword,
+    );
   }
 
   private setRefreshTokenCookie(res: Response, refreshToken: string): void {

@@ -2,12 +2,23 @@
 
 import { useState } from "react";
 import { TRACKING_STATUS_CODES, type TrackingStatusCode } from "@nationwide/shared-types";
+import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
 
 export interface OverrideInput {
   status: TrackingStatusCode;
   location?: string;
   note?: string;
 }
+
+const STATUS_LABEL: Record<TrackingStatusCode, string> = {
+  PICKED_UP: "Picked Up",
+  IN_TRANSIT: "In Transit",
+  OUT_FOR_DELIVERY: "Out for Delivery",
+  DELIVERED: "Delivered",
+  EXCEPTION: "Exception",
+};
 
 export function OverrideStatusForm({
   onSubmit,
@@ -32,38 +43,26 @@ export function OverrideStatusForm({
         });
       }}
     >
-      <select
-        value={status}
-        onChange={(e) => setStatus(e.target.value as TrackingStatusCode)}
-        className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-      >
+      <NativeSelect value={status} onChange={(e) => setStatus(e.target.value as TrackingStatusCode)}>
         {TRACKING_STATUS_CODES.map((code) => (
           <option key={code} value={code}>
-            {code}
+            {STATUS_LABEL[code]}
           </option>
         ))}
-      </select>
-      <input
-        type="text"
+      </NativeSelect>
+      <Input
         value={location}
         onChange={(e) => setLocation(e.target.value)}
         placeholder="Location (optional)"
-        className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
       />
-      <input
-        type="text"
+      <Input
         value={note}
         onChange={(e) => setNote(e.target.value)}
         placeholder="Reason for override (optional)"
-        className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
       />
-      <button
-        type="submit"
-        disabled={isSubmitting}
-        className="rounded-md bg-black px-4 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-black"
-      >
+      <Button type="submit" isLoading={isSubmitting} className="w-full">
         {isSubmitting ? "Saving…" : "Override status"}
-      </button>
+      </Button>
     </form>
   );
 }

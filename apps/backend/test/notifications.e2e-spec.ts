@@ -126,7 +126,9 @@ describe('Notifications (e2e)', () => {
       where: { customer: { phone: TEST_CUSTOMER_PHONE } },
     });
     await prisma.trackingEvent.deleteMany({
-      where: { shipment: { order: { customer: { phone: TEST_CUSTOMER_PHONE } } } },
+      where: {
+        shipment: { order: { customer: { phone: TEST_CUSTOMER_PHONE } } },
+      },
     });
     await prisma.shipment.deleteMany({
       where: { order: { customer: { phone: TEST_CUSTOMER_PHONE } } },

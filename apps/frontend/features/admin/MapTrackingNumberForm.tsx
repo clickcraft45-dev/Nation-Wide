@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 
 export function MapTrackingNumberForm({
   onSubmit,
@@ -19,21 +21,17 @@ export function MapTrackingNumberForm({
         if (value.trim()) void onSubmit(value.trim());
       }}
     >
-      <input
-        type="text"
-        required
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        placeholder="Carrier tracking number"
-        className="flex-1 rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-      />
-      <button
-        type="submit"
-        disabled={isSubmitting}
-        className="rounded-md bg-black px-4 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-black"
-      >
+      <div className="flex-1">
+        <Input
+          required
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder="Carrier tracking number"
+        />
+      </div>
+      <Button type="submit" variant="secondary" isLoading={isSubmitting}>
         {isSubmitting ? "Saving…" : "Map"}
-      </button>
+      </Button>
     </form>
   );
 }
