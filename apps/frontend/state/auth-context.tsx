@@ -12,10 +12,18 @@ import type { AuthUserDto, LoginResponseDto } from "@nationwide/shared-types";
 import { apiClient, setAccessToken, setUnauthorizedHandler } from "@/lib/api-client";
 import { decodeAccessToken } from "@/lib/auth/jwt";
 
+export interface RegisterInput {
+  name: string;
+  phone: string;
+  email: string;
+  password: string;
+}
+
 interface AuthContextValue {
   user: AuthUserDto | null;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
+  register: (input: RegisterInput) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -56,6 +64,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(res.user);
   }, []);
 
+  const register = useCallback(async (input: RegisterInput) => {
+    const res = await apiClient.post<LoginResponseDto>("/auth/register", input);
+    setAccessToken(res.accessToken);
+    setUser(res.user);
+  }, []);
+
   const logout = useCallback(async () => {
     try {
       await apiClient.post("/auth/logout", {});
@@ -66,7 +80,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, logout }}>
+    <AuthContext.Provider value={{ user, isLoading, login, register, logout }}>
       {children}
     </AuthContext.Provider>
   );

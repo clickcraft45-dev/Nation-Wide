@@ -9,11 +9,13 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import type { Response } from 'express';
 import ms from 'ms';
 import type { LoginResponseDto } from '@nationwide/shared-types';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
+import { RegisterDto } from './dto/register.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { JwtRefreshGuard } from '../../common/guards/jwt-refresh.guard';
@@ -25,6 +27,10 @@ import type {
 
 const REFRESH_TOKEN_COOKIE = 'refresh_token';
 
+// Deliberately strict — this guards the single unified login/register form against
+// brute-force and credential-stuffing attempts. Keyed per-IP by ThrottlerGuard's default.
+const AUTH_THROTTLE = { default: { limit: 5, ttl: 60_000 } };
+
 @Controller('auth')
 export class AuthController {
   constructor(
@@ -32,24 +38,46 @@ export class AuthController {
     private readonly configService: ConfigService,
   ) {}
 
+  @UseGuards(ThrottlerGuard)
+  @Throttle(AUTH_THROTTLE)
+  @Post('register')
+  @HttpCode(HttpStatus.CREATED)
+  async register(
+    @Body() dto: RegisterDto,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<LoginResponseDto> {
+    const account = await this.authService.register(dto);
+    const { accessToken, refreshToken } =
+      await this.authService.issueTokenPair(account);
+
+    this.setRefreshTokenCookie(res, refreshToken);
+
+    return {
+      accessToken,
+      user: { id: account.id, email: account.email, role: account.role },
+    };
+  }
+
+  @UseGuards(ThrottlerGuard)
+  @Throttle(AUTH_THROTTLE)
   @Post('login')
   @HttpCode(HttpStatus.OK)
   async login(
     @Body() dto: LoginDto,
     @Res({ passthrough: true }) res: Response,
   ): Promise<LoginResponseDto> {
-    const user = await this.authService.validateAdminCredentials(
+    const account = await this.authService.authenticate(
       dto.email,
       dto.password,
     );
     const { accessToken, refreshToken } =
-      await this.authService.issueTokenPair(user);
+      await this.authService.issueTokenPair(account);
 
     this.setRefreshTokenCookie(res, refreshToken);
 
     return {
       accessToken,
-      user: { id: user.id, email: user.email, role: user.role },
+      user: { id: account.id, email: account.email, role: account.role },
     };
   }
 
@@ -61,7 +89,11 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ): Promise<{ accessToken: string }> {
     const { accessToken, refreshToken } =
-      await this.authService.refreshTokenPair(user.sub, user.refreshToken);
+      await this.authService.refreshTokenPair(
+        user.sub,
+        user.role,
+        user.refreshToken,
+      );
 
     this.setRefreshTokenCookie(res, refreshToken);
 
@@ -75,7 +107,7 @@ export class AuthController {
     @CurrentUser() user: JwtPayload,
     @Res({ passthrough: true }) res: Response,
   ): Promise<void> {
-    await this.authService.revokeRefreshToken(user.sub);
+    await this.authService.revokeRefreshToken(user.sub, user.role);
     res.clearCookie(REFRESH_TOKEN_COOKIE);
   }
 
@@ -88,6 +120,7 @@ export class AuthController {
   ): Promise<void> {
     await this.authService.changePassword(
       user.sub,
+      user.role,
       dto.currentPassword,
       dto.newPassword,
     );

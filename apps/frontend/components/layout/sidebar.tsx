@@ -3,13 +3,15 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Package, X } from "lucide-react";
-import { NAV_ITEMS } from "@/lib/nav-config";
+import type { NavItem } from "@/lib/nav-config";
 import { cn } from "@/lib/utils/cn";
 
 export function Sidebar({
+  items,
   mobileOpen,
   onCloseMobile,
 }: {
+  items: NavItem[];
   mobileOpen: boolean;
   onCloseMobile: () => void;
 }) {
@@ -33,7 +35,7 @@ export function Sidebar({
         </button>
       </div>
       <nav aria-label="Main navigation" className="flex-1 space-y-0.5 px-2 py-2">
-        {NAV_ITEMS.map((item) => {
+        {items.map((item) => {
           const isActive =
             pathname === item.href || pathname.startsWith(`${item.href}/`);
           const Icon = item.icon;

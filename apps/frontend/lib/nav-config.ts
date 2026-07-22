@@ -9,6 +9,7 @@ import {
   FileQuestion,
   BarChart3,
   Settings,
+  User,
   type LucideIcon,
 } from "lucide-react";
 
@@ -18,7 +19,7 @@ export interface NavItem {
   icon: LucideIcon;
 }
 
-export const NAV_ITEMS: NavItem[] = [
+export const ADMIN_NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard },
   { label: "Orders", href: "/admin/orders", icon: Package },
   { label: "Customers", href: "/admin/customers", icon: Users },
@@ -31,8 +32,18 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Settings", href: "/admin/settings", icon: Settings },
 ];
 
-export function findNavItemForPath(pathname: string): NavItem | undefined {
-  return [...NAV_ITEMS]
+export const CUSTOMER_NAV_ITEMS: NavItem[] = [
+  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { label: "My Orders", href: "/orders", icon: Package },
+  { label: "Track a Shipment", href: "/tracking", icon: MapPin },
+  { label: "Profile", href: "/profile", icon: User },
+];
+
+export function findNavItemForPath(
+  pathname: string,
+  items: NavItem[],
+): NavItem | undefined {
+  return [...items]
     .sort((a, b) => b.href.length - a.href.length)
     .find((item) => pathname === item.href || pathname.startsWith(`${item.href}/`));
 }

@@ -4,7 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Menu, Bell, LogOut, User as UserIcon, ChevronRight } from "lucide-react";
 import type { AuthUserDto } from "@nationwide/shared-types";
 import { useAuth } from "@/state/auth-context";
-import { findNavItemForPath } from "@/lib/nav-config";
+import { findNavItemForPath, type NavItem } from "@/lib/nav-config";
 import { Avatar } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -15,9 +15,10 @@ import {
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
 
-function Breadcrumbs({ pathname }: { pathname: string }) {
-  const current = findNavItemForPath(pathname);
-  const segments = pathname.split("/").filter(Boolean).slice(2); // drop "admin", section root
+function Breadcrumbs({ pathname, items }: { pathname: string; items: NavItem[] }) {
+  const current = findNavItemForPath(pathname, items);
+  const matchedDepth = current ? current.href.split("/").filter(Boolean).length : 0;
+  const segments = pathname.split("/").filter(Boolean).slice(matchedDepth);
 
   return (
     <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-sm">
@@ -35,9 +36,13 @@ function Breadcrumbs({ pathname }: { pathname: string }) {
 
 export function Topbar({
   user,
+  items,
+  profileHref,
   onOpenMobileNav,
 }: {
   user: AuthUserDto;
+  items: NavItem[];
+  profileHref: string;
   onOpenMobileNav: () => void;
 }) {
   const pathname = usePathname();
@@ -46,7 +51,7 @@ export function Topbar({
 
   async function handleLogout() {
     await logout();
-    router.replace("/admin/login");
+    router.replace("/");
   }
 
   return (
@@ -59,7 +64,7 @@ export function Topbar({
         <Menu className="h-5 w-5" aria-hidden />
       </button>
 
-      <Breadcrumbs pathname={pathname} />
+      <Breadcrumbs pathname={pathname} items={items} />
 
       <div className="ml-auto flex items-center gap-3">
         <button
@@ -81,7 +86,7 @@ export function Topbar({
               <div className="font-normal text-muted-foreground">{user.role}</div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => router.push("/admin/settings")}>
+            <DropdownMenuItem onClick={() => router.push(profileHref)}>
               <UserIcon className="h-4 w-4" aria-hidden />
               Profile & Settings
             </DropdownMenuItem>

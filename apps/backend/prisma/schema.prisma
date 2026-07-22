@@ -43,15 +43,18 @@ enum NotificationStatus {
 // ---------------------------------------------------------------------------
 
 model Customer {
-  id               String    @id @default(uuid())
-  name             String
-  phone            String    @unique // E.164 normalized
-  email            String?
-  address          String?
-  consentGivenAt   DateTime  @map("consent_given_at") // DPDP Act: when the customer consented to data collection
-  consentSource    String    @map("consent_source") // e.g. 'signup_form', 'staff_entry'
-  createdAt        DateTime  @default(now()) @map("created_at")
-  updatedAt        DateTime  @updatedAt @map("updated_at")
+  id                 String    @id @default(uuid())
+  name               String
+  phone              String    @unique // E.164 normalized
+  email              String?   @unique // required + unique only for self-registered (login-capable) customers
+  address            String?
+  passwordHash       String?   @map("password_hash") // null until the customer registers/sets a password
+  hashedRefreshToken String?   @map("hashed_refresh_token")
+  isActive           Boolean   @default(true) @map("is_active")
+  consentGivenAt     DateTime  @map("consent_given_at") // DPDP Act: when the customer consented to data collection
+  consentSource      String    @map("consent_source") // e.g. 'signup_form', 'staff_entry'
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
 
   orders        Order[]
   notifications Notification[]
@@ -191,6 +194,7 @@ model AdminUser {
   email               String    @unique
   passwordHash        String    @map("password_hash")
   role                AdminRole @default(STAFF)
+  isActive            Boolean   @default(true) @map("is_active")
   hashedRefreshToken  String?   @map("hashed_refresh_token")
   createdAt           DateTime  @default(now()) @map("created_at")
   updatedAt           DateTime  @updatedAt @map("updated_at")

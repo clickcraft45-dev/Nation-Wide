@@ -58,6 +58,14 @@ export class OrdersService {
     });
   }
 
+  findAllForCustomer(customerId: string): Promise<OrderWithShipments[]> {
+    return this.prisma.order.findMany({
+      where: { customerId },
+      include: { shipments: true },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
   async findOne(id: string): Promise<OrderWithShipments> {
     const order = await this.prisma.order.findUnique({
       where: { id },

@@ -1,14 +1,21 @@
 "use client";
 
 import { useState } from "react";
+import { SearchInput } from "@/components/ui/search-input";
+import { Button } from "@/components/ui/button";
 
 interface TrackingSearchFormProps {
   onSubmit: (trackingNumber: string) => void;
   isLoading?: boolean;
+  initialValue?: string;
 }
 
-export function TrackingSearchForm({ onSubmit, isLoading }: TrackingSearchFormProps) {
-  const [value, setValue] = useState("");
+export function TrackingSearchForm({
+  onSubmit,
+  isLoading,
+  initialValue,
+}: TrackingSearchFormProps) {
+  const [value, setValue] = useState(initialValue ?? "");
 
   return (
     <form
@@ -18,20 +25,16 @@ export function TrackingSearchForm({ onSubmit, isLoading }: TrackingSearchFormPr
         if (value.trim()) onSubmit(value.trim());
       }}
     >
-      <input
-        type="text"
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        placeholder="Enter your tracking number"
-        className="flex-1 rounded-md border border-zinc-300 px-4 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-      />
-      <button
-        type="submit"
-        disabled={isLoading}
-        className="rounded-md bg-black px-4 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-black"
-      >
+      <div className="flex-1">
+        <SearchInput
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder="Enter your tracking number"
+        />
+      </div>
+      <Button type="submit" isLoading={isLoading}>
         {isLoading ? "Searching…" : "Track"}
-      </button>
+      </Button>
     </form>
   );
 }

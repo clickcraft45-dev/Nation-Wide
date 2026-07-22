@@ -3,7 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, type Customer } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
@@ -11,11 +11,29 @@ import { UpdateCustomerDto } from './dto/update-customer.dto';
 const UNIQUE_CONSTRAINT_VIOLATION = 'P2002';
 const RECORD_NOT_FOUND = 'P2025';
 
+// Deliberately excludes passwordHash / hashedRefreshToken — those must never leave this
+// service, not even to STAFF/ADMIN callers. Keep in sync with @nationwide/shared-types CustomerDto.
+const PUBLIC_CUSTOMER_SELECT = {
+  id: true,
+  name: true,
+  phone: true,
+  email: true,
+  address: true,
+  consentGivenAt: true,
+  consentSource: true,
+  createdAt: true,
+  updatedAt: true,
+} satisfies Prisma.CustomerSelect;
+
+export type PublicCustomer = Prisma.CustomerGetPayload<{
+  select: typeof PUBLIC_CUSTOMER_SELECT;
+}>;
+
 @Injectable()
 export class CustomersService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(dto: CreateCustomerDto): Promise<Customer> {
+  async create(dto: CreateCustomerDto): Promise<PublicCustomer> {
     try {
       return await this.prisma.customer.create({
         data: {
@@ -26,6 +44,7 @@ export class CustomersService {
           consentSource: dto.consentSource,
           consentGivenAt: new Date(),
         },
+        select: PUBLIC_CUSTOMER_SELECT,
       });
     } catch (error) {
       this.rethrowKnownPrismaError(error, dto.phone);
@@ -33,21 +52,31 @@ export class CustomersService {
     }
   }
 
-  findAll(): Promise<Customer[]> {
-    return this.prisma.customer.findMany({ orderBy: { createdAt: 'desc' } });
+  findAll(): Promise<PublicCustomer[]> {
+    return this.prisma.customer.findMany({
+      orderBy: { createdAt: 'desc' },
+      select: PUBLIC_CUSTOMER_SELECT,
+    });
   }
 
-  async findOne(id: string): Promise<Customer> {
-    const customer = await this.prisma.customer.findUnique({ where: { id } });
+  async findOne(id: string): Promise<PublicCustomer> {
+    const customer = await this.prisma.customer.findUnique({
+      where: { id },
+      select: PUBLIC_CUSTOMER_SELECT,
+    });
     if (!customer) {
       throw new NotFoundException(`Customer ${id} not found`);
     }
     return customer;
   }
 
-  async update(id: string, dto: UpdateCustomerDto): Promise<Customer> {
+  async update(id: string, dto: UpdateCustomerDto): Promise<PublicCustomer> {
     try {
-      return await this.prisma.customer.update({ where: { id }, data: dto });
+      return await this.prisma.customer.update({
+        where: { id },
+        data: dto,
+        select: PUBLIC_CUSTOMER_SELECT,
+      });
     } catch (error) {
       this.rethrowKnownPrismaError(error, dto.phone, id);
       throw error;
