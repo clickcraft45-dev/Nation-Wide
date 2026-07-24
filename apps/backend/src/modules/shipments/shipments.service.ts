@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, type Shipment } from '@prisma/client';
 import type { TrackingStatusCode } from '@nationwide/shared-types';
@@ -6,10 +7,8 @@ import { RedisService } from '../../database/redis.service';
 import { trackingCacheKey } from '../tracking/tracking-cache-key';
 import { NotificationsService } from '../notifications/notifications.service';
 import { templateForTrackingStatus } from '../notifications/templates';
-import { generateInternalTrackingNumber } from './tracking-number';
+import { formatInternalTrackingNumber } from './tracking-number';
 
-const UNIQUE_CONSTRAINT_VIOLATION = 'P2002';
-const MAX_GENERATION_ATTEMPTS = 5;
 const MANUAL_OVERRIDE_RAW_STATUS = 'MANUAL_OVERRIDE';
 
 const withAdminDetail = {
@@ -35,35 +34,29 @@ export class ShipmentsService {
     private readonly notificationsService: NotificationsService,
   ) {}
 
+  // Two-step create-then-format: the customer-facing number embeds the DB-assigned
+  // sequenceNumber (Section: sequential tracking numbers), which Postgres only assigns once
+  // the row is actually inserted — so a syntactically-unique placeholder goes in first, then
+  // gets overwritten with the real formatted number now that the sequence value is known. This
+  // window is momentary and the placeholder is never returned to a caller.
   async createForOrder(orderId: string, providerId: string): Promise<Shipment> {
-    for (let attempt = 0; attempt < MAX_GENERATION_ATTEMPTS; attempt++) {
-      try {
-        return await this.prisma.shipment.create({
-          data: {
-            orderId,
-            providerId,
-            internalTrackingNumber: generateInternalTrackingNumber(),
-          },
-        });
-      } catch (error) {
-        const isTrackingNumberCollision =
-          error instanceof Prisma.PrismaClientKnownRequestError &&
-          error.code === UNIQUE_CONSTRAINT_VIOLATION &&
-          (error.meta?.target as string[] | undefined)?.includes(
-            'internal_tracking_number',
-          );
+    const created = await this.prisma.shipment.create({
+      data: {
+        orderId,
+        providerId,
+        internalTrackingNumber: `PENDING-${randomUUID()}`,
+      },
+    });
 
-        if (!isTrackingNumberCollision) {
-          throw error;
-        }
-        // Astronomically unlikely (40 bits of randomness) but cheap to guard against — retry
-        // with a freshly generated number rather than surfacing a confusing 500 to staff.
-      }
-    }
-
-    throw new Error(
-      `Failed to generate a unique internal tracking number after ${MAX_GENERATION_ATTEMPTS} attempts`,
-    );
+    return this.prisma.shipment.update({
+      where: { id: created.id },
+      data: {
+        internalTrackingNumber: formatInternalTrackingNumber(
+          created.sequenceNumber,
+          created.createdAt,
+        ),
+      },
+    });
   }
 
   /** Staff-facing view: raw provider data alongside the normalized event history (Section 3). */

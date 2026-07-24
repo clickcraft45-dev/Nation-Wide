@@ -98,6 +98,10 @@ model Shipment {
   id                    String    @id @default(uuid())
   orderId               String    @map("order_id")
   internalTrackingNumber String   @unique @map("internal_tracking_number")
+  // DB-assigned, gapless-enough monotonic counter backing internalTrackingNumber's numeric
+  // suffix (see tracking-number.ts) — lets staff/customers eyeball creation order and total
+  // parcel volume from the tracking number itself, per explicit product decision.
+  sequenceNumber        Int       @unique @default(autoincrement()) @map("sequence_number")
   providerId            String    @map("provider_id")
   currentStatus         String?   @map("current_status") // denormalized cache of latest canonical status code
   lastSyncedAt          DateTime? @map("last_synced_at")
