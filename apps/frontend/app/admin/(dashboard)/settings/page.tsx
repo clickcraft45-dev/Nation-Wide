@@ -16,7 +16,7 @@ export default function AdminSettingsPage() {
 
   async function handleLogout() {
     await logout();
-    router.replace("/admin/login");
+    router.replace("/");
   }
 
   return (

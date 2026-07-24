@@ -14,7 +14,7 @@ export default function CustomerLayout({ children }: { children: React.ReactNode
   useEffect(() => {
     if (isLoading) return;
     if (!user) {
-      router.replace("/");
+      router.replace("/login");
     } else if (user.role !== "CUSTOMER") {
       // A staff/admin account trying to reach the customer area — send them to their own
       // dashboard rather than showing a dead end.

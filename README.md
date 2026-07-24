@@ -34,8 +34,13 @@ npm run db:seed
 npm run build --workspace=packages/shared-types
 
 # 7. run both apps
-npm run dev:backend    # http://localhost:4000
-npm run dev:frontend   # http://localhost:3000
+npm run dev           # backend on fixed port 4000, frontend on fixed port 3004
+                       # (fails fast with a clear error if either port is already in use —
+                       # see scripts/ports.cjs to change the assignment)
+
+# 8. alternative single-app startup
+npm run dev:backend   # backend on 4000
+npm run dev:frontend  # frontend on 3004, backend API URL is auto-derived from BACKEND_PORT or NEXT_PUBLIC_API_BASE_URL
 ```
 
 **`packages/shared-types` must be built before `apps/backend` or `apps/frontend` will resolve it
@@ -70,9 +75,10 @@ cache immediately), `GET /api/v1/admin/integrations/:providerCode/health` (error
 `api_request_logs`), `GET /api/v1/admin/audit-logs`. Frontend pages: `/admin/login`,
 `/admin/shipments`, `/admin/integrations`, `/admin/audit-logs`.
 
-Note: this machine also runs an unrelated project's Postgres/Redis containers on the default ports
-(5432/6379), so this repo's `docker-compose.yml` maps to 5433/6380 instead. Adjust if that's not the
-case in your environment.
+Note: this machine also runs unrelated projects' containers on several default ports — Postgres/Redis
+on 5432/6379 (another project) and 3000-3003 (a persistent IDE container) — so this repo uses fixed
+ports chosen to avoid all of them: backend `4000`, frontend `3004`, Postgres `5433`, Redis `6380`
+(see `scripts/ports.cjs` and `docker-compose.yml`). Adjust if that's not the case in your environment.
 
 ## Project structure
 

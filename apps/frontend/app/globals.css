@@ -110,3 +110,62 @@ body {
   color: var(--foreground);
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
 }
+
+/* Marketing-page motion: a route line "drawing" itself and a package dot travelling along it. */
+@keyframes route-draw {
+  from {
+    stroke-dashoffset: 1000;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes route-travel {
+  0% {
+    offset-distance: 0%;
+    opacity: 0;
+  }
+  8% {
+    opacity: 1;
+  }
+  92% {
+    opacity: 1;
+  }
+  100% {
+    offset-distance: 100%;
+    opacity: 0;
+  }
+}
+
+@keyframes soft-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+.animate-route-draw {
+  stroke-dasharray: 1000;
+  animation: route-draw 2.4s ease-out forwards;
+}
+
+.animate-route-travel {
+  offset-rotate: 0deg;
+  animation: route-travel 4s ease-in-out infinite;
+}
+
+.animate-soft-float {
+  animation: soft-float 4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-route-draw,
+  .animate-route-travel,
+  .animate-soft-float {
+    animation: none;
+  }
+}

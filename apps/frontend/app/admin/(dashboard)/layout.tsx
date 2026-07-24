@@ -12,8 +12,13 @@ export default function AdminDashboardLayout({ children }: { children: React.Rea
   const router = useRouter();
 
   useEffect(() => {
-    if (!isLoading && (!user || user.role === "CUSTOMER")) {
-      router.replace("/");
+    if (isLoading) return;
+    if (!user) {
+      router.replace("/login");
+    } else if (user.role === "CUSTOMER") {
+      // A customer account trying to reach the manager area — send them to their own
+      // dashboard rather than the login form they're already past.
+      router.replace("/dashboard");
     }
   }, [isLoading, user, router]);
 
