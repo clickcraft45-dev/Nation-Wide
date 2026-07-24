@@ -2,7 +2,6 @@ import {
   LayoutDashboard,
   Package,
   Users,
-  ClipboardList,
   Truck,
   CreditCard,
   MapPin,
@@ -23,7 +22,6 @@ export const ADMIN_NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard },
   { label: "Orders", href: "/admin/orders", icon: Package },
   { label: "Customers", href: "/admin/customers", icon: Users },
-  { label: "Shipment Requests", href: "/admin/shipment-requests", icon: ClipboardList },
   { label: "Pickups", href: "/admin/pickups", icon: Truck },
   { label: "Payments", href: "/admin/payments", icon: CreditCard },
   { label: "Tracking", href: "/admin/shipments", icon: MapPin },
@@ -35,6 +33,7 @@ export const ADMIN_NAV_ITEMS: NavItem[] = [
 export const CUSTOMER_NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "My Orders", href: "/orders", icon: Package },
+  { label: "My Quotes", href: "/quotes", icon: FileQuestion },
   { label: "Track a Shipment", href: "/tracking", icon: MapPin },
   { label: "Profile", href: "/profile", icon: User },
 ];

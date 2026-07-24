@@ -2,6 +2,13 @@ export const ORDER_STATUSES = ["PENDING", "CONFIRMED", "CANCELLED", "COMPLETED"]
 
 export type OrderStatusCode = (typeof ORDER_STATUSES)[number];
 
+export const PAYMENT_STATUSES = ["PENDING", "PAID", "FAILED", "REFUNDED"] as const;
+export type PaymentStatusCode = (typeof PAYMENT_STATUSES)[number];
+
+// RAZORPAY is reserved, unused until a real gateway is integrated.
+export const PAYMENT_METHODS = ["CASH", "UPI", "BANK_TRANSFER", "RAZORPAY"] as const;
+export type PaymentMethodCode = (typeof PAYMENT_METHODS)[number];
+
 export interface ShipmentSummaryDto {
   id: string;
   internalTrackingNumber: string;
@@ -14,7 +21,18 @@ export interface OrderDto {
   id: string;
   customerId: string;
   status: OrderStatusCode;
+  quoteId: string | null;
+  paymentStatus: PaymentStatusCode;
+  paymentMethod: PaymentMethodCode | null;
+  paidAmount: number | null;
+  paidAt: string | null; // ISO 8601
   createdAt: string; // ISO 8601
   updatedAt: string; // ISO 8601
   shipments: ShipmentSummaryDto[];
+}
+
+export interface UpdateOrderPaymentDto {
+  paymentStatus: PaymentStatusCode;
+  paymentMethod?: PaymentMethodCode;
+  paidAmount?: number;
 }

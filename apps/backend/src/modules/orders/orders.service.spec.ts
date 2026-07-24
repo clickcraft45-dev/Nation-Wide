@@ -112,6 +112,36 @@ describe('OrdersService', () => {
     });
   });
 
+  describe('createOrderWithShipment', () => {
+    it('creates an order and linked shipment without enqueueing a notification', async () => {
+      const result = await service.createOrderWithShipment('customer-1');
+
+      expect(prisma.order.create).toHaveBeenCalledWith({
+        data: { customerId: 'customer-1' },
+      });
+      expect(shipmentsService.createForOrder).toHaveBeenCalledWith(
+        'order-1',
+        'provider-1',
+      );
+      expect(result).toEqual({
+        order,
+        shipment: { id: 'shipment-1', internalTrackingNumber: 'NW-1' },
+      });
+      expect(notificationsService.enqueue).not.toHaveBeenCalled();
+    });
+
+    it('validates the customer exists before creating anything', async () => {
+      customersService.findOne.mockRejectedValue(
+        new NotFoundException('Customer x not found'),
+      );
+
+      await expect(
+        service.createOrderWithShipment('missing-customer'),
+      ).rejects.toThrow(NotFoundException);
+      expect(prisma.order.create).not.toHaveBeenCalled();
+    });
+  });
+
   describe('update', () => {
     it('throws NotFoundException when the order does not exist', async () => {
       prisma.order.update.mockRejectedValue(recordNotFoundError());

@@ -1,7 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/state/auth-context";
 import { MarketingNavbar } from "@/components/marketing/navbar";
@@ -10,40 +9,23 @@ import { MarketingServices } from "@/components/marketing/services";
 import { MarketingStats } from "@/components/marketing/stats";
 import { MarketingTestimonials } from "@/components/marketing/testimonials";
 import { MarketingFooter } from "@/components/marketing/footer";
-import { GetQuoteDialog } from "@/components/marketing/get-quote-dialog";
-
-// A signed-out visitor who clicks "Get a Quote" is sent to /login?redirect=<this>, so a
-// successful login sends them straight back here with the dialog reopened.
-const QUOTE_REDIRECT_TARGET = "/?quote=1";
 
 // The public homepage — Track is available to anyone without signing in, but Get a Quote
-// requires an account: signed-out visitors are sent to log in first, then returned here with
-// the dialog open. Authenticated visitors aren't redirected away from the page itself; the
-// navbar just swaps "Sign in" for "Dashboard".
-function HomePageInner() {
-  const [quoteOpen, setQuoteOpen] = useState(false);
+// requires an account: signed-out visitors are sent to log in first, then straight to the real
+// /quote booking page on return. Authenticated visitors aren't redirected away from the page
+// itself; the navbar just swaps "Sign in" for "Dashboard".
+export default function HomePage() {
   const { user, isLoading } = useAuth();
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const wantsQuote = searchParams.get("quote") === "1";
 
   function handleGetQuote() {
     if (isLoading) return;
     if (!user) {
-      router.push(`/login?redirect=${encodeURIComponent(QUOTE_REDIRECT_TARGET)}`);
+      router.push(`/login?redirect=${encodeURIComponent("/quote")}`);
       return;
     }
-    setQuoteOpen(true);
+    router.push("/quote");
   }
-
-  useEffect(() => {
-    // Returning here via QUOTE_REDIRECT_TARGET after a login prompted by "Get a Quote":
-    // reopen the dialog and drop the one-shot ?quote= param so a refresh doesn't reopen it.
-    if (!wantsQuote || isLoading || !user) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setQuoteOpen(true);
-    router.replace("/", { scroll: false });
-  }, [wantsQuote, isLoading, user, router]);
 
   return (
     <div className="flex min-h-screen flex-1 flex-col">
@@ -74,16 +56,6 @@ function HomePageInner() {
       </section>
 
       <MarketingFooter />
-
-      <GetQuoteDialog open={quoteOpen} onOpenChange={setQuoteOpen} />
     </div>
-  );
-}
-
-export default function HomePage() {
-  return (
-    <Suspense fallback={null}>
-      <HomePageInner />
-    </Suspense>
   );
 }

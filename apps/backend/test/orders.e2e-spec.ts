@@ -156,7 +156,7 @@ describe('Orders (e2e)', () => {
     expect(order.status).toBe('PENDING');
     expect(order.shipments).toHaveLength(1);
     expect(order.shipments[0].internalTrackingNumber).toMatch(
-      /^NW-[A-Z0-9]{10}$/,
+      /^NW-\d{2}-\d{8}$/,
     );
 
     const getRes = await request(app.getHttpServer())

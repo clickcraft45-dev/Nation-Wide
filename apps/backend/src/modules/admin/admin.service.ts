@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import type {
   AuditLogEntryDto,
+  DashboardSummaryDto,
   IntegrationHealthDto,
 } from '@nationwide/shared-types';
 import { PrismaService } from '../../database/prisma.service';
@@ -99,5 +100,27 @@ export class AdminService {
       after: log.after,
       createdAt: log.createdAt.toISOString(),
     }));
+  }
+
+  async getDashboardSummary(): Promise<DashboardSummaryDto> {
+    const [newQuotes, needsManualReview, scheduledPickups, dropOffs, pendingPayments] =
+      await Promise.all([
+        this.prisma.quote.count({
+          where: { status: { in: ['SUBMITTED', 'NEEDS_MANUAL_REVIEW'] } },
+        }),
+        this.prisma.quote.count({ where: { status: 'NEEDS_MANUAL_REVIEW' } }),
+        this.prisma.pickup.count({
+          where: {
+            method: 'PICKUP',
+            status: { in: ['SCHEDULED', 'PENDING', 'ASSIGNED', 'PICKUP_IN_PROGRESS'] },
+          },
+        }),
+        this.prisma.pickup.count({
+          where: { method: 'WAREHOUSE_DROP_OFF', status: 'SCHEDULED' },
+        }),
+        this.prisma.order.count({ where: { paymentStatus: 'PENDING' } }),
+      ]);
+
+    return { newQuotes, needsManualReview, scheduledPickups, dropOffs, pendingPayments };
   }
 }

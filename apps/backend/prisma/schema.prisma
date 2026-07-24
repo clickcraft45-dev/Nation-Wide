@@ -38,25 +38,86 @@ enum NotificationStatus {
   FAILED
 }
 
+enum ShipmentTypeCode {
+  DOCUMENT
+  PARCEL
+  PACKAGE
+  OTHER
+}
+
+enum FulfillmentMethod {
+  PICKUP
+  WAREHOUSE_DROP_OFF
+}
+
+// No automated pricing engine exists yet (Section: Quote lifecycle) — every quote needs a
+// staff-entered price regardless of status. SUBMITTED vs NEEDS_MANUAL_REVIEW is purely
+// informational until a real pricing engine can auto-quote the SUBMITTED ones.
+enum QuoteStatus {
+  SUBMITTED
+  NEEDS_MANUAL_REVIEW
+  QUOTED
+  ACCEPTED
+  REJECTED
+  CANCELLED
+}
+
+enum QuoteReviewReason {
+  OVERSIZED
+  DANGEROUS_GOODS
+  RESTRICTED_DESTINATION
+  SPECIAL_HANDLING
+  MISCELLANEOUS
+}
+
+// Shared by both fulfillment methods — a Pickup row represents "how the parcel physically
+// reaches us" whether that's a scheduled pickup or a warehouse drop-off. Only the terminal
+// state differs (PICKED_UP vs DROPPED_OFF); see PickupsService's transition map.
+enum PickupStatus {
+  SCHEDULED
+  PENDING
+  ASSIGNED
+  PICKUP_IN_PROGRESS
+  PICKED_UP
+  CANCELLED
+  PICKUP_FAILED
+  DROPPED_OFF
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  CASH
+  UPI
+  BANK_TRANSFER
+  RAZORPAY // reserved, unused until a real gateway is integrated
+}
+
 // ---------------------------------------------------------------------------
 // Core domain
 // ---------------------------------------------------------------------------
 
 model Customer {
-  id                 String    @id @default(uuid())
+  id                 String   @id @default(uuid())
   name               String
-  phone              String    @unique // E.164 normalized
-  email              String?   @unique // required + unique only for self-registered (login-capable) customers
+  phone              String   @unique // E.164 normalized
+  email              String?  @unique // required + unique only for self-registered (login-capable) customers
   address            String?
-  passwordHash       String?   @map("password_hash") // null until the customer registers/sets a password
-  hashedRefreshToken String?   @map("hashed_refresh_token")
-  isActive           Boolean   @default(true) @map("is_active")
-  consentGivenAt     DateTime  @map("consent_given_at") // DPDP Act: when the customer consented to data collection
-  consentSource      String    @map("consent_source") // e.g. 'signup_form', 'staff_entry'
-  createdAt          DateTime  @default(now()) @map("created_at")
-  updatedAt          DateTime  @updatedAt @map("updated_at")
+  passwordHash       String?  @map("password_hash") // null until the customer registers/sets a password
+  hashedRefreshToken String?  @map("hashed_refresh_token")
+  isActive           Boolean  @default(true) @map("is_active")
+  consentGivenAt     DateTime @map("consent_given_at") // DPDP Act: when the customer consented to data collection
+  consentSource      String   @map("consent_source") // e.g. 'signup_form', 'staff_entry'
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
 
   orders        Order[]
+  quotes        Quote[]
   notifications Notification[]
 
   @@map("customers")
@@ -66,50 +127,163 @@ model Order {
   id         String      @id @default(uuid())
   customerId String      @map("customer_id")
   status     OrderStatus @default(PENDING)
-  createdAt  DateTime    @default(now()) @map("created_at")
-  updatedAt  DateTime    @updatedAt @map("updated_at")
 
-  customer  Customer   @relation(fields: [customerId], references: [id])
-  shipments Shipment[] // 1:many — a single order can produce split shipments
+  // Payment is tracked directly on Order rather than a separate Payment model — one order has
+  // at most one "current" payment state in this phase (no gateway, no partial/split payments,
+  // no refund events to track yet). Add a dedicated Payment model later if Razorpay integration
+  // needs a real transaction ledger.
+  paymentStatus          PaymentStatus  @default(PENDING) @map("payment_status")
+  paymentMethod          PaymentMethod? @map("payment_method")
+  paidAmount             Decimal?       @map("paid_amount") @db.Decimal(10, 2)
+  paidAt                 DateTime?      @map("paid_at")
+  paymentMarkedByAdminId String?        @map("payment_marked_by_admin_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  customer        Customer   @relation(fields: [customerId], references: [id])
+  shipments       Shipment[] // 1:many — a single order can produce split shipments
+  quote           Quote? // inverse of Quote.orderId, which owns the FK
+  pickup          Pickup?
+  paymentMarkedBy AdminUser? @relation("OrderPaymentMarkedBy", fields: [paymentMarkedByAdminId], references: [id])
 
   @@index([customerId])
   @@map("orders")
 }
 
-model ShippingProvider {
-  id          String   @id @default(uuid())
-  code        String   @unique // e.g. 'ICL'
-  name        String
-  adapterClass String  @map("adapter_class") // e.g. 'ICLAdapter'
-  isActive    Boolean  @default(true) @map("is_active")
-  config      Json     @default("{}") // provider-specific config (base URLs, etc.)
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+/// A customer's shipment request and its pricing/approval lifecycle, from submission through
+/// to becoming a real Order (see Quote lifecycle in the implementation plan). Address fields are
+/// flat/inline rather than a separate Address model, matching this codebase's existing
+/// non-normalized style (Customer.address is a single field too).
+model Quote {
+  id         String @id @default(uuid())
+  customerId String @map("customer_id")
 
-  shipments              Shipment[]
+  shipmentType ShipmentTypeCode @map("shipment_type")
+  weightKg     Decimal          @map("weight_kg") @db.Decimal(10, 2)
+  description  String?
+
+  originName         String  @map("origin_name")
+  originPhone        String  @map("origin_phone")
+  originAddressLine1 String  @map("origin_address_line1")
+  originAddressLine2 String? @map("origin_address_line2")
+  originCity         String  @map("origin_city")
+  originState        String  @map("origin_state")
+  originPostalCode   String  @map("origin_postal_code")
+  originCountry      String  @map("origin_country")
+  originInstructions String? @map("origin_instructions")
+
+  destName         String  @map("dest_name")
+  destPhone        String  @map("dest_phone")
+  destAddressLine1 String  @map("dest_address_line1")
+  destAddressLine2 String? @map("dest_address_line2")
+  destCity         String  @map("dest_city")
+  destState        String  @map("dest_state")
+  destPostalCode   String  @map("dest_postal_code")
+  destCountry      String  @map("dest_country")
+
+  fulfillmentMethod FulfillmentMethod @map("fulfillment_method")
+  // Only set when fulfillmentMethod == PICKUP; validated at the service layer (not a DB
+  // constraint, matching how OrderStatus transitions aren't DB-enforced either).
+  pickupDate        DateTime?         @map("pickup_date") @db.Date
+  pickupTimeSlot    String?           @map("pickup_time_slot") // '09:00-12:00' | '12:00-15:00' | '15:00-18:00'
+
+  status        QuoteStatus        @default(SUBMITTED)
+  reviewReason  QuoteReviewReason? @map("review_reason")
+  internalNotes String?            @map("internal_notes") // staff-only, never serialized to customer DTOs
+
+  quotedAmount    Decimal?  @map("quoted_amount") @db.Decimal(10, 2)
+  quotedCurrency  String?   @default("INR") @map("quoted_currency")
+  quotedByAdminId String?   @map("quoted_by_admin_id")
+  quotedAt        DateTime? @map("quoted_at")
+  rejectionReason String?   @map("rejection_reason")
+
+  // Client-generated idempotency key — see QuotesService.create's duplicate-submission handling.
+  submissionKey String  @unique @map("submission_key")
+  orderId       String? @unique @map("order_id") // set once accepted, 1:1
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  customer Customer   @relation(fields: [customerId], references: [id])
+  quotedBy AdminUser? @relation("QuoteQuotedBy", fields: [quotedByAdminId], references: [id])
+  order    Order?     @relation(fields: [orderId], references: [id])
+  pickup   Pickup?
+
+  @@index([customerId])
+  @@index([status])
+  @@map("quotes")
+}
+
+/// The operational fulfillment record — created the instant a quote is accepted, for both
+/// PICKUP and WAREHOUSE_DROP_OFF (they're mutually exclusive per quote and share almost
+/// identical status/confirmation metadata, so one model covers both rather than two
+/// near-duplicates).
+model Pickup {
+  id      String  @id @default(uuid())
+  quoteId String  @unique @map("quote_id")
+  orderId String? @unique @map("order_id") // denorm convenience for the admin order-detail join
+
+  method FulfillmentMethod
+  status PickupStatus      @default(SCHEDULED) // only the terminal state differs: PICKED_UP vs DROPPED_OFF
+
+  scheduledDate     DateTime? @map("scheduled_date") @db.Date // PICKUP only, copied from the quote
+  scheduledTimeSlot String?   @map("scheduled_time_slot") // PICKUP only
+
+  assignedStaffId    String?   @map("assigned_staff_id")
+  confirmedByAdminId String?   @map("confirmed_by_admin_id") // who marked PICKED_UP / DROPPED_OFF
+  confirmedAt        DateTime? @map("confirmed_at")
+
+  weightVerifiedKg Decimal? @map("weight_verified_kg") @db.Decimal(10, 2)
+  notes            String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  quote            Quote      @relation(fields: [quoteId], references: [id])
+  order            Order?     @relation(fields: [orderId], references: [id])
+  assignedStaff    AdminUser? @relation("PickupAssignedStaff", fields: [assignedStaffId], references: [id])
+  confirmedByAdmin AdminUser? @relation("PickupConfirmedByAdmin", fields: [confirmedByAdminId], references: [id])
+
+  @@index([status])
+  @@index([scheduledDate])
+  @@map("pickups")
+}
+
+model ShippingProvider {
+  id           String   @id @default(uuid())
+  code         String   @unique // e.g. 'ICL'
+  name         String
+  adapterClass String   @map("adapter_class") // e.g. 'ICLAdapter'
+  isActive     Boolean  @default(true) @map("is_active")
+  config       Json     @default("{}") // provider-specific config (base URLs, etc.)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  shipments               Shipment[]
   externalTrackingNumbers ExternalTrackingNumber[]
-  trackingEvents         TrackingEvent[]
-  apiRequestLogs         ApiRequestLog[]
+  trackingEvents          TrackingEvent[]
+  apiRequestLogs          ApiRequestLog[]
 
   @@map("shipping_providers")
 }
 
 model Shipment {
-  id                    String    @id @default(uuid())
-  orderId               String    @map("order_id")
-  internalTrackingNumber String   @unique @map("internal_tracking_number")
+  id                     String    @id @default(uuid())
+  orderId                String    @map("order_id")
+  internalTrackingNumber String    @unique @map("internal_tracking_number")
   // DB-assigned, gapless-enough monotonic counter backing internalTrackingNumber's numeric
   // suffix (see tracking-number.ts) — lets staff/customers eyeball creation order and total
   // parcel volume from the tracking number itself, per explicit product decision.
-  sequenceNumber        Int       @unique @default(autoincrement()) @map("sequence_number")
-  providerId            String    @map("provider_id")
-  currentStatus         String?   @map("current_status") // denormalized cache of latest canonical status code
-  lastSyncedAt          DateTime? @map("last_synced_at")
-  createdAt             DateTime  @default(now()) @map("created_at")
-  updatedAt             DateTime  @updatedAt @map("updated_at")
+  sequenceNumber         Int       @unique @default(autoincrement()) @map("sequence_number")
+  providerId             String    @map("provider_id")
+  currentStatus          String?   @map("current_status") // denormalized cache of latest canonical status code
+  lastSyncedAt           DateTime? @map("last_synced_at")
+  createdAt              DateTime  @default(now()) @map("created_at")
+  updatedAt              DateTime  @updatedAt @map("updated_at")
 
-  order                   Order                     @relation(fields: [orderId], references: [id])
-  provider                ShippingProvider          @relation(fields: [providerId], references: [id])
+  order                   Order                    @relation(fields: [orderId], references: [id])
+  provider                ShippingProvider         @relation(fields: [providerId], references: [id])
   externalTrackingNumbers ExternalTrackingNumber[]
   trackingEvents          TrackingEvent[]
   apiRequestLogs          ApiRequestLog[]
@@ -129,7 +303,7 @@ model ExternalTrackingNumber {
   rawMetadata            Json?    @map("raw_metadata")
   createdAt              DateTime @default(now()) @map("created_at")
 
-  shipment       Shipment        @relation(fields: [shipmentId], references: [id])
+  shipment       Shipment         @relation(fields: [shipmentId], references: [id])
   provider       ShippingProvider @relation(fields: [providerId], references: [id])
   trackingEvents TrackingEvent[]
 
@@ -162,9 +336,9 @@ model TrackingEvent {
   createdAt                DateTime @default(now()) @map("created_at")
 
   shipment               Shipment                @relation(fields: [shipmentId], references: [id])
-  provider               ShippingProvider         @relation(fields: [providerId], references: [id])
-  externalTrackingNumber ExternalTrackingNumber?  @relation(fields: [externalTrackingNumberId], references: [id])
-  canonicalStatus        TrackingStatus           @relation(fields: [canonicalStatusId], references: [id])
+  provider               ShippingProvider        @relation(fields: [providerId], references: [id])
+  externalTrackingNumber ExternalTrackingNumber? @relation(fields: [externalTrackingNumberId], references: [id])
+  canonicalStatus        TrackingStatus          @relation(fields: [canonicalStatusId], references: [id])
 
   @@index([shipmentId, createdAt])
   @@map("tracking_events")
@@ -194,16 +368,20 @@ model ApiRequestLog {
 // ---------------------------------------------------------------------------
 
 model AdminUser {
-  id                  String    @id @default(uuid())
-  email               String    @unique
-  passwordHash        String    @map("password_hash")
-  role                AdminRole @default(STAFF)
-  isActive            Boolean   @default(true) @map("is_active")
-  hashedRefreshToken  String?   @map("hashed_refresh_token")
-  createdAt           DateTime  @default(now()) @map("created_at")
-  updatedAt           DateTime  @updatedAt @map("updated_at")
+  id                 String    @id @default(uuid())
+  email              String    @unique
+  passwordHash       String    @map("password_hash")
+  role               AdminRole @default(STAFF)
+  isActive           Boolean   @default(true) @map("is_active")
+  hashedRefreshToken String?   @map("hashed_refresh_token")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
 
-  auditLogs AuditLog[]
+  auditLogs           AuditLog[]
+  quotedQuotes        Quote[]    @relation("QuoteQuotedBy")
+  assignedPickups     Pickup[]   @relation("PickupAssignedStaff")
+  confirmedPickups    Pickup[]   @relation("PickupConfirmedByAdmin")
+  paymentMarkedOrders Order[]    @relation("OrderPaymentMarkedBy")
 
   @@map("admin_users")
 }

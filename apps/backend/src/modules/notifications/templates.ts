@@ -13,6 +13,11 @@ export const NOTIFICATION_TEMPLATES = {
   OUT_FOR_DELIVERY: 'out_for_delivery',
   DELIVERED: 'delivered',
   EXCEPTION: 'delivery_exception',
+  QUOTE_READY: 'quote_ready',
+  QUOTE_REJECTED: 'quote_rejected',
+  // Distinct from PICKED_UP's 'pickup_confirmation' (that one's a tracking-status update);
+  // this fires once for either a pickup or a warehouse drop-off being confirmed by staff.
+  PICKUP_CONFIRMED: 'pickup_or_dropoff_confirmed',
 } as const;
 
 const STATUS_TEMPLATE_MAP: Record<TrackingStatusCode, string> = {

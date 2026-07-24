@@ -4,8 +4,6 @@ import { useEffect, useState } from "react";
 import { Package, CalendarDays, CheckCircle2, Users } from "lucide-react";
 import type { OrderDto, CustomerDto, ShippingProviderDto } from "@nationwide/shared-types";
 import { apiClient } from "@/lib/api-client";
-import { listMockPayments } from "@/lib/mock-data";
-import type { PaymentRecord } from "@/lib/types/placeholder";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { BarChart } from "@/components/reports/bar-chart";
@@ -26,7 +24,6 @@ export default function AdminReportsPage() {
   const [orders, setOrders] = useState<OrderDto[]>([]);
   const [customers, setCustomers] = useState<CustomerDto[]>([]);
   const [providers, setProviders] = useState<ShippingProviderDto[]>([]);
-  const [payments, setPayments] = useState<PaymentRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -34,13 +31,11 @@ export default function AdminReportsPage() {
       apiClient.get<OrderDto[]>("/orders"),
       apiClient.get<CustomerDto[]>("/customers"),
       apiClient.get<ShippingProviderDto[]>("/shipping-providers"),
-      listMockPayments(),
     ])
-      .then(([o, c, p, pay]) => {
+      .then(([o, c, p]) => {
         setOrders(o);
         setCustomers(c);
         setProviders(p);
-        setPayments(pay);
       })
       .finally(() => setIsLoading(false));
   }, []);
@@ -69,14 +64,16 @@ export default function AdminReportsPage() {
     value: orders.filter((o) => o.shipments[0]?.providerId === p.id).length,
   }));
 
-  const revenue = payments.filter((p) => p.status === "PAID").reduce((sum, p) => sum + p.amount, 0);
+  const revenue = orders
+    .filter((o) => o.paymentStatus === "PAID")
+    .reduce((sum, o) => sum + (o.paidAmount ?? 0), 0);
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-xl font-semibold text-foreground">Reports</h1>
         <p className="text-sm text-muted-foreground">
-          Orders and customer metrics are live; revenue is placeholder data pending a payments backend.
+          Orders, customer, and revenue metrics.
         </p>
       </div>
 
@@ -104,9 +101,7 @@ export default function AdminReportsPage() {
               <p className="text-2xl font-semibold text-foreground">
                 ₹{revenue.toLocaleString("en-IN")}
               </p>
-              <p className="text-xs text-muted-foreground">
-                Placeholder — computed from mock payment data, not a real ledger.
-              </p>
+              <p className="text-xs text-muted-foreground">Total from orders marked paid.</p>
             </>
           )}
         </CardContent>

@@ -11,7 +11,12 @@ import {
   Users,
   FileQuestion,
 } from "lucide-react";
-import type { OrderDto, CustomerDto, AuditLogEntryDto } from "@nationwide/shared-types";
+import type {
+  OrderDto,
+  CustomerDto,
+  AuditLogEntryDto,
+  DashboardSummaryDto,
+} from "@nationwide/shared-types";
 import { apiClient, ApiError } from "@/lib/api-client";
 import { useAuth } from "@/state/auth-context";
 import { KpiCard } from "@/components/dashboard/kpi-card";
@@ -30,6 +35,7 @@ export default function AdminDashboardHomePage() {
   const [orders, setOrders] = useState<OrderDto[] | null>(null);
   const [customers, setCustomers] = useState<CustomerDto[] | null>(null);
   const [auditLogs, setAuditLogs] = useState<AuditLogEntryDto[]>([]);
+  const [summary, setSummary] = useState<DashboardSummaryDto | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -44,12 +50,14 @@ export default function AdminDashboardHomePage() {
       apiClient.get<OrderDto[]>("/orders"),
       apiClient.get<CustomerDto[]>("/customers"),
       apiClient.get<AuditLogEntryDto[]>("/admin/audit-logs"),
+      apiClient.get<DashboardSummaryDto>("/admin/dashboard-summary"),
     ])
-      .then(([ordersRes, customersRes, auditRes]) => {
+      .then(([ordersRes, customersRes, auditRes, summaryRes]) => {
         if (cancelled) return;
         setOrders(ordersRes);
         setCustomers(customersRes);
         setAuditLogs(auditRes);
+        setSummary(summaryRes);
       })
       .catch((err) => {
         if (cancelled) return;
@@ -118,32 +126,37 @@ export default function AdminDashboardHomePage() {
           isLoading={isLoading}
         />
         <KpiCard
-          title="Pending Pickups"
-          value={2}
+          title="Scheduled Pickups"
+          value={summary?.scheduledPickups ?? 0}
           icon={Clock}
           href="/admin/pickups"
-          hint="Placeholder — no pickup backend yet"
+          isLoading={isLoading}
         />
         <KpiCard
-          title="Today's Pickups"
-          value={2}
+          title="Warehouse Drop-offs"
+          value={summary?.dropOffs ?? 0}
           icon={CalendarClock}
           href="/admin/pickups"
-          hint="Placeholder — no pickup backend yet"
+          isLoading={isLoading}
         />
         <KpiCard
           title="Pending Payments"
-          value={2}
+          value={summary?.pendingPayments ?? 0}
           icon={CreditCard}
           href="/admin/payments"
-          hint="Placeholder — no payment backend yet"
+          isLoading={isLoading}
         />
         <KpiCard
-          title="Pending Quote Requests"
-          value={2}
+          title="Quote Requests"
+          value={summary?.newQuotes ?? 0}
           icon={FileQuestion}
           href="/admin/quotes"
-          hint="Placeholder — no quote backend yet"
+          hint={
+            summary?.needsManualReview
+              ? `${summary.needsManualReview} need manual review`
+              : undefined
+          }
+          isLoading={isLoading}
         />
       </div>
 

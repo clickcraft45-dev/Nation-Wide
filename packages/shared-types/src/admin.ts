@@ -49,3 +49,11 @@ export interface AuditLogEntryDto {
   after: unknown;
   createdAt: string; // ISO 8601
 }
+
+export interface DashboardSummaryDto {
+  newQuotes: number;
+  needsManualReview: number;
+  scheduledPickups: number;
+  dropOffs: number;
+  pendingPayments: number;
+}

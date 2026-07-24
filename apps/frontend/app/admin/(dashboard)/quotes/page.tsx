@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { FileQuestion, Plus } from "lucide-react";
-import { listMockQuotes } from "@/lib/mock-data";
-import type { QuoteRequest } from "@/lib/types/placeholder";
+import Link from "next/link";
+import { FileQuestion } from "lucide-react";
+import type { QuoteAdminDetailDto, QuoteReviewReasonCode } from "@nationwide/shared-types";
+import { apiClient, ApiError } from "@/lib/api-client";
+import { SearchInput } from "@/components/ui/search-input";
 import { NativeSelect } from "@/components/ui/select";
 import {
   Table,
@@ -14,99 +16,134 @@ import {
   TableCell,
 } from "@/components/ui/table";
 import { TableSkeleton } from "@/components/ui/skeleton";
-import { EmptyState } from "@/components/ui/page-state";
+import { EmptyState, ErrorState } from "@/components/ui/page-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
-import { GenerateQuoteDialog } from "@/components/quotes/generate-quote-dialog";
+import { QuoteStatusBadge } from "@/components/ui/status-badge";
 import { ReviewQuoteDialog } from "@/components/quotes/review-quote-dialog";
 
-const STATUS_VARIANT = {
-  PENDING_REVIEW: "warning",
-  APPROVED: "success",
-  REJECTED: "danger",
-} as const;
-
-const REASON_LABEL: Record<string, string> = {
+const REASON_LABEL: Record<QuoteReviewReasonCode, string> = {
   DANGEROUS_GOODS: "Dangerous Goods",
   OVERSIZED: "Oversized",
   RESTRICTED_DESTINATION: "Restricted Destination",
   SPECIAL_HANDLING: "Special Handling",
+  MISCELLANEOUS: "Miscellaneous",
 };
 
 export default function AdminQuotesPage() {
-  const [quotes, setQuotes] = useState<QuoteRequest[]>([]);
+  const [quotes, setQuotes] = useState<QuoteAdminDetailDto[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const { showToast } = useToast();
 
-  useEffect(() => {
-    listMockQuotes()
+  function load() {
+    setIsLoading(true);
+    setError(null);
+    apiClient
+      .get<QuoteAdminDetailDto[]>("/admin/quotes")
       .then(setQuotes)
+      .catch((err) => {
+        setError(
+          err instanceof ApiError ? "Failed to load quote requests." : "Something went wrong.",
+        );
+      })
       .finally(() => setIsLoading(false));
-  }, []);
-
-  const filtered = useMemo(
-    () => (statusFilter ? quotes.filter((q) => q.status === statusFilter) : quotes),
-    [quotes, statusFilter],
-  );
-
-  function approve(id: string, amount: number) {
-    setQuotes((prev) =>
-      prev.map((q) =>
-        q.id === id ? { ...q, status: "APPROVED", quotedAmount: amount } : q,
-      ),
-    );
-    showToast({ variant: "success", title: "Quote approved" });
   }
 
-  function reject(id: string) {
-    setQuotes((prev) => prev.map((q) => (q.id === id ? { ...q, status: "REJECTED" } : q)));
-    showToast({ variant: "success", title: "Quote rejected" });
+  useEffect(() => {
+    // Fetching on mount is a one-shot lookup, not a subscription to external state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    load();
+  }, []);
+
+  const filtered = useMemo(() => {
+    let result = quotes;
+    if (statusFilter) result = result.filter((q) => q.status === statusFilter);
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      result = result.filter(
+        (quote) =>
+          quote.customerName.toLowerCase().includes(q) ||
+          quote.customerEmail?.toLowerCase().includes(q) ||
+          quote.customerPhone.toLowerCase().includes(q),
+      );
+    }
+    return result;
+  }, [quotes, search, statusFilter]);
+
+  async function handleQuoted(id: string, amount: number, currency: string, notes: string) {
+    try {
+      await apiClient.post(`/admin/quotes/${id}/manual-quote`, {
+        amount,
+        currency,
+        internalNotes: notes || undefined,
+      });
+      showToast({ variant: "success", title: "Quote sent to customer" });
+      load();
+    } catch {
+      showToast({ variant: "error", title: "Couldn't save the quote. Please try again." });
+    }
+  }
+
+  async function handleReject(id: string, reason: string) {
+    try {
+      await apiClient.post(`/admin/quotes/${id}/reject`, { reason });
+      showToast({ variant: "success", title: "Quote rejected" });
+      load();
+    } catch {
+      showToast({ variant: "error", title: "Couldn't reject the quote. Please try again." });
+    }
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-foreground">Quote Requests</h1>
-          <p className="text-sm text-muted-foreground">
-            Placeholder data — no quote engine backend yet.
-          </p>
-        </div>
-        <GenerateQuoteDialog
-          onCreate={(q) => setQuotes((prev) => [q, ...prev])}
-          trigger={
-            <Button>
-              <Plus className="h-4 w-4" aria-hidden />
-              Generate Quote
-            </Button>
-          }
-        />
+      <div>
+        <h1 className="text-xl font-semibold text-foreground">Quote Requests</h1>
+        <p className="text-sm text-muted-foreground">
+          Customer-submitted shipment requests awaiting pricing.
+        </p>
       </div>
 
-      <NativeSelect
-        className="sm:w-52"
-        value={statusFilter}
-        onChange={(e) => setStatusFilter(e.target.value)}
-        aria-label="Filter by status"
-      >
-        <option value="">All statuses</option>
-        <option value="PENDING_REVIEW">Pending review</option>
-        <option value="APPROVED">Approved</option>
-        <option value="REJECTED">Rejected</option>
-      </NativeSelect>
+      <div className="flex flex-col gap-3 sm:flex-row">
+        <div className="sm:w-72">
+          <SearchInput
+            placeholder="Search by customer name, email, or phone…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            aria-label="Search quotes"
+          />
+        </div>
+        <NativeSelect
+          className="sm:w-56"
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          aria-label="Filter by status"
+        >
+          <option value="">All statuses</option>
+          <option value="SUBMITTED">Submitted</option>
+          <option value="NEEDS_MANUAL_REVIEW">Needs manual review</option>
+          <option value="QUOTED">Quoted</option>
+          <option value="ACCEPTED">Accepted</option>
+          <option value="REJECTED">Rejected</option>
+          <option value="CANCELLED">Cancelled</option>
+        </NativeSelect>
+      </div>
 
-      {isLoading && <TableSkeleton columns={6} />}
+      {isLoading && <TableSkeleton columns={7} />}
 
-      {!isLoading && filtered.length === 0 && (
+      {!isLoading && error && <ErrorState message={error} onRetry={load} />}
+
+      {!isLoading && !error && filtered.length === 0 && (
         <EmptyState
           icon={<FileQuestion className="h-8 w-8" aria-hidden />}
           title="No quote requests found"
         />
       )}
 
-      {!isLoading && filtered.length > 0 && (
+      {!isLoading && !error && filtered.length > 0 && (
         <Table>
           <TableHeader>
             <TableRow>
@@ -122,9 +159,16 @@ export default function AdminQuotesPage() {
           <TableBody>
             {filtered.map((q) => (
               <TableRow key={q.id}>
-                <TableCell>{q.customerName}</TableCell>
+                <TableCell>
+                  <Link
+                    href={`/admin/quotes/${q.id}`}
+                    className="font-medium text-primary hover:underline"
+                  >
+                    {q.customerName}
+                  </Link>
+                </TableCell>
                 <TableCell className="text-muted-foreground">
-                  {q.origin} → {q.destination}
+                  {q.origin.city} → {q.destination.city}
                 </TableCell>
                 <TableCell>{q.weightKg}kg</TableCell>
                 <TableCell>
@@ -135,19 +179,21 @@ export default function AdminQuotesPage() {
                   )}
                 </TableCell>
                 <TableCell>
-                  <Badge variant={STATUS_VARIANT[q.status]}>
-                    {q.status.replace(/_/g, " ")}
-                  </Badge>
+                  <QuoteStatusBadge status={q.status} />
                 </TableCell>
                 <TableCell>
-                  {q.quotedAmount ? `₹${q.quotedAmount.toLocaleString("en-IN")}` : "—"}
+                  {q.quotedAmount
+                    ? `${q.quotedCurrency ?? "INR"} ${q.quotedAmount.toLocaleString("en-IN")}`
+                    : "—"}
                 </TableCell>
                 <TableCell>
-                  {q.status === "PENDING_REVIEW" ? (
+                  {q.status === "SUBMITTED" || q.status === "NEEDS_MANUAL_REVIEW" ? (
                     <ReviewQuoteDialog
                       quote={q}
-                      onApprove={(amount) => approve(q.id, amount)}
-                      onReject={() => reject(q.id)}
+                      onQuoted={(amount, currency, notes) =>
+                        handleQuoted(q.id, amount, currency, notes)
+                      }
+                      onReject={(reason) => handleReject(q.id, reason)}
                       trigger={
                         <Button variant="secondary" size="sm">
                           Review
@@ -155,7 +201,12 @@ export default function AdminQuotesPage() {
                       }
                     />
                   ) : (
-                    <span className="text-xs text-muted-foreground">—</span>
+                    <Link
+                      href={`/admin/quotes/${q.id}`}
+                      className="text-xs text-primary hover:underline"
+                    >
+                      View
+                    </Link>
                   )}
                 </TableCell>
               </TableRow>

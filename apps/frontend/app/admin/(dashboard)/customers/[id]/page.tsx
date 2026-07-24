@@ -4,24 +4,20 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ArrowLeft, Pencil, Package, CreditCard, Truck, StickyNote } from "lucide-react";
-import type { CustomerDto, OrderDto } from "@nationwide/shared-types";
+import type { CustomerDto, OrderDto, PickupDto } from "@nationwide/shared-types";
 import { apiClient, ApiError } from "@/lib/api-client";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { ErrorState, EmptyState } from "@/components/ui/page-state";
 import { Skeleton } from "@/components/ui/skeleton";
-import { TrackingStatusBadge } from "@/components/ui/status-badge";
+import { TrackingStatusBadge, PaymentStatusBadge, PickupStatusBadge } from "@/components/ui/status-badge";
 import { EditCustomerDialog } from "@/components/customers/edit-customer-dialog";
-import { listMockPayments, listMockPickups } from "@/lib/mock-data";
-import type { PaymentRecord, PickupRecord } from "@/lib/types/placeholder";
 
 export default function AdminCustomerProfilePage() {
   const params = useParams<{ id: string }>();
   const [customer, setCustomer] = useState<CustomerDto | null>(null);
   const [orders, setOrders] = useState<OrderDto[]>([]);
-  const [payments, setPayments] = useState<PaymentRecord[]>([]);
-  const [pickups, setPickups] = useState<PickupRecord[]>([]);
+  const [pickups, setPickups] = useState<PickupDto[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -35,15 +31,20 @@ export default function AdminCustomerProfilePage() {
     Promise.all([
       apiClient.get<CustomerDto>(`/customers/${params.id}`),
       apiClient.get<OrderDto[]>("/orders"),
-      listMockPayments(),
-      listMockPickups(),
+      apiClient.get<PickupDto[]>("/admin/pickups"),
+      apiClient.get<PickupDto[]>("/admin/pickups/drop-offs"),
     ])
-      .then(([customerRes, ordersRes, paymentsRes, pickupsRes]) => {
+      .then(([customerRes, ordersRes, pickupsRes, dropOffsRes]) => {
         if (cancelled) return;
+        const customerOrders = ordersRes.filter((o) => o.customerId === customerRes.id);
+        const customerOrderIds = new Set(customerOrders.map((o) => o.id));
         setCustomer(customerRes);
-        setOrders(ordersRes.filter((o) => o.customerId === customerRes.id));
-        setPayments(paymentsRes.filter((p) => p.customerName === customerRes.name));
-        setPickups(pickupsRes.filter((p) => p.customerName === customerRes.name));
+        setOrders(customerOrders);
+        setPickups(
+          [...pickupsRes, ...dropOffsRes].filter(
+            (p) => p.orderId && customerOrderIds.has(p.orderId),
+          ),
+        );
       })
       .catch((err) => {
         if (cancelled) return;
@@ -168,21 +169,20 @@ export default function AdminCustomerProfilePage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {payments.length === 0 ? (
-                <EmptyState title="No payment records" description="Placeholder data — no payment backend yet." />
+              {orders.length === 0 ? (
+                <EmptyState title="No payment records" />
               ) : (
                 <div className="space-y-2">
-                  {payments.map((p) => (
+                  {orders.map((order) => (
                     <div
-                      key={p.id}
+                      key={order.id}
                       className="flex items-center justify-between rounded-md border border-border p-3 text-sm"
                     >
                       <span>
-                        {p.orderId} — ₹{p.amount}
+                        {order.id.slice(0, 8)}
+                        {order.paidAmount != null ? ` — ₹${order.paidAmount.toLocaleString("en-IN")}` : ""}
                       </span>
-                      <Badge variant={p.status === "PAID" ? "success" : "warning"}>
-                        {p.status}
-                      </Badge>
+                      <PaymentStatusBadge status={order.paymentStatus} />
                     </div>
                   ))}
                 </div>
@@ -199,7 +199,7 @@ export default function AdminCustomerProfilePage() {
             </CardHeader>
             <CardContent>
               {pickups.length === 0 ? (
-                <EmptyState title="No pickup records" description="Placeholder data — no pickup backend yet." />
+                <EmptyState title="No pickup records" />
               ) : (
                 <div className="space-y-2">
                   {pickups.map((p) => (
@@ -208,11 +208,11 @@ export default function AdminCustomerProfilePage() {
                       className="flex items-center justify-between rounded-md border border-border p-3 text-sm"
                     >
                       <span>
-                        {p.date} · {p.timeSlot}
+                        {p.method === "PICKUP"
+                          ? `${p.scheduledDate ?? "—"} · ${p.scheduledTimeSlot ?? "—"}`
+                          : "Warehouse drop-off"}
                       </span>
-                      <Badge variant={p.status === "COMPLETED" ? "success" : "neutral"}>
-                        {p.status}
-                      </Badge>
+                      <PickupStatusBadge status={p.status} />
                     </div>
                   ))}
                 </div>

@@ -9,6 +9,7 @@ import { CustomersService } from '../customers/customers.service';
 import { ShipmentsService } from '../shipments/shipments.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NOTIFICATION_TEMPLATES } from '../notifications/templates';
+import type { UpdateOrderPaymentDto } from '@nationwide/shared-types';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
 
@@ -29,16 +30,9 @@ export class OrdersService {
   ) {}
 
   async create(dto: CreateOrderDto): Promise<OrderWithShipments> {
-    // Throws NotFoundException if the customer doesn't exist.
-    await this.customersService.findOne(dto.customerId);
-    const provider = await this.resolveProvider(dto.providerCode);
-
-    const order = await this.prisma.order.create({
-      data: { customerId: dto.customerId },
-    });
-    const shipment = await this.shipmentsService.createForOrder(
-      order.id,
-      provider.id,
+    const { order, shipment } = await this.createOrderWithShipment(
+      dto.customerId,
+      dto.providerCode,
     );
 
     await this.notificationsService.enqueue(
@@ -49,6 +43,24 @@ export class OrdersService {
     );
 
     return this.findOne(order.id);
+  }
+
+  // Shared primitive: order + linked shipment, no notification. Reused by QuotesService when a
+  // customer accepts a quote, so quote-acceptance never duplicates this logic.
+  async createOrderWithShipment(customerId: string, providerCode?: string) {
+    // Throws NotFoundException if the customer doesn't exist.
+    await this.customersService.findOne(customerId);
+    const provider = await this.resolveProvider(providerCode);
+
+    const order = await this.prisma.order.create({
+      data: { customerId },
+    });
+    const shipment = await this.shipmentsService.createForOrder(
+      order.id,
+      provider.id,
+    );
+
+    return { order, shipment };
   }
 
   findAll(): Promise<OrderWithShipments[]> {
@@ -92,6 +104,27 @@ export class OrdersService {
       }
       throw error;
     }
+    return this.findOne(id);
+  }
+
+  // Kept separate from update() (order lifecycle status) so payment and status can't
+  // accidentally cross-write on the same PATCH body.
+  async updatePayment(
+    id: string,
+    dto: UpdateOrderPaymentDto,
+    actorId: string,
+  ): Promise<OrderWithShipments> {
+    await this.findOne(id); // 404s if missing
+    await this.prisma.order.update({
+      where: { id },
+      data: {
+        paymentStatus: dto.paymentStatus,
+        paymentMethod: dto.paymentMethod,
+        paidAmount: dto.paymentStatus === 'PAID' ? dto.paidAmount : null,
+        paidAt: dto.paymentStatus === 'PAID' ? new Date() : null,
+        paymentMarkedByAdminId: actorId,
+      },
+    });
     return this.findOne(id);
   }
 
