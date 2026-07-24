@@ -26,16 +26,16 @@ async function main() {
       : 'Password set from SEED_ADMIN_PASSWORD env var.',
   );
 
-  // Real ICL API details aren't wired up yet (see Section 12/31), so this row points at the
-  // stub adapter for now. Phase 6 flips adapterClass to 'ICLAdapter' once that adapter exists
-  // and is registered — that's the only change needed; no other module touches this.
+  // Phase 6: real ICL Tracking API integration is live (verified end-to-end against
+  // production), so this row points at ICLShippingProviderAdapter — see
+  // provider-integration/adapters/icl/icl-shipping-provider.adapter.ts.
   const iclProvider = await prisma.shippingProvider.upsert({
     where: { code: 'ICL' },
-    update: { adapterClass: 'StubShippingProviderAdapter' },
+    update: { adapterClass: 'ICLShippingProviderAdapter' },
     create: {
       code: 'ICL',
       name: 'ICL',
-      adapterClass: 'StubShippingProviderAdapter',
+      adapterClass: 'ICLShippingProviderAdapter',
       isActive: true,
     },
   });

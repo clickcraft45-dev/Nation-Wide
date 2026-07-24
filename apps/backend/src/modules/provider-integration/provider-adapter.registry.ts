@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { ShippingProvider } from './interfaces/shipping-provider.interface';
 import { StubShippingProviderAdapter } from './adapters/stub/stub-shipping-provider.adapter';
+import { ICLShippingProviderAdapter } from './adapters/icl/icl-shipping-provider.adapter';
 
 /**
  * Resolves a shipping_providers.adapter_class value to the concrete adapter instance that
@@ -11,8 +12,12 @@ import { StubShippingProviderAdapter } from './adapters/stub/stub-shipping-provi
 export class ProviderAdapterRegistry {
   private readonly adaptersByClassName = new Map<string, ShippingProvider>();
 
-  constructor(stubAdapter: StubShippingProviderAdapter) {
+  constructor(
+    stubAdapter: StubShippingProviderAdapter,
+    iclAdapter: ICLShippingProviderAdapter,
+  ) {
     this.adaptersByClassName.set('StubShippingProviderAdapter', stubAdapter);
+    this.adaptersByClassName.set('ICLShippingProviderAdapter', iclAdapter);
   }
 
   resolve(adapterClass: string): ShippingProvider {

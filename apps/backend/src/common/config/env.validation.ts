@@ -57,6 +57,20 @@ class EnvironmentVariables {
   @IsOptional()
   @IsString()
   WHATSAPP_WEBHOOK_VERIFY_TOKEN?: string;
+
+  // Optional so the app still boots when ICL isn't the active adapter (e.g. local dev on the
+  // stub). ICLShippingProviderAdapter itself throws a clear error if invoked without these set.
+  @IsOptional()
+  @IsString()
+  ICL_TRACKING_API_URL?: string;
+
+  @IsOptional()
+  @IsString()
+  ICL_API_USER_ID?: string;
+
+  @IsOptional()
+  @IsString()
+  ICL_API_PASSWORD?: string;
 }
 
 export function validateEnv(

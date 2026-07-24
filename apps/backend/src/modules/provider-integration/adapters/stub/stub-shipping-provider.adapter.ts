@@ -5,6 +5,7 @@ import type {
   NormalizedTrackingResult,
   ShippingProvider,
 } from '../../interfaces/shipping-provider.interface';
+import { hashString } from '../day-anchored-timestamp.util';
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -30,14 +31,6 @@ const PROGRESSION: Array<{
   },
   { status: 'DELIVERED', rawStatus: 'DELIVERED', location: 'Pune' },
 ];
-
-function hashString(value: string): number {
-  let hash = 0;
-  for (let i = 0; i < value.length; i++) {
-    hash = (hash * 31 + value.charCodeAt(i)) | 0;
-  }
-  return Math.abs(hash);
-}
 
 /**
  * Deterministic mock so the tracking pipeline (cache, normalization, event history) can be
