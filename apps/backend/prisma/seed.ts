@@ -109,6 +109,40 @@ async function main() {
   });
 
   console.log(`Seeded demo shipment for local testing: ${demoInternalTrackingNumber}`);
+
+  // Pricing engine (Section: Dynamic Shipping Quotation) — RateProvider is independent from
+  // ShippingProvider above; it's pure admin-managed pricing data, no adapter class involved.
+  const RATE_PROVIDERS: Array<{ code: string; name: string }> = [
+    { code: 'FEDEX', name: 'FedEx' },
+    { code: 'UPS', name: 'UPS' },
+    { code: 'DHL', name: 'DHL' },
+    { code: 'DHL_EXPRESS', name: 'DHL Express' },
+  ];
+
+  for (const provider of RATE_PROVIDERS) {
+    await prisma.rateProvider.upsert({
+      where: { code: provider.code },
+      update: { name: provider.name },
+      create: provider,
+    });
+  }
+  console.log(`Seeded ${RATE_PROVIDERS.length} rate providers.`);
+
+  const COUNTRIES: Array<{ code: string; name: string }> = [
+    { code: 'IN', name: 'India' },
+    { code: 'US', name: 'USA' },
+    { code: 'GB', name: 'UK' },
+    { code: 'AE', name: 'UAE' },
+  ];
+
+  for (const country of COUNTRIES) {
+    await prisma.country.upsert({
+      where: { code: country.code },
+      update: { name: country.name },
+      create: country,
+    });
+  }
+  console.log(`Seeded ${COUNTRIES.length} countries.`);
 }
 
 main()

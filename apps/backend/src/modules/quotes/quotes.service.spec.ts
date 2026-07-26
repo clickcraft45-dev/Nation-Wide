@@ -6,6 +6,10 @@ import {
 import { Prisma } from '@prisma/client';
 import { QuotesService } from './quotes.service';
 
+function decimal(value: number) {
+  return new Prisma.Decimal(value);
+}
+
 function submissionKeyCollisionError(): Prisma.PrismaClientKnownRequestError {
   return new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
     code: 'P2002',
@@ -52,8 +56,32 @@ function pickupDateInWindow(): string {
   return d.toISOString().slice(0, 10);
 }
 
+function computedOption(overrides: Record<string, unknown> = {}) {
+  return {
+    rateProviderId: 'provider-1',
+    rateProviderName: 'E2E Test Provider',
+    rateCardId: 'card-1',
+    weightSlabId: 'slab-1',
+    currency: 'INR',
+    baseRate: 500,
+    pssAmount: 50,
+    fuelChargePercent: 10,
+    fuelChargeAmount: 50,
+    taxableSubtotal: 600,
+    gstPercent: 18,
+    gstAmount: 108,
+    nationwideCut: 100,
+    finalPrice: 808,
+    ...overrides,
+  };
+}
+
 describe('QuotesService', () => {
-  const savedQuote = { id: 'quote-1', customerId: 'customer-1', status: 'SUBMITTED' };
+  const savedQuote = {
+    id: 'quote-1',
+    customerId: 'customer-1',
+    status: 'SUBMITTED',
+  };
 
   let prisma: {
     quote: {
@@ -61,12 +89,15 @@ describe('QuotesService', () => {
       findUnique: jest.Mock;
       findMany: jest.Mock;
       update: jest.Mock;
+      updateMany: jest.Mock;
     };
     pickup: { create: jest.Mock };
     auditLog: { create: jest.Mock };
   };
   let ordersService: { createOrderWithShipment: jest.Mock };
   let notificationsService: { enqueue: jest.Mock };
+  let pricingEngineService: { computeQuotesForRequest: jest.Mock };
+  let configService: { get: jest.Mock };
   let service: QuotesService;
 
   beforeEach(() => {
@@ -76,6 +107,7 @@ describe('QuotesService', () => {
         findUnique: jest.fn().mockResolvedValue(savedQuote),
         findMany: jest.fn(),
         update: jest.fn().mockResolvedValue(savedQuote),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       pickup: { create: jest.fn().mockResolvedValue({ id: 'pickup-1' }) },
       auditLog: { create: jest.fn().mockResolvedValue(undefined) },
@@ -83,21 +115,33 @@ describe('QuotesService', () => {
     ordersService = {
       createOrderWithShipment: jest.fn().mockResolvedValue({
         order: { id: 'order-1' },
-        shipment: { id: 'shipment-1', internalTrackingNumber: 'NW-26-00000001' },
+        shipment: {
+          id: 'shipment-1',
+          internalTrackingNumber: 'NW-26-00000001',
+        },
       }),
     };
     notificationsService = { enqueue: jest.fn().mockResolvedValue(undefined) };
+    pricingEngineService = {
+      computeQuotesForRequest: jest.fn().mockResolvedValue([]),
+    };
+    configService = { get: jest.fn().mockReturnValue(undefined) };
 
     service = new QuotesService(
       prisma as never,
       ordersService as never,
       notificationsService as never,
+      pricingEngineService as never,
+      configService as never,
     );
   });
 
-  describe('create — classification', () => {
-    it('flags OTHER shipment type as NEEDS_MANUAL_REVIEW/MISCELLANEOUS', async () => {
-      await service.create(baseCreateDto({ shipmentType: 'OTHER' }), 'customer-1');
+  describe('create — classification (short-circuits before the pricing engine)', () => {
+    it('flags OTHER shipment type as NEEDS_MANUAL_REVIEW/MISCELLANEOUS without calling the pricing engine', async () => {
+      await service.create(
+        baseCreateDto({ shipmentType: 'OTHER' }),
+        'customer-1',
+      );
       expect(prisma.quote.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
@@ -106,10 +150,13 @@ describe('QuotesService', () => {
           }),
         }),
       );
+      expect(
+        pricingEngineService.computeQuotesForRequest,
+      ).not.toHaveBeenCalled();
     });
 
-    it('flags weight over the oversized threshold as NEEDS_MANUAL_REVIEW/OVERSIZED', async () => {
-      await service.create(baseCreateDto({ weightKg: 75 }), 'customer-1');
+    it('flags weight over the oversized threshold as NEEDS_MANUAL_REVIEW/OVERSIZED without calling the pricing engine', async () => {
+      await service.create(baseCreateDto({ weightKg: 150 }), 'customer-1');
       expect(prisma.quote.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
@@ -118,15 +165,55 @@ describe('QuotesService', () => {
           }),
         }),
       );
+      expect(
+        pricingEngineService.computeQuotesForRequest,
+      ).not.toHaveBeenCalled();
     });
+  });
 
-    it('leaves a normal-weight, non-OTHER shipment as SUBMITTED with no review reason', async () => {
+  describe('create — pricing engine wiring', () => {
+    it('marks the quote RATED and attaches the computed options when the engine finds eligible providers', async () => {
+      pricingEngineService.computeQuotesForRequest.mockResolvedValue([
+        computedOption(),
+      ]);
+
       await service.create(baseCreateDto(), 'customer-1');
+
+      expect(pricingEngineService.computeQuotesForRequest).toHaveBeenCalledWith(
+        {
+          destinationCountryName: 'USA',
+          weightKg: 5,
+          shipmentType: 'PARCEL',
+        },
+      );
       expect(prisma.quote.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ status: 'SUBMITTED', reviewReason: null }),
+          data: expect.objectContaining({
+            status: 'RATED',
+            reviewReason: null,
+            rateQuoteOptions: {
+              create: [expect.objectContaining({ finalPrice: 808 })],
+            },
+          }),
         }),
       );
+    });
+
+    it('falls back to NEEDS_MANUAL_REVIEW/NO_RATE_AVAILABLE when the engine finds no eligible providers', async () => {
+      pricingEngineService.computeQuotesForRequest.mockResolvedValue([]);
+
+      await service.create(baseCreateDto(), 'customer-1');
+
+      expect(prisma.quote.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: 'NEEDS_MANUAL_REVIEW',
+            reviewReason: 'NO_RATE_AVAILABLE',
+          }),
+        }),
+      );
+      const callData = prisma.quote.create.mock.calls[0][0].data;
+      expect(callData.rateQuoteOptions).toBeUndefined();
     });
   });
 
@@ -261,6 +348,89 @@ describe('QuotesService', () => {
     });
   });
 
+  describe('selectOption', () => {
+    const ratedQuote = {
+      ...savedQuote,
+      status: 'RATED',
+      fulfillmentMethod: 'WAREHOUSE_DROP_OFF',
+      pickupDate: null,
+      pickupTimeSlot: null,
+      optionsExpireAt: new Date(Date.now() + 60 * 60 * 1000),
+      rateQuoteOptions: [
+        { id: 'option-1', finalPrice: decimal(808), currency: 'INR' },
+      ],
+    };
+
+    it('rejects when the quote does not belong to the caller', async () => {
+      prisma.quote.findUnique.mockResolvedValue({
+        ...ratedQuote,
+        customerId: 'someone-else',
+      });
+      await expect(
+        service.selectOption('quote-1', 'option-1', 'customer-1'),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('rejects an optionId that does not belong to this quote', async () => {
+      prisma.quote.findUnique.mockResolvedValue(ratedQuote);
+      await expect(
+        service.selectOption('quote-1', 'not-a-real-option', 'customer-1'),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('rejects when the quote is not RATED', async () => {
+      prisma.quote.findUnique.mockResolvedValue({
+        ...ratedQuote,
+        status: 'QUOTED',
+      });
+      await expect(
+        service.selectOption('quote-1', 'option-1', 'customer-1'),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('rejects when the quote has expired', async () => {
+      prisma.quote.findUnique.mockResolvedValue({
+        ...ratedQuote,
+        optionsExpireAt: new Date(Date.now() - 60 * 60 * 1000),
+      });
+      await expect(
+        service.selectOption('quote-1', 'option-1', 'customer-1'),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('rejects when the conditional claim loses the race (already transitioned)', async () => {
+      prisma.quote.findUnique.mockResolvedValue(ratedQuote);
+      prisma.quote.updateMany.mockResolvedValue({ count: 0 });
+      await expect(
+        service.selectOption('quote-1', 'option-1', 'customer-1'),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('claims the quote, creates the order+pickup, and records the selected option', async () => {
+      prisma.quote.findUnique.mockResolvedValue(ratedQuote);
+
+      await service.selectOption('quote-1', 'option-1', 'customer-1');
+
+      expect(prisma.quote.updateMany).toHaveBeenCalledWith({
+        where: { id: 'quote-1', status: 'RATED' },
+        data: { status: 'ACCEPTED' },
+      });
+      expect(ordersService.createOrderWithShipment).toHaveBeenCalledWith(
+        'customer-1',
+      );
+      expect(prisma.quote.update).toHaveBeenCalledWith({
+        where: { id: 'quote-1' },
+        data: {
+          orderId: 'order-1',
+          status: 'ACCEPTED',
+          selectedOptionId: 'option-1',
+          quotedAmount: decimal(808),
+          quotedCurrency: 'INR',
+        },
+      });
+    });
+  });
+
   describe('setManualQuote', () => {
     it('sets the amount, marks QUOTED, audit-logs, and notifies the customer', async () => {
       prisma.quote.findUnique.mockResolvedValue({
@@ -349,6 +519,107 @@ describe('QuotesService', () => {
       await expect(service.findOneAdmin('missing')).rejects.toThrow(
         NotFoundException,
       );
+    });
+  });
+
+  describe('preview', () => {
+    it('returns RATED with slim, customer-safe options when the engine finds eligible providers', async () => {
+      pricingEngineService.computeQuotesForRequest.mockResolvedValue([
+        computedOption(),
+      ]);
+
+      const result = await service.preview({
+        destinationCountry: 'USA',
+        weightKg: 5,
+        shipmentType: 'PARCEL',
+      });
+
+      expect(pricingEngineService.computeQuotesForRequest).toHaveBeenCalledWith(
+        {
+          destinationCountryName: 'USA',
+          weightKg: 5,
+          shipmentType: 'PARCEL',
+        },
+      );
+      expect(result).toEqual({
+        status: 'RATED',
+        reviewReason: null,
+        options: [
+          {
+            rateProviderId: 'provider-1',
+            rateProviderName: 'E2E Test Provider',
+            currency: 'INR',
+            finalPrice: 808,
+          },
+        ],
+      });
+    });
+
+    it('short-circuits to NEEDS_MANUAL_REVIEW/OVERSIZED without calling the pricing engine', async () => {
+      const result = await service.preview({
+        destinationCountry: 'USA',
+        weightKg: 150,
+        shipmentType: 'PARCEL',
+      });
+
+      expect(result).toEqual({
+        status: 'NEEDS_MANUAL_REVIEW',
+        reviewReason: 'OVERSIZED',
+        options: [],
+      });
+      expect(
+        pricingEngineService.computeQuotesForRequest,
+      ).not.toHaveBeenCalled();
+    });
+
+    it('short-circuits to NEEDS_MANUAL_REVIEW/MISCELLANEOUS for shipmentType OTHER without calling the pricing engine', async () => {
+      // Shares classifyManualReview with create(), so this can never drift from the real
+      // POST /quotes classification for the exact same request (a bug the shared helper was
+      // extracted specifically to make impossible).
+      const result = await service.preview({
+        destinationCountry: 'USA',
+        weightKg: 5,
+        shipmentType: 'OTHER',
+      });
+
+      expect(result).toEqual({
+        status: 'NEEDS_MANUAL_REVIEW',
+        reviewReason: 'MISCELLANEOUS',
+        options: [],
+      });
+      expect(
+        pricingEngineService.computeQuotesForRequest,
+      ).not.toHaveBeenCalled();
+    });
+
+    it('returns NEEDS_MANUAL_REVIEW/NO_RATE_AVAILABLE when the engine finds no eligible providers', async () => {
+      pricingEngineService.computeQuotesForRequest.mockResolvedValue([]);
+
+      const result = await service.preview({
+        destinationCountry: 'Freedonia',
+        weightKg: 2,
+        shipmentType: 'PARCEL',
+      });
+
+      expect(result).toEqual({
+        status: 'NEEDS_MANUAL_REVIEW',
+        reviewReason: 'NO_RATE_AVAILABLE',
+        options: [],
+      });
+    });
+
+    it('never writes to the database', async () => {
+      pricingEngineService.computeQuotesForRequest.mockResolvedValue([
+        computedOption(),
+      ]);
+
+      await service.preview({
+        destinationCountry: 'USA',
+        weightKg: 5,
+        shipmentType: 'PARCEL',
+      });
+
+      expect(prisma.quote.create).not.toHaveBeenCalled();
     });
   });
 });

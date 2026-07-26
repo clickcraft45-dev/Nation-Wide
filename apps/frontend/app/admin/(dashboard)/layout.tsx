@@ -30,8 +30,12 @@ export default function AdminDashboardLayout({ children }: { children: React.Rea
     );
   }
 
+  const visibleNavItems = ADMIN_NAV_ITEMS.filter(
+    (item) => !item.roles || item.roles.includes(user.role),
+  );
+
   return (
-    <DashboardShell user={user} items={ADMIN_NAV_ITEMS} profileHref="/admin/settings">
+    <DashboardShell user={user} items={visibleNavItems} profileHref="/admin/settings">
       {children}
     </DashboardShell>
   );

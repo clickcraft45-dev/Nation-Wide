@@ -56,6 +56,7 @@ export function OrderStatusBadge({ status }: { status: OrderStatusCode }) {
 
 const QUOTE_STATUS_VARIANT: Record<QuoteStatusCode, BadgeProps["variant"]> = {
   SUBMITTED: "neutral",
+  RATED: "info",
   NEEDS_MANUAL_REVIEW: "warning",
   QUOTED: "info",
   ACCEPTED: "success",

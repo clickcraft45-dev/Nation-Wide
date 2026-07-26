@@ -54,6 +54,13 @@ class EnvironmentVariables {
   @Min(1)
   TRACKING_CACHE_TTL_TERMINAL_SECONDS?: number;
 
+  // How long a RATED quote's computed provider options stay selectable before the customer
+  // must request a fresh quote (Section: Quote expiration). Defaults to 48 at the call site.
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  QUOTE_VALIDITY_HOURS?: number;
+
   @IsOptional()
   @IsString()
   WHATSAPP_WEBHOOK_VERIFY_TOKEN?: string;

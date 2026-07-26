@@ -4,6 +4,11 @@ export class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
+    // The parsed JSON response body, when the server sent one (e.g. NestJS's structured
+    // exception payloads) — undefined for non-JSON or empty error responses. Most callers only
+    // need `.status`; this exists for flows that need server-supplied structured data, like the
+    // rate-management duplicate-conflict prompt.
+    public body?: unknown,
   ) {
     super(message);
     this.name = "ApiError";
@@ -46,7 +51,11 @@ async function request<T>(path: string, init?: RequestInit, isRetry = false): Pr
   }
 
   if (!res.ok) {
-    throw new ApiError(res.status, `Request to ${path} failed with status ${res.status}`);
+    const body = await res
+      .clone()
+      .json()
+      .catch(() => undefined);
+    throw new ApiError(res.status, `Request to ${path} failed with status ${res.status}`, body);
   }
 
   if (res.status === 204) {
@@ -62,4 +71,5 @@ export const apiClient = {
     request<T>(path, { method: "POST", body: JSON.stringify(body) }),
   patch: <T>(path: string, body: unknown) =>
     request<T>(path, { method: "PATCH", body: JSON.stringify(body) }),
+  delete: <T>(path: string) => request<T>(path, { method: "DELETE" }),
 };

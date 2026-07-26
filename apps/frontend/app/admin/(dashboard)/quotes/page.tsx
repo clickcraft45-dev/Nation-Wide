@@ -29,6 +29,7 @@ const REASON_LABEL: Record<QuoteReviewReasonCode, string> = {
   RESTRICTED_DESTINATION: "Restricted Destination",
   SPECIAL_HANDLING: "Special Handling",
   MISCELLANEOUS: "Miscellaneous",
+  NO_RATE_AVAILABLE: "No Rate Available",
 };
 
 export default function AdminQuotesPage() {
@@ -124,6 +125,7 @@ export default function AdminQuotesPage() {
         >
           <option value="">All statuses</option>
           <option value="SUBMITTED">Submitted</option>
+          <option value="RATED">Rated (awaiting customer)</option>
           <option value="NEEDS_MANUAL_REVIEW">Needs manual review</option>
           <option value="QUOTED">Quoted</option>
           <option value="ACCEPTED">Accepted</option>

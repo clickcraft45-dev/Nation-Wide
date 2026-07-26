@@ -9,13 +9,18 @@ import {
   BarChart3,
   Settings,
   User,
+  Tag,
   type LucideIcon,
 } from "lucide-react";
+import type { Role } from "@nationwide/shared-types";
 
 export interface NavItem {
   label: string;
   href: string;
   icon: LucideIcon;
+  // Omitted means visible to every role that can reach this nav (i.e. all admin-panel roles
+  // today). Pricing is the first ADMIN-only exception — see admin/(dashboard)/pricing/layout.tsx.
+  roles?: Role[];
 }
 
 export const ADMIN_NAV_ITEMS: NavItem[] = [
@@ -26,6 +31,7 @@ export const ADMIN_NAV_ITEMS: NavItem[] = [
   { label: "Payments", href: "/admin/payments", icon: CreditCard },
   { label: "Tracking", href: "/admin/shipments", icon: MapPin },
   { label: "Quote Requests", href: "/admin/quotes", icon: FileQuestion },
+  { label: "Pricing", href: "/admin/pricing", icon: Tag, roles: ["ADMIN"] },
   { label: "Reports", href: "/admin/reports", icon: BarChart3 },
   { label: "Settings", href: "/admin/settings", icon: Settings },
 ];

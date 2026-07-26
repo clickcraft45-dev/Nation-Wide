@@ -97,6 +97,12 @@ export default function CustomerQuotesPage() {
                       customized quotation.
                     </p>
                   )}
+                  {q.status === "RATED" && (
+                    <p className="text-xs text-info">
+                      {q.rateQuoteOptions.length} provider
+                      {q.rateQuoteOptions.length === 1 ? "" : "s"} available to compare.
+                    </p>
+                  )}
                   {q.status === "QUOTED" && q.quotedAmount != null && (
                     <p className="text-sm font-medium text-foreground">
                       Quoted: {q.quotedCurrency ?? "INR"} {q.quotedAmount.toLocaleString("en-IN")}
@@ -108,7 +114,11 @@ export default function CustomerQuotesPage() {
                 </div>
                 <div className="flex items-center gap-3">
                   <QuoteStatusBadge status={q.status} />
-                  {q.status === "QUOTED" && (
+                  {q.status === "RATED" ? (
+                    <Link href={`/quotes/${q.id}`}>
+                      <Button size="sm">Compare</Button>
+                    </Link>
+                  ) : q.status === "QUOTED" ? (
                     <Button
                       size="sm"
                       isLoading={acceptingId === q.id}
@@ -117,6 +127,10 @@ export default function CustomerQuotesPage() {
                     >
                       Accept
                     </Button>
+                  ) : (
+                    <Link href={`/quotes/${q.id}`} className="text-xs text-primary hover:underline">
+                      View
+                    </Link>
                   )}
                 </div>
               </CardContent>

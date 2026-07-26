@@ -50,11 +50,14 @@ enum FulfillmentMethod {
   WAREHOUSE_DROP_OFF
 }
 
-// No automated pricing engine exists yet (Section: Quote lifecycle) — every quote needs a
-// staff-entered price regardless of status. SUBMITTED vs NEEDS_MANUAL_REVIEW is purely
-// informational until a real pricing engine can auto-quote the SUBMITTED ones.
+// The pricing engine (RateProvider/RateCard/WeightSlab) auto-computes RATED options for most
+// requests at creation time — see QuotesService.create. NEEDS_MANUAL_REVIEW is the fallback for
+// shipment types the engine can't touch (OTHER/oversized) or destinations with no active rate
+// card (NO_RATE_AVAILABLE); those still get a staff-entered price via the unchanged manual-quote
+// flow. SUBMITTED is retained only for pre-existing rows created before the engine shipped.
 enum QuoteStatus {
   SUBMITTED
+  RATED
   NEEDS_MANUAL_REVIEW
   QUOTED
   ACCEPTED
@@ -68,6 +71,7 @@ enum QuoteReviewReason {
   RESTRICTED_DESTINATION
   SPECIAL_HANDLING
   MISCELLANEOUS
+  NO_RATE_AVAILABLE
 }
 
 // Shared by both fulfillment methods — a Pickup row represents "how the parcel physically
@@ -202,13 +206,20 @@ model Quote {
   submissionKey String  @unique @map("submission_key")
   orderId       String? @unique @map("order_id") // set once accepted, 1:1
 
+  // The provider option the customer picked from a RATED quote's comparison, if any (the
+  // manual-quote path never sets this — quotedAmount/quotedCurrency alone cover it there).
+  selectedOptionId String?   @unique @map("selected_option_id")
+  optionsExpireAt  DateTime? @map("options_expire_at")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  customer Customer   @relation(fields: [customerId], references: [id])
-  quotedBy AdminUser? @relation("QuoteQuotedBy", fields: [quotedByAdminId], references: [id])
-  order    Order?     @relation(fields: [orderId], references: [id])
-  pickup   Pickup?
+  customer         Customer          @relation(fields: [customerId], references: [id])
+  quotedBy         AdminUser?        @relation("QuoteQuotedBy", fields: [quotedByAdminId], references: [id])
+  order            Order?            @relation(fields: [orderId], references: [id])
+  pickup           Pickup?
+  selectedOption   RateQuoteOption?  @relation("QuoteSelectedOption", fields: [selectedOptionId], references: [id])
+  rateQuoteOptions RateQuoteOption[] @relation("QuoteRateOptions")
 
   @@index([customerId])
   @@index([status])
@@ -248,6 +259,166 @@ model Pickup {
   @@index([status])
   @@index([scheduledDate])
   @@map("pickups")
+}
+
+// ---------------------------------------------------------------------------
+// Pricing engine — deliberately independent from ShippingProvider below, which is the
+// tracking-adapter integration (ICL). RateProvider is pure admin-managed data (FedEx/UPS/DHL/
+// DHL Express); adding a new one never requires a code change, only a new RateProvider +
+// RateCard rows (see PricingEngineService).
+// ---------------------------------------------------------------------------
+
+model RateProvider {
+  id        String   @id @default(uuid())
+  code      String   @unique // e.g. 'FEDEX', 'UPS', 'DHL', 'DHL_EXPRESS'
+  name      String
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  zones            Zone[]
+  zoneCountries    ZoneCountry[]
+  rateQuoteOptions RateQuoteOption[]
+
+  @@map("rate_providers")
+}
+
+model Country {
+  id        String   @id @default(uuid())
+  code      String   @unique // ISO 3166-1 alpha-2
+  name      String
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  zoneCountries ZoneCountry[]
+
+  @@map("countries")
+}
+
+/// A carrier-specific grouping of countries that share the same tariff (e.g. FedEx "Zone A",
+/// DHL "Zone 11") — zone definitions are never shared across providers, see ZoneCountry. The
+/// admin manages zones directly (unlike RateCard, which stays an invisible grouping key).
+model Zone {
+  id             String   @id @default(uuid())
+  rateProviderId String   @map("rate_provider_id")
+  name           String
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  rateProvider RateProvider  @relation(fields: [rateProviderId], references: [id])
+  countries    ZoneCountry[]
+  rateCards    RateCard[]
+
+  @@unique([rateProviderId, name])
+  @@map("zones")
+}
+
+/// rateProviderId is denormalized from zone.rateProviderId specifically so Postgres itself
+/// enforces "a country belongs to at most one zone per provider" via the unique index below —
+/// reassigning a country to a different zone must go through a single atomic upsert on that same
+/// key (see ZonesService.assignCountry), never a find-then-write, to avoid a TOCTOU race on the
+/// first-ever assignment of a country under a provider.
+model ZoneCountry {
+  id             String @id @default(uuid())
+  zoneId         String @map("zone_id")
+  countryId      String @map("country_id")
+  rateProviderId String @map("rate_provider_id")
+
+  zone         Zone         @relation(fields: [zoneId], references: [id])
+  country      Country      @relation(fields: [countryId], references: [id])
+  rateProvider RateProvider @relation(fields: [rateProviderId], references: [id])
+
+  @@unique([rateProviderId, countryId])
+  @@map("zone_countries")
+}
+
+/// A thin, invisible grouping key — exactly one per (zone, shipmentType) pair, auto-created the
+/// first time an admin saves a rate for that pair (see RatesService.create's upsert) and never
+/// surfaced as its own concept beyond the Zone/Shipment Type pickers in the admin UI.
+/// WeightSlab (labeled "Rate" in the UI) is the actual unit of status/editing/audit — see its
+/// own doc comment. Deliberately has no rateProviderId of its own — it's fully implied by
+/// zoneId -> Zone.rateProviderId, and duplicating it here would let the two silently diverge
+/// (Postgres can't enforce two FKs agree with each other declaratively).
+model RateCard {
+  id               String   @id @default(uuid())
+  zoneId           String   @map("zone_id")
+  shipmentType     String   @map("shipment_type") // DOCUMENT | PARCEL | PACKAGE — never OTHER
+  currency         String   @default("INR")
+  createdByAdminId String   @map("created_by_admin_id")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  zone      Zone      @relation(fields: [zoneId], references: [id])
+  createdBy AdminUser @relation("RateCardCreatedBy", fields: [createdByAdminId], references: [id])
+
+  weightSlabs      WeightSlab[]
+  rateQuoteOptions RateQuoteOption[]
+
+  @@unique([zoneId, shipmentType])
+  @@map("rate_cards")
+}
+
+/// This is "a Rate" from the admin's point of view — the unit of status, editing, and audit.
+/// weightFromKg/weightToKg are inclusive on both ends and must not overlap with any other ACTIVE
+/// rate under the same (provider, country) pair (validated in RatesService, not DB-enforced).
+/// Gaps between ranges are legal — a weight falling in a gap simply produces no option for that
+/// provider. Deactivating a rate (isActive: false) excludes it from new quotes without deleting
+/// it, preserving its history and any already-computed RateQuoteOption snapshots.
+model WeightSlab {
+  id                String   @id @default(uuid())
+  rateCardId        String   @map("rate_card_id")
+  weightFromKg      Decimal  @map("weight_from_kg") @db.Decimal(10, 2)
+  weightToKg        Decimal  @map("weight_to_kg") @db.Decimal(10, 2)
+  baseRate          Decimal  @map("base_rate") @db.Decimal(10, 2)
+  pssAmount         Decimal  @default(0) @map("pss_amount") @db.Decimal(10, 2)
+  fuelChargePercent Decimal  @default(0) @map("fuel_charge_percent") @db.Decimal(5, 2)
+  gstPercent        Decimal  @default(0) @map("gst_percent") @db.Decimal(5, 2)
+  nationwideCut     Decimal  @default(0) @map("nationwide_cut") @db.Decimal(10, 2)
+  isActive          Boolean  @default(true) @map("is_active")
+  createdByAdminId  String?  @map("created_by_admin_id")
+  updatedByAdminId  String?  @map("updated_by_admin_id")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  rateCard         RateCard          @relation(fields: [rateCardId], references: [id])
+  createdBy        AdminUser?        @relation("WeightSlabCreatedBy", fields: [createdByAdminId], references: [id])
+  updatedBy        AdminUser?        @relation("WeightSlabUpdatedBy", fields: [updatedByAdminId], references: [id])
+  rateQuoteOptions RateQuoteOption[]
+
+  @@index([rateCardId])
+  @@map("weight_slabs")
+}
+
+/// Frozen snapshot of one provider's computed price for one Quote request — every monetary/
+/// percentage value is duplicated here (not just referenced) so a historical quote never changes
+/// when the admin later edits or deactivates the rate it was computed from.
+model RateQuoteOption {
+  id                String   @id @default(uuid())
+  quoteId           String   @map("quote_id")
+  rateProviderId    String   @map("rate_provider_id")
+  rateCardId        String   @map("rate_card_id")
+  weightSlabId      String   @map("weight_slab_id")
+  currency          String
+  baseRate          Decimal  @map("base_rate") @db.Decimal(10, 2)
+  pssAmount         Decimal  @map("pss_amount") @db.Decimal(10, 2)
+  fuelChargePercent Decimal  @map("fuel_charge_percent") @db.Decimal(5, 2)
+  fuelChargeAmount  Decimal  @map("fuel_charge_amount") @db.Decimal(10, 2)
+  taxableSubtotal   Decimal  @map("taxable_subtotal") @db.Decimal(10, 2)
+  gstPercent        Decimal  @map("gst_percent") @db.Decimal(5, 2)
+  gstAmount         Decimal  @map("gst_amount") @db.Decimal(10, 2)
+  nationwideCut     Decimal  @map("nationwide_cut") @db.Decimal(10, 2)
+  finalPrice        Decimal  @map("final_price") @db.Decimal(10, 2)
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  quote           Quote        @relation("QuoteRateOptions", fields: [quoteId], references: [id])
+  rateProvider    RateProvider @relation(fields: [rateProviderId], references: [id])
+  rateCard        RateCard     @relation(fields: [rateCardId], references: [id])
+  weightSlab      WeightSlab   @relation(fields: [weightSlabId], references: [id])
+  selectedByQuote Quote?       @relation("QuoteSelectedOption")
+
+  @@index([quoteId])
+  @@map("rate_quote_options")
 }
 
 model ShippingProvider {
@@ -378,10 +549,13 @@ model AdminUser {
   updatedAt          DateTime  @updatedAt @map("updated_at")
 
   auditLogs           AuditLog[]
-  quotedQuotes        Quote[]    @relation("QuoteQuotedBy")
-  assignedPickups     Pickup[]   @relation("PickupAssignedStaff")
-  confirmedPickups    Pickup[]   @relation("PickupConfirmedByAdmin")
-  paymentMarkedOrders Order[]    @relation("OrderPaymentMarkedBy")
+  quotedQuotes        Quote[]      @relation("QuoteQuotedBy")
+  assignedPickups     Pickup[]     @relation("PickupAssignedStaff")
+  confirmedPickups    Pickup[]     @relation("PickupConfirmedByAdmin")
+  paymentMarkedOrders Order[]      @relation("OrderPaymentMarkedBy")
+  createdRateCards    RateCard[]   @relation("RateCardCreatedBy")
+  createdRates        WeightSlab[] @relation("WeightSlabCreatedBy")
+  updatedRates        WeightSlab[] @relation("WeightSlabUpdatedBy")
 
   @@map("admin_users")
 }

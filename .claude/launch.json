@@ -8,6 +8,13 @@
       "port": 3004,
       "autoPort": false,
       "env": { "PORT": "3004" }
+    },
+    {
+      "name": "backend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "start:dev", "--workspace=apps/backend"],
+      "port": 4000,
+      "autoPort": false
     }
   ]
 }
