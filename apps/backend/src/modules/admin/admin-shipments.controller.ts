@@ -34,6 +34,7 @@ export class AdminShipmentsController {
   ): Promise<ShipmentAdminDetailDto> {
     const shipment = await this.shipmentsService.mapExternalTrackingNumber(
       internalTrackingNumber,
+      dto.providerId,
       dto.externalTrackingNumber,
       user.sub,
     );

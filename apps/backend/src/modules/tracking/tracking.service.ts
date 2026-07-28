@@ -57,7 +57,13 @@ export class TrackingService {
       return JSON.parse(cached) as TrackingResultDto;
     }
 
-    const externalTrackingNumber = shipment.externalTrackingNumbers[0];
+    // A shipment can accumulate one ExternalTrackingNumber row per reseller it has ever been
+    // assigned to (see ShipmentsService.mapExternalTrackingNumber); only the row for the
+    // shipment's *current* provider is the live mapping — picking index [0] would risk calling
+    // the wrong adapter with a stale AWB left over from a previous reseller.
+    const externalTrackingNumber = shipment.externalTrackingNumbers.find(
+      (etn) => etn.providerId === shipment.providerId,
+    );
     if (!externalTrackingNumber) {
       // Shipment exists, but no carrier tracking number has been mapped yet (Section 3: staff
       // maps this manually, or a future real adapter's createShipment() call would set it).

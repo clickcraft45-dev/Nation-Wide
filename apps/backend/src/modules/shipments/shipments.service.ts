@@ -1,5 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma, type Shipment } from '@prisma/client';
 import type { TrackingStatusCode } from '@nationwide/shared-types';
 import { PrismaService } from '../../database/prisma.service';
@@ -76,48 +80,82 @@ export class ShipmentsService {
   }
 
   /**
-   * Maps (or re-maps) the shipment's carrier tracking number for its own provider. Until this
-   * exists, the public tracking endpoint reports "Tracking not yet available" (Section 5).
+   * Maps (or re-maps) a shipment to a reseller/provider + that provider's AWB. Until an AWB
+   * exists, the public tracking endpoint reports "Tracking not yet available" (Section 5). The
+   * reseller can be changed here too — the shipment's provider_id is the source of truth for
+   * which adapter TrackingService dispatches to, so re-pointing it is how staff reassign a
+   * shipment to a different reseller after booking.
    */
   async mapExternalTrackingNumber(
     internalTrackingNumber: string,
+    providerId: string,
     externalTrackingNumber: string,
     actorId: string,
   ): Promise<ShipmentAdminDetail> {
     const shipment = await this.findByInternalTrackingNumber(
       internalTrackingNumber,
     );
-    const existing = shipment.externalTrackingNumbers.find(
-      (etn) => etn.providerId === shipment.providerId,
-    );
 
-    if (existing) {
-      await this.prisma.externalTrackingNumber.update({
-        where: { id: existing.id },
-        data: { externalTrackingNumber },
-      });
-    } else {
-      await this.prisma.externalTrackingNumber.create({
-        data: {
-          shipmentId: shipment.id,
-          providerId: shipment.providerId,
-          externalTrackingNumber,
-        },
-      });
+    const provider = await this.prisma.shippingProvider.findUnique({
+      where: { id: providerId },
+    });
+    if (!provider) {
+      throw new NotFoundException(`Shipping provider ${providerId} not found`);
     }
 
-    await this.prisma.auditLog.create({
-      data: {
-        actorId,
-        action: 'MAP_EXTERNAL_TRACKING_NUMBER',
-        entity: 'Shipment',
-        entityId: shipment.id,
-        before: {
-          externalTrackingNumber: existing?.externalTrackingNumber ?? null,
-        },
-        after: { externalTrackingNumber },
+    // Same AWB should never quietly end up on two different shipments for the same reseller.
+    const conflicting = await this.prisma.externalTrackingNumber.findFirst({
+      where: {
+        providerId,
+        externalTrackingNumber,
+        NOT: { shipmentId: shipment.id },
       },
     });
+    if (conflicting) {
+      throw new ConflictException(
+        `AWB ${externalTrackingNumber} is already assigned to another shipment for ${provider.code}`,
+      );
+    }
+
+    const activeMapping = shipment.externalTrackingNumbers.find(
+      (etn) => etn.providerId === shipment.providerId,
+    );
+    const isChanging =
+      shipment.providerId !== providerId ||
+      activeMapping?.externalTrackingNumber !== externalTrackingNumber;
+
+    await this.prisma.$transaction([
+      this.prisma.externalTrackingNumber.upsert({
+        where: { shipmentId_providerId: { shipmentId: shipment.id, providerId } },
+        update: { externalTrackingNumber },
+        create: { shipmentId: shipment.id, providerId, externalTrackingNumber },
+      }),
+      this.prisma.shipment.update({
+        where: { id: shipment.id },
+        data: {
+          providerId,
+          ...(isChanging ? { currentStatus: null, lastSyncedAt: null } : {}),
+        },
+      }),
+      this.prisma.auditLog.create({
+        data: {
+          actorId,
+          action: 'MAP_EXTERNAL_TRACKING_NUMBER',
+          entity: 'Shipment',
+          entityId: shipment.id,
+          before: {
+            providerId: shipment.providerId,
+            providerCode: shipment.provider.code,
+            externalTrackingNumber: activeMapping?.externalTrackingNumber ?? null,
+          },
+          after: {
+            providerId,
+            providerCode: provider.code,
+            externalTrackingNumber,
+          },
+        },
+      }),
+    ]);
 
     return this.findByInternalTrackingNumber(internalTrackingNumber);
   }

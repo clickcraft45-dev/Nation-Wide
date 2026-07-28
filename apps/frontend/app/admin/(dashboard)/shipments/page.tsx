@@ -3,7 +3,11 @@
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { RefreshCw } from "lucide-react";
-import type { ShipmentAdminDetailDto, TrackingResultDto } from "@nationwide/shared-types";
+import type {
+  ShipmentAdminDetailDto,
+  ShippingProviderDto,
+  TrackingResultDto,
+} from "@nationwide/shared-types";
 import { apiClient, ApiError } from "@/lib/api-client";
 import { useToast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
@@ -20,10 +24,18 @@ function AdminShipmentsPageInner() {
 
   const [trackingNumber, setTrackingNumber] = useState<string | null>(null);
   const [shipment, setShipment] = useState<ShipmentAdminDetailDto | null>(null);
+  const [providers, setProviders] = useState<ShippingProviderDto[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isMutating, setIsMutating] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    apiClient
+      .get<ShippingProviderDto[]>("/shipping-providers")
+      .then(setProviders)
+      .catch(() => setProviders([]));
+  }, []);
 
   async function loadShipment(num: string) {
     setIsLoading(true);
@@ -66,18 +78,24 @@ function AdminShipmentsPageInner() {
     }
   }
 
-  async function handleMap(externalTrackingNumber: string) {
+  async function handleMap(providerId: string, externalTrackingNumber: string) {
     if (!trackingNumber) return;
     setIsMutating(true);
     try {
       const data = await apiClient.post<ShipmentAdminDetailDto>(
         `/admin/shipments/${trackingNumber}/external-tracking-number`,
-        { externalTrackingNumber },
+        { providerId, externalTrackingNumber },
       );
       setShipment(data);
       showToast({ variant: "success", title: "Carrier tracking number mapped" });
-    } catch {
-      showToast({ variant: "error", title: "Failed to map the tracking number" });
+    } catch (e) {
+      showToast({
+        variant: "error",
+        title:
+          e instanceof ApiError && e.status === 409
+            ? "That AWB is already assigned to another shipment."
+            : "Failed to map the tracking number",
+      });
     } finally {
       setIsMutating(false);
     }
@@ -138,7 +156,13 @@ function AdminShipmentsPageInner() {
               <p className="mb-2 text-sm font-medium text-foreground">
                 Map carrier tracking number
               </p>
-              <MapTrackingNumberForm onSubmit={handleMap} isSubmitting={isMutating} />
+              <MapTrackingNumberForm
+                key={shipment.internalTrackingNumber}
+                providers={providers}
+                currentProviderId={shipment.providerId}
+                onSubmit={handleMap}
+                isSubmitting={isMutating}
+              />
             </div>
             <div>
               <p className="mb-2 text-sm font-medium text-foreground">

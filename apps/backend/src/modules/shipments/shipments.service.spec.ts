@@ -1,4 +1,4 @@
-import { NotFoundException } from '@nestjs/common';
+import { ConflictException, NotFoundException } from '@nestjs/common';
 import { ShipmentsService } from './shipments.service';
 
 const baseShipmentDetail = {
@@ -30,7 +30,8 @@ interface AuditLogCallArgs {
 describe('ShipmentsService', () => {
   let prisma: {
     shipment: { create: jest.Mock; findUnique: jest.Mock; update: jest.Mock };
-    externalTrackingNumber: { create: jest.Mock; update: jest.Mock };
+    shippingProvider: { findUnique: jest.Mock };
+    externalTrackingNumber: { findFirst: jest.Mock; upsert: jest.Mock };
     trackingStatus: { findUnique: jest.Mock };
     trackingEvent: { create: jest.Mock };
     auditLog: { create: jest.Mock };
@@ -49,7 +50,15 @@ describe('ShipmentsService', () => {
         findUnique: jest.fn().mockResolvedValue(baseShipmentDetail),
         update: jest.fn(),
       },
-      externalTrackingNumber: { create: jest.fn(), update: jest.fn() },
+      shippingProvider: {
+        findUnique: jest
+          .fn()
+          .mockResolvedValue({ id: 'provider-1', code: 'ICL' }),
+      },
+      externalTrackingNumber: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        upsert: jest.fn(),
+      },
       trackingStatus: {
         findUnique: jest
           .fn()
@@ -124,21 +133,34 @@ describe('ShipmentsService', () => {
   });
 
   describe('mapExternalTrackingNumber', () => {
-    it('creates a new mapping and writes an audit log when none exists yet', async () => {
+    it('creates a new mapping, resets status, and writes an audit log when none exists yet', async () => {
       await service.mapExternalTrackingNumber(
         'NW-1',
+        'provider-1',
         'ICL-EXTERNAL-1',
         'actor-1',
       );
 
-      expect(prisma.externalTrackingNumber.create).toHaveBeenCalledWith({
-        data: {
+      expect(prisma.externalTrackingNumber.upsert).toHaveBeenCalledWith({
+        where: {
+          shipmentId_providerId: { shipmentId: 'shipment-1', providerId: 'provider-1' },
+        },
+        update: { externalTrackingNumber: 'ICL-EXTERNAL-1' },
+        create: {
           shipmentId: 'shipment-1',
           providerId: 'provider-1',
           externalTrackingNumber: 'ICL-EXTERNAL-1',
         },
       });
-      expect(prisma.externalTrackingNumber.update).not.toHaveBeenCalled();
+
+      expect(prisma.shipment.update).toHaveBeenCalledWith({
+        where: { id: 'shipment-1' },
+        data: {
+          providerId: 'provider-1',
+          currentStatus: null,
+          lastSyncedAt: null,
+        },
+      });
 
       expect(auditLogCalls).toHaveLength(1);
       expect(auditLogCalls[0].data.actorId).toBe('actor-1');
@@ -146,14 +168,18 @@ describe('ShipmentsService', () => {
       expect(auditLogCalls[0].data.entity).toBe('Shipment');
       expect(auditLogCalls[0].data.entityId).toBe('shipment-1');
       expect(auditLogCalls[0].data.before).toEqual({
+        providerId: 'provider-1',
+        providerCode: 'ICL',
         externalTrackingNumber: null,
       });
       expect(auditLogCalls[0].data.after).toEqual({
+        providerId: 'provider-1',
+        providerCode: 'ICL',
         externalTrackingNumber: 'ICL-EXTERNAL-1',
       });
     });
 
-    it('updates the existing mapping for the shipment provider instead of creating a duplicate', async () => {
+    it('updates the existing mapping for the same provider instead of creating a duplicate', async () => {
       prisma.shipment.findUnique.mockResolvedValue({
         ...baseShipmentDetail,
         externalTrackingNumbers: [
@@ -165,19 +191,133 @@ describe('ShipmentsService', () => {
         ],
       });
 
-      await service.mapExternalTrackingNumber('NW-1', 'NEW-VALUE', 'actor-1');
+      await service.mapExternalTrackingNumber(
+        'NW-1',
+        'provider-1',
+        'NEW-VALUE',
+        'actor-1',
+      );
 
-      expect(prisma.externalTrackingNumber.update).toHaveBeenCalledWith({
-        where: { id: 'etn-1' },
-        data: { externalTrackingNumber: 'NEW-VALUE' },
+      expect(prisma.externalTrackingNumber.upsert).toHaveBeenCalledWith({
+        where: {
+          shipmentId_providerId: { shipmentId: 'shipment-1', providerId: 'provider-1' },
+        },
+        update: { externalTrackingNumber: 'NEW-VALUE' },
+        create: {
+          shipmentId: 'shipment-1',
+          providerId: 'provider-1',
+          externalTrackingNumber: 'NEW-VALUE',
+        },
       });
-      expect(prisma.externalTrackingNumber.create).not.toHaveBeenCalled();
       expect(auditLogCalls[0].data.before).toEqual({
+        providerId: 'provider-1',
+        providerCode: 'ICL',
         externalTrackingNumber: 'OLD-VALUE',
       });
       expect(auditLogCalls[0].data.after).toEqual({
+        providerId: 'provider-1',
+        providerCode: 'ICL',
         externalTrackingNumber: 'NEW-VALUE',
       });
+    });
+
+    it('re-saving the same provider and AWB leaves currentStatus/lastSyncedAt untouched', async () => {
+      prisma.shipment.findUnique.mockResolvedValue({
+        ...baseShipmentDetail,
+        externalTrackingNumbers: [
+          {
+            id: 'etn-1',
+            providerId: 'provider-1',
+            externalTrackingNumber: 'SAME-VALUE',
+          },
+        ],
+      });
+
+      await service.mapExternalTrackingNumber(
+        'NW-1',
+        'provider-1',
+        'SAME-VALUE',
+        'actor-1',
+      );
+
+      expect(prisma.shipment.update).toHaveBeenCalledWith({
+        where: { id: 'shipment-1' },
+        data: { providerId: 'provider-1' },
+      });
+    });
+
+    it('reassigning to a different reseller updates providerId and resets status', async () => {
+      prisma.shipment.findUnique.mockResolvedValue({
+        ...baseShipmentDetail,
+        externalTrackingNumbers: [
+          {
+            id: 'etn-1',
+            providerId: 'provider-1',
+            externalTrackingNumber: 'OLD-VALUE',
+          },
+        ],
+      });
+      prisma.shippingProvider.findUnique.mockResolvedValue({
+        id: 'provider-2',
+        code: 'RESELLER2',
+      });
+
+      await service.mapExternalTrackingNumber(
+        'NW-1',
+        'provider-2',
+        'NEW-AWB',
+        'actor-1',
+      );
+
+      expect(prisma.shipment.update).toHaveBeenCalledWith({
+        where: { id: 'shipment-1' },
+        data: {
+          providerId: 'provider-2',
+          currentStatus: null,
+          lastSyncedAt: null,
+        },
+      });
+      expect(auditLogCalls[0].data.before).toEqual({
+        providerId: 'provider-1',
+        providerCode: 'ICL',
+        externalTrackingNumber: 'OLD-VALUE',
+      });
+      expect(auditLogCalls[0].data.after).toEqual({
+        providerId: 'provider-2',
+        providerCode: 'RESELLER2',
+        externalTrackingNumber: 'NEW-AWB',
+      });
+    });
+
+    it('throws NotFoundException when the provider does not exist', async () => {
+      prisma.shippingProvider.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.mapExternalTrackingNumber(
+          'NW-1',
+          'unknown-provider',
+          'ICL-EXTERNAL-1',
+          'actor-1',
+        ),
+      ).rejects.toThrow(NotFoundException);
+      expect(prisma.externalTrackingNumber.upsert).not.toHaveBeenCalled();
+    });
+
+    it('throws ConflictException when the AWB is already assigned to another shipment for that provider', async () => {
+      prisma.externalTrackingNumber.findFirst.mockResolvedValue({
+        id: 'etn-other',
+        shipmentId: 'shipment-2',
+      });
+
+      await expect(
+        service.mapExternalTrackingNumber(
+          'NW-1',
+          'provider-1',
+          'ALREADY-USED',
+          'actor-1',
+        ),
+      ).rejects.toThrow(ConflictException);
+      expect(prisma.externalTrackingNumber.upsert).not.toHaveBeenCalled();
     });
   });
 

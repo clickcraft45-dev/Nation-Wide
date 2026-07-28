@@ -87,7 +87,7 @@ describe('TrackingService', () => {
     prisma.shipment.findUnique.mockResolvedValue({
       ...baseShipment,
       externalTrackingNumbers: [
-        { id: 'ext-1', externalTrackingNumber: 'ICL-1' },
+        { id: 'ext-1', providerId: 'provider-1', externalTrackingNumber: 'ICL-1' },
       ],
     });
     const cachedDto = {
@@ -128,7 +128,7 @@ describe('TrackingService', () => {
     prisma.shipment.findUnique.mockResolvedValue({
       ...baseShipment,
       externalTrackingNumbers: [
-        { id: 'ext-1', externalTrackingNumber: 'ICL-1' },
+        { id: 'ext-1', providerId: 'provider-1', externalTrackingNumber: 'ICL-1' },
       ],
     });
     const eventTime = new Date('2026-01-01T00:00:00.000Z');
@@ -237,7 +237,7 @@ describe('TrackingService', () => {
     prisma.shipment.findUnique.mockResolvedValue({
       ...baseShipment,
       externalTrackingNumbers: [
-        { id: 'ext-1', externalTrackingNumber: 'ICL-1' },
+        { id: 'ext-1', providerId: 'provider-1', externalTrackingNumber: 'ICL-1' },
       ],
     });
     const oldEventTime = new Date('2026-01-01T00:00:00.000Z');
@@ -267,7 +267,7 @@ describe('TrackingService', () => {
     prisma.shipment.findUnique.mockResolvedValue({
       ...baseShipment,
       externalTrackingNumbers: [
-        { id: 'ext-1', externalTrackingNumber: 'ICL-1' },
+        { id: 'ext-1', providerId: 'provider-1', externalTrackingNumber: 'ICL-1' },
       ],
     });
     providerRegistry.resolve.mockReturnValue({
@@ -309,7 +309,7 @@ describe('TrackingService', () => {
     prisma.shipment.findUnique.mockResolvedValue({
       ...baseShipment,
       externalTrackingNumbers: [
-        { id: 'ext-1', externalTrackingNumber: 'ICL-1' },
+        { id: 'ext-1', providerId: 'provider-1', externalTrackingNumber: 'ICL-1' },
       ],
     });
     providerRegistry.resolve.mockReturnValue({
@@ -328,7 +328,7 @@ describe('TrackingService', () => {
     prisma.shipment.findUnique.mockResolvedValue({
       ...baseShipment,
       externalTrackingNumbers: [
-        { id: 'ext-1', externalTrackingNumber: 'ICL-1' },
+        { id: 'ext-1', providerId: 'provider-1', externalTrackingNumber: 'ICL-1' },
       ],
     });
     configService.get.mockImplementation((key: string) =>

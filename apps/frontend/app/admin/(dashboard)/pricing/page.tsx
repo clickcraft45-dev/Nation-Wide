@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Tag, Globe, Receipt, MapPinned } from "lucide-react";
 import type { CountryDto, RateDto, RateProviderDto, ZoneDto } from "@nationwide/shared-types";
 import { apiClient, ApiError } from "@/lib/api-client";
@@ -32,6 +32,28 @@ const SHIPMENT_TYPE_LABELS: Record<string, string> = {
   PARCEL: "Parcel",
   PACKAGE: "Package",
 };
+
+// A fixed palette assigned by each provider's position in the full provider list (sorted by id
+// for a stable order), so every provider gets its own distinct color — a hash-based assignment
+// can't guarantee that two providers never land in the same bucket, but an index into a palette
+// larger than the provider count can.
+const PROVIDER_COLOR_PALETTE = [
+  "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/30",
+  "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30",
+  "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30",
+  "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30",
+  "bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/30",
+  "bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/30",
+  "bg-teal-500/10 text-teal-600 dark:text-teal-400 border-teal-500/30",
+  "bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/30",
+];
+
+function buildProviderColorMap(providers: RateProviderDto[]): Map<string, string> {
+  const sorted = [...providers].sort((a, b) => a.id.localeCompare(b.id));
+  return new Map(
+    sorted.map((p, index) => [p.id, PROVIDER_COLOR_PALETTE[index % PROVIDER_COLOR_PALETTE.length]]),
+  );
+}
 
 type Tab = "rates" | "zones" | "providers" | "countries";
 
@@ -121,6 +143,8 @@ function RatesTab() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search, providerFilter, shipmentTypeFilter]);
 
+  const providerColors = useMemo(() => buildProviderColorMap(providers), [providers]);
+
   async function toggleActive(rate: RateDto) {
     try {
       await apiClient.patch(`/admin/rates/${rate.id}/active`, { isActive: !rate.isActive });
@@ -201,7 +225,16 @@ function RatesTab() {
           <TableBody>
             {rates.map((rate) => (
               <TableRow key={rate.id}>
-                <TableCell className="font-medium">{rate.rateProviderName}</TableCell>
+                <TableCell>
+                  <span
+                    className={cn(
+                      "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium",
+                      providerColors.get(rate.rateProviderId) ?? "border-border bg-muted text-muted-foreground",
+                    )}
+                  >
+                    {rate.rateProviderName}
+                  </span>
+                </TableCell>
                 <TableCell>{rate.zoneName}</TableCell>
                 <TableCell>{SHIPMENT_TYPE_LABELS[rate.shipmentType] ?? rate.shipmentType}</TableCell>
                 <TableCell>

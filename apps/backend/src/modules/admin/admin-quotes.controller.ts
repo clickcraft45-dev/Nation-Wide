@@ -18,6 +18,8 @@ import { toQuoteAdminDetailDto } from '../quotes/quote.mapper';
 import { QueryQuotesDto } from '../quotes/dto/query-quotes.dto';
 import { ManualQuoteDto } from '../quotes/dto/manual-quote.dto';
 import { RejectQuoteDto } from '../quotes/dto/reject-quote.dto';
+import { CreateAdminQuoteDto } from '../quotes/dto/create-admin-quote.dto';
+import { SelectOptionDto } from '../quotes/dto/select-option.dto';
 
 @Controller('admin/quotes')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -26,7 +28,9 @@ export class AdminQuotesController {
   constructor(private readonly quotesService: QuotesService) {}
 
   @Get()
-  async findAll(@Query() query: QueryQuotesDto): Promise<QuoteAdminDetailDto[]> {
+  async findAll(
+    @Query() query: QueryQuotesDto,
+  ): Promise<QuoteAdminDetailDto[]> {
     const quotes = await this.quotesService.findAllAdmin(query);
     return quotes.map(toQuoteAdminDetailDto);
   }
@@ -34,6 +38,34 @@ export class AdminQuotesController {
   @Get(':id')
   async findOne(@Param('id') id: string): Promise<QuoteAdminDetailDto> {
     const quote = await this.quotesService.findOneAdmin(id);
+    return toQuoteAdminDetailDto(quote);
+  }
+
+  // Admin "Get a Quote" — staff running the same wizard/pricing engine as the customer portal on
+  // a customer's behalf (e.g. a phone-in request), per the explicit requirement that this must
+  // not duplicate pricing logic. customerId is supplied directly since there's no customer JWT
+  // subject to derive it from here.
+  @Post()
+  async create(@Body() dto: CreateAdminQuoteDto): Promise<QuoteAdminDetailDto> {
+    const { customerId, ...createDto } = dto;
+    const quote = await this.quotesService.create(createDto, customerId);
+    return toQuoteAdminDetailDto(quote);
+  }
+
+  // Confirms a provider option on the target customer's behalf, immediately after admin-side
+  // creation — mirrors POST /quotes/:id/select-option, but looks up the quote's owning customer
+  // first since staff don't have that customer's JWT to supply it.
+  @Post(':id/select-option')
+  async selectOption(
+    @Param('id') id: string,
+    @Body() dto: SelectOptionDto,
+  ): Promise<QuoteAdminDetailDto> {
+    const existing = await this.quotesService.findOneAdmin(id);
+    const quote = await this.quotesService.selectOption(
+      id,
+      dto.optionId,
+      existing.customerId,
+    );
     return toQuoteAdminDetailDto(quote);
   }
 

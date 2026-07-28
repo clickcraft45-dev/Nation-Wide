@@ -131,6 +131,13 @@ export interface CreateQuoteDto {
   submissionKey: string;
 }
 
+// Admin "Get a Quote" — staff-initiated quote creation on a customer's behalf, e.g. a phone-in
+// request. Identical to CreateQuoteDto plus the target customer, since there's no customer JWT
+// subject to imply it from (see AdminQuotesController.create).
+export interface CreateAdminQuoteDto extends CreateQuoteDto {
+  customerId: string;
+}
+
 export interface ManualQuoteDto {
   amount: number;
   currency?: string;

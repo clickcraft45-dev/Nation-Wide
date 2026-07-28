@@ -101,11 +101,16 @@ export default function AdminQuotesPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold text-foreground">Quote Requests</h1>
-        <p className="text-sm text-muted-foreground">
-          Customer-submitted shipment requests awaiting pricing.
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-semibold text-foreground">Quote Requests</h1>
+          <p className="text-sm text-muted-foreground">
+            Customer-submitted shipment requests awaiting pricing.
+          </p>
+        </div>
+        <Link href="/admin/quotes/new">
+          <Button size="sm">+ New Quote</Button>
+        </Link>
       </div>
 
       <div className="flex flex-col gap-3 sm:flex-row">

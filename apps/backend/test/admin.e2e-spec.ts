@@ -233,7 +233,7 @@ describe('Admin (e2e)', () => {
           `/api/v1/admin/shipments/${shipment.internalTrackingNumber}/external-tracking-number`,
         )
         .set('Authorization', `Bearer ${staffAccessToken}`)
-        .send({ externalTrackingNumber: 'ICL-E2E-ADMIN-1' })
+        .send({ providerId, externalTrackingNumber: 'ICL-E2E-ADMIN-1' })
         .expect(201);
       const mappedDetail = mapRes.body as ShipmentAdminDetailDto;
       expect(mappedDetail.externalTrackingNumbers).toHaveLength(1);

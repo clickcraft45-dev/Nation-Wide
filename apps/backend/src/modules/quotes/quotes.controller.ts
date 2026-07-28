@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import type { QuoteDto, QuotePreviewResultDto } from '@nationwide/shared-types';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -27,10 +35,14 @@ export class QuotesController {
   }
 
   // Stateless compare-providers lookup — no Quote is created. Powers the quote wizard's compare
-  // step, before the customer has provided any address details.
+  // step, before the customer has provided any address details. Also used by the admin-initiated
+  // quote wizard (AdminQuotesController) — same stateless lookup, same pricing engine, no separate
+  // calculation for staff.
   @Get('preview')
-  @Roles('CUSTOMER')
-  async preview(@Query() query: QuotePreviewQueryDto): Promise<QuotePreviewResultDto> {
+  @Roles('CUSTOMER', 'STAFF', 'ADMIN')
+  async preview(
+    @Query() query: QuotePreviewQueryDto,
+  ): Promise<QuotePreviewResultDto> {
     return this.quotesService.preview(query);
   }
 
@@ -60,7 +72,11 @@ export class QuotesController {
     @Body() dto: SelectOptionDto,
     @CurrentUser() user: JwtPayload,
   ): Promise<QuoteDto> {
-    const quote = await this.quotesService.selectOption(id, dto.optionId, user.sub);
+    const quote = await this.quotesService.selectOption(
+      id,
+      dto.optionId,
+      user.sub,
+    );
     return toQuoteDto(quote);
   }
 }
