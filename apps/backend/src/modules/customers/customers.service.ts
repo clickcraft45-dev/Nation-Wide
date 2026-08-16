@@ -5,6 +5,10 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
+import {
+  resolvePagination,
+  type PaginationParams,
+} from '../../common/utils/pagination.util';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 
@@ -52,11 +56,33 @@ export class CustomersService {
     }
   }
 
-  findAll(): Promise<PublicCustomer[]> {
-    return this.prisma.customer.findMany({
-      orderBy: { createdAt: 'desc' },
-      select: PUBLIC_CUSTOMER_SELECT,
-    });
+  // total is only computed (an extra COUNT query) when pagination was actually requested —
+  // every existing caller that omits page/pageSize (dashboard, reports, payments aggregation,
+  // the admin quote wizard's customer search) keeps getting the full array with zero extra
+  // query cost and no response-shape change.
+  async findAll(
+    params: PaginationParams & { search?: string } = {},
+  ): Promise<{ data: PublicCustomer[]; total: number | null }> {
+    const where: Prisma.CustomerWhereInput = params.search
+      ? {
+          OR: [
+            { name: { contains: params.search, mode: 'insensitive' } },
+            { email: { contains: params.search, mode: 'insensitive' } },
+            { phone: { contains: params.search, mode: 'insensitive' } },
+          ],
+        }
+      : {};
+    const paging = resolvePagination(params);
+    const [data, total] = await Promise.all([
+      this.prisma.customer.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        select: PUBLIC_CUSTOMER_SELECT,
+        ...paging,
+      }),
+      paging ? this.prisma.customer.count({ where }) : Promise.resolve(null),
+    ]);
+    return { data, total };
   }
 
   async findOne(id: string): Promise<PublicCustomer> {

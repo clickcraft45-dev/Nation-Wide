@@ -5,8 +5,10 @@ import {
   Param,
   Post,
   Query,
+  Res,
   UseGuards,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import type { QuoteAdminDetailDto } from '@nationwide/shared-types';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -27,12 +29,16 @@ import { SelectOptionDto } from '../quotes/dto/select-option.dto';
 export class AdminQuotesController {
   constructor(private readonly quotesService: QuotesService) {}
 
+  // Response body is always a plain array. Passing page/pageSize opts into skip/take and adds
+  // an X-Total-Count header the admin quotes list page reads to render pagination controls.
   @Get()
   async findAll(
     @Query() query: QueryQuotesDto,
+    @Res({ passthrough: true }) res: Response,
   ): Promise<QuoteAdminDetailDto[]> {
-    const quotes = await this.quotesService.findAllAdmin(query);
-    return quotes.map(toQuoteAdminDetailDto);
+    const { data, total } = await this.quotesService.findAllAdmin(query);
+    if (total !== null) res.setHeader('X-Total-Count', String(total));
+    return data.map(toQuoteAdminDetailDto);
   }
 
   @Get(':id')

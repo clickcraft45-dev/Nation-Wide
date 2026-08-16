@@ -1,6 +1,7 @@
 import { ConflictException, UnauthorizedException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { AuthService } from './auth.service';
+import type { GoogleProfile } from './strategies/google.strategy';
 
 interface WhereClause {
   where: { email?: string; id?: string; phone?: string };
@@ -40,7 +41,7 @@ describe('AuthService', () => {
       create: jest.Mock;
     };
   };
-  let jwtService: { signAsync: jest.Mock };
+  let jwtService: { signAsync: jest.Mock; verifyAsync: jest.Mock };
   let configService: { getOrThrow: jest.Mock };
   let authService: AuthService;
 
@@ -107,6 +108,7 @@ describe('AuthService', () => {
     };
     jwtService = {
       signAsync: jest.fn().mockResolvedValue('signed-token'),
+      verifyAsync: jest.fn(),
     };
     configService = {
       getOrThrow: jest.fn().mockReturnValue('config-value'),
@@ -280,6 +282,202 @@ describe('AuthService', () => {
       expect(prisma.customer.findUnique).toHaveBeenCalledWith({
         where: { id: customer.id },
       });
+    });
+  });
+
+  describe('changePassword', () => {
+    it('throws and does not update when the current password is wrong', async () => {
+      await expect(
+        authService.changePassword(
+          adminUser.id,
+          'STAFF',
+          'wrong-current-password',
+          'a-new-password',
+        ),
+      ).rejects.toThrow(UnauthorizedException);
+      expect(prisma.adminUser.update).not.toHaveBeenCalled();
+    });
+
+    it('updates the password hash and nulls out the stored refresh token, in the same write', async () => {
+      adminUser.hashedRefreshToken = await bcrypt.hash(
+        'a-stolen-refresh-token',
+        10,
+      );
+
+      await authService.changePassword(
+        adminUser.id,
+        'STAFF',
+        'correct-password',
+        'a-new-password',
+      );
+
+      expect(prisma.adminUser.update).toHaveBeenCalledTimes(1);
+      const [{ data }] = prisma.adminUser.update.mock.calls[0] as [
+        { data: { passwordHash?: string; hashedRefreshToken?: string | null } },
+      ];
+      expect(data.hashedRefreshToken).toBeNull();
+      expect(data.passwordHash).toBeDefined();
+      expect(data.passwordHash).not.toBe(adminUser.passwordHash);
+    });
+
+    it('routes a CUSTOMER role change to the Customer table, not AdminUser', async () => {
+      customer.passwordHash = await bcrypt.hash('correct-password', 10);
+
+      await authService.changePassword(
+        customer.id,
+        'CUSTOMER',
+        'correct-password',
+        'a-new-password',
+      );
+
+      expect(prisma.adminUser.update).not.toHaveBeenCalled();
+      expect(prisma.customer.update).toHaveBeenCalledWith({
+        where: { id: customer.id },
+        data: expect.objectContaining({ hashedRefreshToken: null }) as unknown,
+      });
+    });
+  });
+
+  describe('loginOrPrepareGoogleSignup', () => {
+    const googleProfile: GoogleProfile = {
+      googleId: 'google-sub-1',
+      email: 'someone@example.com',
+      name: 'Someone',
+    };
+
+    it('rejects a Google identity matching a staff/admin email, without ever checking Customer', async () => {
+      const profile = { ...googleProfile, email: adminUser.email };
+
+      await expect(
+        authService.loginOrPrepareGoogleSignup(profile),
+      ).rejects.toThrow(UnauthorizedException);
+      expect(prisma.customer.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('logs straight in when the Google email matches an existing Customer', async () => {
+      const profile = { ...googleProfile, email: customer.email! };
+
+      const result = await authService.loginOrPrepareGoogleSignup(profile);
+
+      expect(result).toEqual({
+        status: 'authenticated',
+        account: expect.objectContaining({ id: customer.id, role: 'CUSTOMER' }),
+      });
+    });
+
+    it('logs in an existing Customer via Google even without a password ever set', async () => {
+      // customer.passwordHash is null by default in beforeEach — Google verifying the email is
+      // sufficient on its own; a missing password must not block this path the way it blocks
+      // authenticate().
+      const profile = { ...googleProfile, email: customer.email! };
+
+      const result = await authService.loginOrPrepareGoogleSignup(profile);
+
+      expect(result.status).toBe('authenticated');
+    });
+
+    it('returns a pending signup token when no account matches the Google email', async () => {
+      const result =
+        await authService.loginOrPrepareGoogleSignup(googleProfile);
+
+      expect(result).toEqual({
+        status: 'needs-phone',
+        pendingToken: 'signed-token',
+      });
+      expect(jwtService.signAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          purpose: 'google_signup',
+          email: googleProfile.email,
+          name: googleProfile.name,
+          googleId: googleProfile.googleId,
+        }),
+        expect.objectContaining({ expiresIn: '15m' }),
+      );
+    });
+  });
+
+  describe('completeGoogleSignup', () => {
+    const pendingPayload = {
+      purpose: 'google_signup' as const,
+      email: 'newperson@example.com',
+      name: 'New Person',
+      googleId: 'google-sub-2',
+    };
+
+    it('throws when the token fails verification (expired/tampered)', async () => {
+      jwtService.verifyAsync.mockRejectedValue(new Error('jwt expired'));
+
+      await expect(
+        authService.completeGoogleSignup('bad-token', '+919876500009'),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('throws when the token is valid but not a google_signup token', async () => {
+      jwtService.verifyAsync.mockResolvedValue({
+        ...pendingPayload,
+        purpose: 'something_else',
+      });
+
+      await expect(
+        authService.completeGoogleSignup('other-token', '+919876500009'),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('logs straight in, without creating a duplicate, if the email got claimed meanwhile', async () => {
+      jwtService.verifyAsync.mockResolvedValue({
+        ...pendingPayload,
+        email: customer.email!,
+      });
+
+      const result = await authService.completeGoogleSignup(
+        'token',
+        '+919876500009',
+      );
+
+      expect(result).toMatchObject({ id: customer.id, role: 'CUSTOMER' });
+      expect(prisma.customer.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects when the submitted phone already belongs to a password-protected account', async () => {
+      customer.passwordHash = 'already-set';
+      jwtService.verifyAsync.mockResolvedValue(pendingPayload);
+
+      await expect(
+        authService.completeGoogleSignup('token', customer.phone),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it('claims an existing passwordless Customer record by phone instead of duplicating it', async () => {
+      jwtService.verifyAsync.mockResolvedValue(pendingPayload);
+
+      await authService.completeGoogleSignup('token', customer.phone);
+
+      expect(prisma.customer.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: customer.id },
+          data: { name: pendingPayload.name, email: pendingPayload.email },
+        }),
+      );
+      expect(prisma.customer.create).not.toHaveBeenCalled();
+    });
+
+    it('creates a brand-new Customer with no passwordHash when nothing matches', async () => {
+      jwtService.verifyAsync.mockResolvedValue(pendingPayload);
+
+      const result = await authService.completeGoogleSignup(
+        'token',
+        '+919876500009',
+      );
+
+      expect(prisma.customer.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          name: pendingPayload.name,
+          phone: '+919876500009',
+          email: pendingPayload.email,
+          consentSource: 'google_oauth',
+        }),
+      });
+      expect(result.role).toBe('CUSTOMER');
     });
   });
 });

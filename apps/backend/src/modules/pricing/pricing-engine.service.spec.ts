@@ -11,8 +11,6 @@ function makeSlab(overrides: Record<string, unknown> = {}) {
     weightFromKg: decimal(2),
     weightToKg: decimal(2),
     baseRate: decimal(500),
-    pssAmount: decimal(50),
-    fuelChargePercent: decimal(10),
     gstPercent: decimal(18),
     nationwideCut: decimal(100),
     isActive: true,
@@ -30,6 +28,9 @@ function makeZoneCountry(overrides: Record<string, unknown> = {}) {
   };
 }
 
+// Fuel Charge % and PSS/kg are provider-level config now (see RateProvider) — 10% and ₹25/kg
+// here so a 2kg shipment reproduces the same PSS=50/fuel=50 worked example the old per-slab
+// fixture used.
 function makeRateCard(overrides: Record<string, unknown> = {}) {
   return {
     id: 'card-1',
@@ -40,7 +41,12 @@ function makeRateCard(overrides: Record<string, unknown> = {}) {
       id: 'zone-1',
       rateProviderId: 'provider-1',
       name: 'Zone A',
-      rateProvider: { id: 'provider-1', name: 'Test Provider' },
+      rateProvider: {
+        id: 'provider-1',
+        name: 'Test Provider',
+        fuelChargePercent: decimal(10),
+        pssPerKg: decimal(25),
+      },
     },
     weightSlabs: [makeSlab()],
     ...overrides,
@@ -84,6 +90,26 @@ describe('PricingEngineService', () => {
     expect(option.finalPrice).toBe(808);
   });
 
+  it('computes PSS as weight × the provider-level PSS/kg, not a per-slab flat amount', async () => {
+    prisma.rateCard.findMany.mockResolvedValue([
+      makeRateCard({
+        weightSlabs: [
+          makeSlab({ weightFromKg: decimal(1), weightToKg: decimal(20) }),
+        ],
+      }),
+    ]);
+
+    const [option] = await service.computeQuotesForRequest({
+      destinationCountryName: 'USA',
+      weightKg: 12,
+      shipmentType: 'PACKAGE',
+    });
+
+    // pssPerKg 25 × 12kg = 300 — same rate card/slab the 2kg case uses, proving PSS scales with
+    // the requested weight rather than staying fixed at the old per-slab amount.
+    expect(option.pssAmount).toBe(300);
+  });
+
   it('never computes fuel charge or GST on NationWide Cut', async () => {
     prisma.rateCard.findMany.mockResolvedValue([
       makeRateCard({
@@ -124,7 +150,12 @@ describe('PricingEngineService', () => {
           id: 'zone-fedex',
           rateProviderId: 'fedex',
           name: 'Zone A',
-          rateProvider: { id: 'fedex', name: 'FedEx' },
+          rateProvider: {
+            id: 'fedex',
+            name: 'FedEx',
+            fuelChargePercent: decimal(10),
+            pssPerKg: decimal(25),
+          },
         },
       }),
       makeRateCard({
@@ -134,7 +165,12 @@ describe('PricingEngineService', () => {
           id: 'zone-ups',
           rateProviderId: 'ups',
           name: 'Zone 1',
-          rateProvider: { id: 'ups', name: 'UPS' },
+          rateProvider: {
+            id: 'ups',
+            name: 'UPS',
+            fuelChargePercent: decimal(10),
+            pssPerKg: decimal(25),
+          },
         },
       }),
     ]);
@@ -167,7 +203,12 @@ describe('PricingEngineService', () => {
           id: 'zone-1',
           rateProviderId: 'ups',
           name: 'Zone 1',
-          rateProvider: { id: 'ups', name: 'UPS' },
+          rateProvider: {
+            id: 'ups',
+            name: 'UPS',
+            fuelChargePercent: decimal(10),
+            pssPerKg: decimal(25),
+          },
         },
       }),
     ]);

@@ -1,6 +1,16 @@
 import { Type } from 'class-transformer';
-import { IsBoolean, IsIn, IsNumber, IsOptional, IsString, IsUUID } from 'class-validator';
-import { SHIPMENT_TYPES, type ShipmentTypeCode } from '@nationwide/shared-types';
+import {
+  IsBoolean,
+  IsIn,
+  IsNumber,
+  IsOptional,
+  IsString,
+  IsUUID,
+} from 'class-validator';
+import {
+  SHIPMENT_TYPES,
+  type ShipmentTypeCode,
+} from '@nationwide/shared-types';
 
 export class QueryRatesDto {
   @IsOptional()

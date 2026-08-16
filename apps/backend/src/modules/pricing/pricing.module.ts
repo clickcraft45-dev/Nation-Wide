@@ -5,6 +5,7 @@ import { RateProvidersService } from './rate-providers.service';
 import { ZonesService } from './zones.service';
 import { RatesService } from './rates.service';
 import { PricingEngineService } from './pricing-engine.service';
+import { PricingOverviewService } from './pricing-overview.service';
 
 @Module({
   controllers: [CountriesController],
@@ -14,6 +15,7 @@ import { PricingEngineService } from './pricing-engine.service';
     ZonesService,
     RatesService,
     PricingEngineService,
+    PricingOverviewService,
   ],
   exports: [
     CountriesService,
@@ -21,6 +23,7 @@ import { PricingEngineService } from './pricing-engine.service';
     ZonesService,
     RatesService,
     PricingEngineService,
+    PricingOverviewService,
   ],
 })
 export class PricingModule {}

@@ -143,12 +143,17 @@ describe('Quotes (e2e)', () => {
       create: { code: TEST_COUNTRY_CODE, name: TEST_COUNTRY_NAME },
     });
 
+    // Fuel Charge % and PSS/kg are provider-level config now — 10% and ₹10/kg here reproduce the
+    // same 50/50 PSS/fuel-charge amounts the old per-slab fixture used, for the 5kg PARCEL
+    // requests below (weight × ₹10 = ₹50 PSS, matching this file's existing finalPrice: 808).
     const rateProvider = await prisma.rateProvider.upsert({
       where: { code: TEST_RATE_PROVIDER_CODE },
-      update: {},
+      update: { fuelChargePercent: 10, pssPerKg: 10 },
       create: {
         code: TEST_RATE_PROVIDER_CODE,
         name: 'E2E Quotes Test Provider',
+        fuelChargePercent: 10,
+        pssPerKg: 10,
       },
     });
     rateProviderId = rateProvider.id;
@@ -189,8 +194,6 @@ describe('Quotes (e2e)', () => {
         weightFromKg: 0,
         weightToKg: 100,
         baseRate: 500,
-        pssAmount: 50,
-        fuelChargePercent: 10,
         gstPercent: 18,
         nationwideCut: 100,
       },

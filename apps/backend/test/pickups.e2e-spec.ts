@@ -26,7 +26,11 @@ describe('Pickups (e2e)', () => {
   let pickupId: string;
   let dropOffPickupId: string;
 
-  async function signToken(sub: string, email: string, role: 'CUSTOMER' | 'STAFF' | 'ADMIN') {
+  async function signToken(
+    sub: string,
+    email: string,
+    role: 'CUSTOMER' | 'STAFF' | 'ADMIN',
+  ) {
     return jwtService.signAsync(
       { sub, email, role },
       {
@@ -45,7 +49,11 @@ describe('Pickups (e2e)', () => {
     app.setGlobalPrefix('api/v1');
     app.use(cookieParser());
     app.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
     );
     await app.init();
 
@@ -56,7 +64,11 @@ describe('Pickups (e2e)', () => {
     const provider = await prisma.shippingProvider.upsert({
       where: { code: TEST_PROVIDER_CODE },
       update: {},
-      create: { code: TEST_PROVIDER_CODE, name: 'ICL', adapterClass: 'ICLAdapter' },
+      create: {
+        code: TEST_PROVIDER_CODE,
+        name: 'ICL',
+        adapterClass: 'ICLAdapter',
+      },
     });
 
     const staff = await prisma.adminUser.upsert({
@@ -89,10 +101,20 @@ describe('Pickups (e2e)', () => {
           customerId,
           shipmentType: 'PARCEL',
           weightKg: 3,
-          originName: 'S', originPhone: '1', originAddressLine1: 'A', originCity: 'C',
-          originState: 'S', originPostalCode: '1', originCountry: 'IN',
-          destName: 'R', destPhone: '2', destAddressLine1: 'B', destCity: 'D',
-          destState: 'S', destPostalCode: '2', destCountry: 'US',
+          originName: 'S',
+          originPhone: '1',
+          originAddressLine1: 'A',
+          originCity: 'C',
+          originState: 'S',
+          originPostalCode: '1',
+          originCountry: 'IN',
+          destName: 'R',
+          destPhone: '2',
+          destAddressLine1: 'B',
+          destCity: 'D',
+          destState: 'S',
+          destPostalCode: '2',
+          destCountry: 'US',
           fulfillmentMethod: method,
           status: 'ACCEPTED',
           submissionKey: `e2e-pickup-setup-${method}-${Date.now()}`,
@@ -100,13 +122,22 @@ describe('Pickups (e2e)', () => {
       });
       const order = await prisma.order.create({ data: { customerId } });
       const shipmentPlaceholder = await prisma.shipment.create({
-        data: { orderId: order.id, providerId: provider.id, internalTrackingNumber: `PENDING-${order.id}` },
+        data: {
+          orderId: order.id,
+          providerId: provider.id,
+          internalTrackingNumber: `PENDING-${order.id}`,
+        },
       });
       await prisma.shipment.update({
         where: { id: shipmentPlaceholder.id },
-        data: { internalTrackingNumber: `NW-TEST-${shipmentPlaceholder.sequenceNumber}` },
+        data: {
+          internalTrackingNumber: `NW-TEST-${shipmentPlaceholder.sequenceNumber}`,
+        },
       });
-      await prisma.quote.update({ where: { id: quote.id }, data: { orderId: order.id } });
+      await prisma.quote.update({
+        where: { id: quote.id },
+        data: { orderId: order.id },
+      });
       const pickup = await prisma.pickup.create({
         data: {
           quoteId: quote.id,
@@ -129,10 +160,17 @@ describe('Pickups (e2e)', () => {
 
   afterAll(async () => {
     const quotes = await prisma.quote.findMany({ where: { customerId } });
-    const orderIds = quotes.map((q) => q.orderId).filter((id): id is string => !!id);
-    await prisma.pickup.deleteMany({ where: { quoteId: { in: quotes.map((q) => q.id) } } });
+    const orderIds = quotes
+      .map((q) => q.orderId)
+      .filter((id): id is string => !!id);
+    await prisma.pickup.deleteMany({
+      where: { quoteId: { in: quotes.map((q) => q.id) } },
+    });
     await prisma.auditLog.deleteMany({
-      where: { entity: 'Pickup', entityId: { in: [pickupId, dropOffPickupId] } },
+      where: {
+        entity: 'Pickup',
+        entityId: { in: [pickupId, dropOffPickupId] },
+      },
     });
     await prisma.notification.deleteMany({ where: { customerId } });
     await prisma.shipment.deleteMany({ where: { orderId: { in: orderIds } } });
@@ -144,7 +182,11 @@ describe('Pickups (e2e)', () => {
   });
 
   it('rejects a CUSTOMER-role token on admin pickup routes', async () => {
-    const customerToken = await signToken(customerId, 'pickup-e2e@example.com', 'CUSTOMER');
+    const customerToken = await signToken(
+      customerId,
+      'pickup-e2e@example.com',
+      'CUSTOMER',
+    );
     await request(app.getHttpServer())
       .get('/api/v1/admin/pickups')
       .set('Authorization', `Bearer ${customerToken}`)

@@ -11,3 +11,8 @@ coverage/
 .turbo/
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
+apps/backend/storage/logos/*
+!apps/backend/storage/logos/.gitkeep
+
+# Contains a full dump of real customer/order data — never commit
+backups/

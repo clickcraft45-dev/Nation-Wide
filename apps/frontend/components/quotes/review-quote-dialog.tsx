@@ -33,7 +33,7 @@ export function ReviewQuoteDialog({
       {open && (
         <DialogContent
           title="Review quote request"
-          description={`${quote.customerName} — ${quote.origin.city} → ${quote.destination.city}, ${quote.weightKg}kg`}
+          description={`${quote.customerName} — ${quote.origin ? `${quote.origin.city} → ` : "To "}${quote.destination.city}, ${quote.weightKg}kg`}
         >
           <div className="space-y-4">
             <div className="space-y-1.5 text-sm text-muted-foreground">

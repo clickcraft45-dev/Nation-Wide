@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import type { Country } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { CreateCountryDto } from './dto/create-country.dto';
@@ -21,9 +25,13 @@ export class CountriesService {
 
   async create(dto: CreateCountryDto): Promise<Country> {
     await this.assertNameNotTaken(dto.name);
-    const existingCode = await this.prisma.country.findUnique({ where: { code: dto.code } });
+    const existingCode = await this.prisma.country.findUnique({
+      where: { code: dto.code },
+    });
     if (existingCode) {
-      throw new BadRequestException(`A country with code ${dto.code} already exists`);
+      throw new BadRequestException(
+        `A country with code ${dto.code} already exists`,
+      );
     }
     return this.prisma.country.create({ data: dto });
   }
@@ -47,7 +55,10 @@ export class CountriesService {
   // Case-insensitive match — "India" and "india" must never both exist, since the pricing
   // engine resolves a quote's destination country by a case-insensitive name lookup and would
   // otherwise pick one arbitrarily (Section: Country matching).
-  private async assertNameNotTaken(name: string, excludeId?: string): Promise<void> {
+  private async assertNameNotTaken(
+    name: string,
+    excludeId?: string,
+  ): Promise<void> {
     const clash = await this.prisma.country.findFirst({
       where: {
         name: { equals: name, mode: 'insensitive' },
@@ -55,7 +66,9 @@ export class CountriesService {
       },
     });
     if (clash) {
-      throw new BadRequestException(`A country named "${clash.name}" already exists`);
+      throw new BadRequestException(
+        `A country named "${clash.name}" already exists`,
+      );
     }
   }
 }

@@ -10,12 +10,17 @@ export type FulfillmentMethodCode = (typeof FULFILLMENT_METHODS)[number];
 // PricingEngineService. NEEDS_MANUAL_REVIEW is the fallback for shipment types it can't touch
 // (OTHER/oversized) or destinations with no active rate card (NO_RATE_AVAILABLE); those still
 // get a staff-entered price via the manual-quote flow. SUBMITTED only appears on pre-existing
-// rows created before the engine shipped.
+// rows created before the engine shipped. PENDING_PICKUP_REQUEST / PICKUP_REQUESTED are the new
+// customer self-service pre-order states — see pickup-request.ts — reached instead of ACCEPTED
+// when the quote has no fulfillmentMethod set (the legacy admin manual-quote path, which always
+// sets fulfillmentMethod, still goes straight to ACCEPTED as before).
 export const QUOTE_STATUSES = [
   "SUBMITTED",
   "RATED",
   "NEEDS_MANUAL_REVIEW",
   "QUOTED",
+  "PENDING_PICKUP_REQUEST",
+  "PICKUP_REQUESTED",
   "ACCEPTED",
   "REJECTED",
   "CANCELLED",
@@ -84,9 +89,11 @@ export interface QuoteDto {
   shipmentType: ShipmentTypeCode;
   weightKg: number;
   description: string | null;
-  origin: QuoteOriginAddressDto;
+  // Null on the new customer self-service flow — pickup logistics live on PickupRequest instead
+  // (see pickup-request.ts). Still populated by the legacy admin manual-quote flow.
+  origin: QuoteOriginAddressDto | null;
   destination: QuoteAddressDto;
-  fulfillmentMethod: FulfillmentMethodCode;
+  fulfillmentMethod: FulfillmentMethodCode | null;
   pickupDate: string | null; // ISO 8601 date-only
   pickupTimeSlot: PickupTimeSlot | null;
   status: QuoteStatusCode;
@@ -123,9 +130,12 @@ export interface CreateQuoteDto {
   shipmentType: ShipmentTypeCode;
   weightKg: number;
   description?: string;
-  origin: QuoteOriginAddressDto;
   destination: QuoteAddressDto;
-  fulfillmentMethod: FulfillmentMethodCode;
+  // Optional — omitted by the new customer self-service wizard, which collects pickup logistics
+  // later via CreatePickupRequestDto (see pickup-request.ts) instead of at quote-creation time.
+  // The admin manual-quote flow (CreateAdminQuoteDto) still always supplies these.
+  origin?: QuoteOriginAddressDto;
+  fulfillmentMethod?: FulfillmentMethodCode;
   pickupDate?: string; // ISO 8601 date-only, required when fulfillmentMethod === "PICKUP"
   pickupTimeSlot?: PickupTimeSlot;
   submissionKey: string;
@@ -133,8 +143,14 @@ export interface CreateQuoteDto {
 
 // Admin "Get a Quote" — staff-initiated quote creation on a customer's behalf, e.g. a phone-in
 // request. Identical to CreateQuoteDto plus the target customer, since there's no customer JWT
-// subject to imply it from (see AdminQuotesController.create).
-export interface CreateAdminQuoteDto extends CreateQuoteDto {
+// subject to imply it from (see AdminQuotesController.create). Unlike the customer self-service
+// wizard, this flow still collects full logistics upfront — re-required here (CreateQuoteDto
+// itself made them optional for the new pickup-request flow) so staff always supply them, which
+// is also what keeps Quote.fulfillmentMethod set and this whole path on the legacy
+// immediate-order-creation behavior — see QuotesService.selectOption/acceptQuote.
+export interface CreateAdminQuoteDto
+  extends Omit<CreateQuoteDto, "origin" | "fulfillmentMethod">,
+    Required<Pick<CreateQuoteDto, "origin" | "fulfillmentMethod">> {
   customerId: string;
 }
 

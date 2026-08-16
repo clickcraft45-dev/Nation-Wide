@@ -1,5 +1,8 @@
 import { IsIn, IsISO8601, IsOptional } from 'class-validator';
-import { PICKUP_STATUSES, type PickupStatusCode } from '@nationwide/shared-types';
+import {
+  PICKUP_STATUSES,
+  type PickupStatusCode,
+} from '@nationwide/shared-types';
 
 const PICKUP_RANGES = ['today', 'tomorrow', 'next7'] as const;
 export type PickupRange = (typeof PICKUP_RANGES)[number];

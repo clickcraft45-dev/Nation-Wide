@@ -1,26 +1,26 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "@/state/auth-context";
-import { DashboardShell } from "@/components/layout/dashboard-shell";
-import { CUSTOMER_NAV_ITEMS } from "@/lib/nav-config";
+import { CustomerMobileShell } from "@/components/customer/customer-mobile-shell";
 import { Loader2 } from "lucide-react";
 
 export default function CustomerLayout({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
     if (isLoading) return;
     if (!user) {
-      router.replace("/login");
+      router.replace(`/login?redirect=${encodeURIComponent(pathname)}`);
     } else if (user.role !== "CUSTOMER") {
       // A staff/admin account trying to reach the customer area — send them to their own
       // dashboard rather than showing a dead end.
       router.replace("/admin/dashboard");
     }
-  }, [isLoading, user, router]);
+  }, [isLoading, user, router, pathname]);
 
   if (isLoading || !user || user.role !== "CUSTOMER") {
     return (
@@ -30,9 +30,5 @@ export default function CustomerLayout({ children }: { children: React.ReactNode
     );
   }
 
-  return (
-    <DashboardShell user={user} items={CUSTOMER_NAV_ITEMS} profileHref="/profile">
-      {children}
-    </DashboardShell>
-  );
+  return <CustomerMobileShell user={user}>{children}</CustomerMobileShell>;
 }

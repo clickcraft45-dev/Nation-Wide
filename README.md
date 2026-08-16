@@ -2,6 +2,19 @@
 
 Customer-facing shipment tracking platform. See [`docs/architecture-research.docx`](docs/architecture-research.docx) for the full architecture research and rationale.
 
+## Documentation
+
+- [Production Readiness Report](docs/PRODUCTION_READINESS_REPORT.md) — latest audit findings, fixes, and remaining recommendations
+- [Deployment Guide](docs/DEPLOYMENT.md) — building/running the Docker images, migrations, health checks, CI
+- [Environment Variable Reference](docs/ENV_VARS.md)
+- [API Overview](docs/API_OVERVIEW.md)
+- [Admin / Staff User Guide](docs/ADMIN_GUIDE.md)
+- [Pickup Partner User Guide](docs/PICKUP_PARTNER_GUIDE.md)
+- [Troubleshooting](docs/TROUBLESHOOTING.md)
+- [WhatsApp Integration Strategy](docs/WHATSAPP_INTEGRATION_STRATEGY.md) — research + architecture plan for going from the current stub adapter to a real Meta Cloud API integration
+- [Gupshup Setup Guide](docs/GUPSHUP_SETUP_GUIDE.md) — step-by-step account setup checklist (chosen provider)
+- [Current UI Audit (PDF)](docs/NationWide-UI-Audit.pdf) — every page across all three portals, every control and what it does, walked live against the running app — the pre-redesign reference
+
 ## Stack
 
 - Frontend: Next.js + TypeScript (`apps/frontend`)

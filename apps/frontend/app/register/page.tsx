@@ -3,12 +3,13 @@
 import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Package, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useAuth } from "@/state/auth-context";
 import { ApiError } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
 import { Input, Label, FieldError } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
+import { Logo } from "@/components/brand/logo";
 
 interface FormState {
   name: string;
@@ -48,8 +49,8 @@ export default function RegisterPage() {
       next.phone = "Phone must be in E.164 format, e.g. +919876543210.";
     }
     if (!isValidEmail(form.email)) next.email = "Enter a valid email address.";
-    if (form.password.length < 8) {
-      next.password = "Password must be at least 8 characters.";
+    if (form.password.length < 10) {
+      next.password = "Password must be at least 10 characters.";
     }
     if (form.password !== form.confirmPassword) {
       next.confirmPassword = "Passwords do not match.";
@@ -94,12 +95,7 @@ export default function RegisterPage() {
   return (
     <div className="flex min-h-screen flex-1 items-center justify-center px-6 py-12">
       <div className="w-full max-w-sm space-y-8">
-        <div className="flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary">
-            <Package className="h-5 w-5 text-white" aria-hidden />
-          </div>
-          <span className="text-lg font-semibold text-foreground">NationWide</span>
-        </div>
+        <Logo variant="horizontal" size="md" />
 
         <div className="space-y-1">
           <h1 className="text-2xl font-semibold text-foreground">Create your account</h1>

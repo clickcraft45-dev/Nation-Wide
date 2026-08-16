@@ -13,6 +13,20 @@ import type { Role } from '@nationwide/shared-types';
 import { PrismaService } from '../../database/prisma.service';
 import type { JwtPayload } from './types/jwt-payload.type';
 import type { RegisterDto } from './dto/register.dto';
+import type { GoogleProfile } from './strategies/google.strategy';
+
+const GOOGLE_SIGNUP_TOKEN_PURPOSE = 'google_signup';
+
+interface GoogleSignupTokenPayload {
+  purpose: typeof GOOGLE_SIGNUP_TOKEN_PURPOSE;
+  email: string;
+  name: string;
+  googleId: string;
+}
+
+export type GoogleLoginResult =
+  | { status: 'authenticated'; account: AuthAccount }
+  | { status: 'needs-phone'; pendingToken: string };
 
 export interface TokenPair {
   accessToken: string;
@@ -91,11 +105,19 @@ export class AuthService {
    * a customer's details before that customer ever creates their own login.
    */
   async register(dto: RegisterDto): Promise<AuthAccount> {
+    // Same message for both fields deliberately (AUTH-2 fix) — distinct "email taken" vs "phone
+    // taken" text let an attacker script a candidate list against this endpoint and learn which
+    // individual field had an account, independent of the other. One generic message still
+    // reveals *that* a match existed on this (email, phone) pair, which real-time duplicate
+    // detection can't avoid without breaking the legitimate "you already have an account, log
+    // in instead" UX — but no longer discloses which field matched.
     const existingByEmail = await this.prisma.customer.findUnique({
       where: { email: dto.email },
     });
     if (existingByEmail) {
-      throw new ConflictException('An account with this email already exists');
+      throw new ConflictException(
+        'An account with this email or phone number already exists',
+      );
     }
 
     const existingByPhone = await this.prisma.customer.findUnique({
@@ -103,7 +125,7 @@ export class AuthService {
     });
     if (existingByPhone?.passwordHash) {
       throw new ConflictException(
-        'An account with this phone number already exists',
+        'An account with this email or phone number already exists',
       );
     }
 
@@ -127,6 +149,133 @@ export class AuthService {
 
     this.audit('REGISTER', { email: customer.email, accountId: customer.id });
 
+    return this.toAuthAccount(customer, 'CUSTOMER');
+  }
+
+  /**
+   * Resolves a verified Google identity to either an immediate login or a "one step left" signup.
+   * Matches purely by email (Google has already verified ownership of it) — never by googleId,
+   * so an existing password-based Customer account is transparently usable via Google too.
+   *
+   * STAFF/ADMIN/PICKUP_PARTNER emails are always rejected: Google sign-in only ever authenticates
+   * Customer accounts (product decision — those roles are internally managed, not public
+   * self-service).
+   */
+  async loginOrPrepareGoogleSignup(
+    profile: GoogleProfile,
+  ): Promise<GoogleLoginResult> {
+    const adminUser = await this.prisma.adminUser.findUnique({
+      where: { email: profile.email },
+    });
+    if (adminUser) {
+      this.audit('GOOGLE_LOGIN_REJECTED_STAFF_EMAIL', { email: profile.email });
+      throw new UnauthorizedException(
+        'This email belongs to a staff account. Please sign in with your password.',
+      );
+    }
+
+    const customer = await this.prisma.customer.findUnique({
+      where: { email: profile.email },
+    });
+    if (customer) {
+      this.audit('GOOGLE_LOGIN_SUCCESS', {
+        email: profile.email,
+        accountId: customer.id,
+      });
+      return {
+        status: 'authenticated',
+        account: this.toAuthAccount(customer, 'CUSTOMER'),
+      };
+    }
+
+    // No existing account — hand back a short-lived, signed token carrying the *verified* Google
+    // identity rather than trusting the frontend to resubmit it, so completeGoogleSignup() can't
+    // be tricked into creating an account under an email/name the caller only claims came from
+    // Google.
+    const payload: GoogleSignupTokenPayload = {
+      purpose: GOOGLE_SIGNUP_TOKEN_PURPOSE,
+      email: profile.email,
+      name: profile.name,
+      googleId: profile.googleId,
+    };
+    const pendingToken = await this.jwtService.signAsync(payload, {
+      secret: this.configService.getOrThrow<string>('JWT_ACCESS_SECRET'),
+      expiresIn: '15m',
+    });
+    this.audit('GOOGLE_SIGNUP_STARTED', { email: profile.email });
+    return { status: 'needs-phone', pendingToken };
+  }
+
+  /**
+   * Second half of new-customer Google sign-up: exchanges the pendingToken (proof of a verified
+   * Google identity) plus a phone number for a real Customer account — phone is required/unique
+   * on Customer and Google doesn't reliably provide one, hence the two-step flow.
+   */
+  async completeGoogleSignup(
+    pendingToken: string,
+    phone: string,
+  ): Promise<AuthAccount> {
+    let payload: GoogleSignupTokenPayload;
+    try {
+      payload = await this.jwtService.verifyAsync<GoogleSignupTokenPayload>(
+        pendingToken,
+        { secret: this.configService.getOrThrow<string>('JWT_ACCESS_SECRET') },
+      );
+    } catch {
+      throw new UnauthorizedException(
+        'This sign-up link has expired. Please try continuing with Google again.',
+      );
+    }
+    if (payload.purpose !== GOOGLE_SIGNUP_TOKEN_PURPOSE) {
+      throw new UnauthorizedException(
+        'This sign-up link has expired. Please try continuing with Google again.',
+      );
+    }
+
+    // Re-check rather than trusting the token's snapshot — someone could sit on this step for
+    // several minutes while another flow claims the same email.
+    const existingByEmail = await this.prisma.customer.findUnique({
+      where: { email: payload.email },
+    });
+    if (existingByEmail) {
+      this.audit('GOOGLE_SIGNUP_SUCCESS', {
+        email: payload.email,
+        accountId: existingByEmail.id,
+      });
+      return this.toAuthAccount(existingByEmail, 'CUSTOMER');
+    }
+
+    const existingByPhone = await this.prisma.customer.findUnique({
+      where: { phone },
+    });
+    if (existingByPhone?.passwordHash) {
+      throw new ConflictException(
+        'An account with this phone number already exists.',
+      );
+    }
+
+    // Mirrors register()'s "claim a staff-created placeholder record by phone" behavior. A
+    // Google-only account never gets a passwordHash — that's what already makes authenticate()
+    // correctly refuse email/password login for it.
+    const customer = existingByPhone
+      ? await this.prisma.customer.update({
+          where: { id: existingByPhone.id },
+          data: { name: payload.name, email: payload.email },
+        })
+      : await this.prisma.customer.create({
+          data: {
+            name: payload.name,
+            phone,
+            email: payload.email,
+            consentGivenAt: new Date(),
+            consentSource: 'google_oauth',
+          },
+        });
+
+    this.audit('GOOGLE_SIGNUP_SUCCESS', {
+      email: payload.email,
+      accountId: customer.id,
+    });
     return this.toAuthAccount(customer, 'CUSTOMER');
   }
 
@@ -217,7 +366,14 @@ export class AuthService {
     }
 
     const passwordHash = await bcrypt.hash(newPassword, PASSWORD_HASH_ROUNDS);
-    await this.updateAccount(userId, role, { passwordHash });
+    // Also revoke the refresh token so a stolen one doesn't survive the password change — the
+    // whole point of changing a password after a suspected compromise is to end every existing
+    // session, not just block future email/password logins. Forces re-authentication everywhere,
+    // consistent with how logout already behaves (see revokeRefreshToken).
+    await this.updateAccount(userId, role, {
+      passwordHash,
+      hashedRefreshToken: null,
+    });
     this.audit('PASSWORD_CHANGED', { accountId: userId, role });
   }
 

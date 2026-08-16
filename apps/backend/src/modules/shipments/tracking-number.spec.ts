@@ -9,7 +9,10 @@ describe('formatInternalTrackingNumber', () => {
 
   it('does not truncate a sequence number wider than the padding width', () => {
     expect(
-      formatInternalTrackingNumber(123456789, new Date('2026-01-01T00:00:00.000Z')),
+      formatInternalTrackingNumber(
+        123456789,
+        new Date('2026-01-01T00:00:00.000Z'),
+      ),
     ).toBe('NW-26-123456789');
   });
 

@@ -121,11 +121,7 @@ export default function GetQuotePage() {
         shipmentType: payload.shipmentType,
         weightKg,
         description: payload.description,
-        origin: payload.origin,
         destination: payload.destination,
-        fulfillmentMethod: payload.fulfillmentMethod,
-        pickupDate: payload.pickupDate,
-        pickupTimeSlot: payload.pickupTimeSlot,
         submissionKey,
       });
 
@@ -152,7 +148,13 @@ export default function GetQuotePage() {
 
       if (match) {
         try {
-          await apiClient.post(`/quotes/${quote.id}/select-option`, { optionId: match.id });
+          const updated = await apiClient.post<QuoteDto>(`/quotes/${quote.id}/select-option`, {
+            optionId: match.id,
+          });
+          if (updated.status === "PENDING_PICKUP_REQUEST") {
+            router.push(`/pickup-request/${quote.id}`);
+            return;
+          }
           showToast({ variant: "success", title: "Quote confirmed — your shipment request has been submitted" });
         } catch {
           showToast({
@@ -181,7 +183,13 @@ export default function GetQuotePage() {
     if (!createdQuoteId) return;
     setSelectingProviderId(option.rateProviderId);
     try {
-      await apiClient.post(`/quotes/${createdQuoteId}/select-option`, { optionId: option.id });
+      const updated = await apiClient.post<QuoteDto>(`/quotes/${createdQuoteId}/select-option`, {
+        optionId: option.id,
+      });
+      if (updated.status === "PENDING_PICKUP_REQUEST") {
+        router.push(`/pickup-request/${createdQuoteId}`);
+        return;
+      }
       showToast({ variant: "success", title: "Quote confirmed — your shipment request has been submitted" });
       router.push(`/quotes/${createdQuoteId}`);
     } catch {
@@ -250,6 +258,7 @@ export default function GetQuotePage() {
             customer={customer}
             onSubmit={handleDetailsSubmit}
             isSubmitting={isSubmittingDetails}
+            collectOriginAndFulfillment={false}
           />
           {submitError && (
             <div className="mx-auto max-w-3xl">

@@ -5,10 +5,12 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import type { ShipmentTypeCode } from '@nationwide/shared-types';
 import { PrismaService } from '../../database/prisma.service';
 import { CreateRateDto } from './dto/create-rate.dto';
 import { UpdateRateDto } from './dto/update-rate.dto';
 import { QueryRatesDto } from './dto/query-rates.dto';
+import { BulkUpdateRatesDto } from './dto/bulk-update-rates.dto';
 import { findOverlappingSlabs } from './weight-slab-overlap';
 
 const withDetails = {
@@ -24,8 +26,6 @@ type DecimalRateFields = {
   weightFromKg: Prisma.Decimal;
   weightToKg: Prisma.Decimal;
   baseRate: Prisma.Decimal;
-  pssAmount: Prisma.Decimal;
-  fuelChargePercent: Prisma.Decimal;
   gstPercent: Prisma.Decimal;
   nationwideCut: Prisma.Decimal;
 };
@@ -140,8 +140,6 @@ export class RatesService {
         weightFromKg: dto.weightFromKg,
         weightToKg: dto.weightToKg,
         baseRate: dto.baseRate,
-        pssAmount: dto.pssAmount ?? 0,
-        fuelChargePercent: dto.fuelChargePercent ?? 0,
         gstPercent: dto.gstPercent ?? 0,
         nationwideCut: dto.nationwideCut ?? 0,
         createdByAdminId: actorId,
@@ -155,9 +153,85 @@ export class RatesService {
       rate.id,
       {},
       this.toAuditSnapshot(rate),
+      dto.reason,
     );
 
     return rate;
+  }
+
+  // Country-scoped listing that resolves (provider, country) -> zone internally via
+  // ZoneCountry's unique index — the frontend drill-down never needs to know a "zone" exists.
+  async findForProviderCountry(
+    rateProviderId: string,
+    countryId: string,
+    shipmentType: ShipmentTypeCode,
+  ): Promise<RateWithDetails[]> {
+    const zoneCountry = await this.prisma.zoneCountry.findUnique({
+      where: { rateProviderId_countryId: { rateProviderId, countryId } },
+    });
+    if (!zoneCountry) {
+      throw new NotFoundException(
+        `Country ${countryId} is not configured under provider ${rateProviderId}`,
+      );
+    }
+    return this.prisma.weightSlab.findMany({
+      where: { rateCard: { zoneId: zoneCountry.zoneId, shipmentType } },
+      orderBy: { weightFromKg: 'asc' },
+      ...withDetails,
+    });
+  }
+
+  // Values-only bulk edit — weight ranges are never touched here (see BulkUpdateRatesDto), so
+  // the overlap check that guards create/update/setActive doesn't apply: changing a rate's
+  // price can never create a new overlap among siblings whose ranges are unchanged.
+  async bulkUpdate(
+    dto: BulkUpdateRatesDto,
+    actorId: string,
+  ): Promise<RateWithDetails[]> {
+    if (
+      dto.updates.some(
+        (u) => u.gstPercent !== undefined && u.gstPercent > MAX_GST_PERCENT,
+      )
+    ) {
+      throw new BadRequestException('gstPercent cannot exceed 100');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const results: RateWithDetails[] = [];
+      for (const row of dto.updates) {
+        const existing = await tx.weightSlab.findUnique({
+          where: { id: row.id },
+          ...withDetails,
+        });
+        if (!existing) {
+          throw new NotFoundException(`Rate ${row.id} not found`);
+        }
+        const before = this.toAuditSnapshot(existing);
+        const updated = await tx.weightSlab.update({
+          where: { id: row.id },
+          data: {
+            baseRate: row.baseRate,
+            gstPercent: row.gstPercent,
+            nationwideCut: row.nationwideCut,
+            updatedByAdminId: actorId,
+          },
+          ...withDetails,
+        });
+        await tx.auditLog.create({
+          data: {
+            actorId,
+            action: 'RATE_UPDATED',
+            entity: 'WeightSlab',
+            entityId: row.id,
+            before,
+            after: this.toAuditSnapshot(updated),
+            reason: dto.reason,
+          },
+        });
+        results.push(updated);
+      }
+      return results;
+    });
   }
 
   async update(
@@ -196,8 +270,6 @@ export class RatesService {
         weightFromKg: dto.weightFromKg,
         weightToKg: dto.weightToKg,
         baseRate: dto.baseRate,
-        pssAmount: dto.pssAmount,
-        fuelChargePercent: dto.fuelChargePercent,
         gstPercent: dto.gstPercent,
         nationwideCut: dto.nationwideCut,
         updatedByAdminId: actorId,
@@ -211,6 +283,7 @@ export class RatesService {
       id,
       before,
       this.toAuditSnapshot(updated),
+      dto.reason,
     );
 
     return updated;
@@ -220,6 +293,7 @@ export class RatesService {
     id: string,
     isActive: boolean,
     actorId: string,
+    reason?: string,
   ): Promise<RateWithDetails> {
     const existing = await this.findOneOrThrow(id);
     if (existing.isActive === isActive) {
@@ -252,6 +326,7 @@ export class RatesService {
       id,
       { isActive: existing.isActive },
       { isActive },
+      reason,
     );
 
     return updated;
@@ -293,8 +368,6 @@ export class RatesService {
       weightFromKg: rate.weightFromKg.toNumber(),
       weightToKg: rate.weightToKg.toNumber(),
       baseRate: rate.baseRate.toNumber(),
-      pssAmount: rate.pssAmount.toNumber(),
-      fuelChargePercent: rate.fuelChargePercent.toNumber(),
       gstPercent: rate.gstPercent.toNumber(),
       nationwideCut: rate.nationwideCut.toNumber(),
     };
@@ -306,9 +379,18 @@ export class RatesService {
     entityId: string,
     before: Prisma.InputJsonValue,
     after: Prisma.InputJsonValue,
+    reason?: string,
   ) {
     return this.prisma.auditLog.create({
-      data: { actorId, action, entity: 'WeightSlab', entityId, before, after },
+      data: {
+        actorId,
+        action,
+        entity: 'WeightSlab',
+        entityId,
+        before,
+        after,
+        reason,
+      },
     });
   }
 }

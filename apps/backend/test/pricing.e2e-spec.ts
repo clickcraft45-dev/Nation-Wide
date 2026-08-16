@@ -19,7 +19,9 @@ const TEST_ADMIN_EMAIL = 'e2e-pricing-admin@nationwide.dev';
 const TEST_STAFF_EMAIL = 'e2e-pricing-staff@nationwide.dev';
 const TEST_PASSWORD = 'CorrectHorseBattery1';
 const TEST_PROVIDER_CODE = 'E2E_PRICING_PROVIDER';
-const TEST_COUNTRY_CODE = 'E2';
+// A real ISO 3166-1 alpha-2 shape (letters only) is now enforced by CreateCountryDto (VAL-2) —
+// this fake test code has to match that shape too, not just be a unique 2-char string.
+const TEST_COUNTRY_CODE = 'ZQ';
 
 describe('Pricing (e2e)', () => {
   let app: INestApplication<App>;
@@ -245,7 +247,6 @@ describe('Pricing (e2e)', () => {
           weightFromKg: 0,
           weightToKg: 10,
           baseRate: 500,
-          fuelChargePercent: 10,
           gstPercent: 18,
           nationwideCut: 100,
         })
@@ -271,6 +272,29 @@ describe('Pricing (e2e)', () => {
       expect(
         (publicCountriesRes.body as CountryDto[]).some(
           (c) => c.id === countryId,
+        ),
+      ).toBe(true);
+    });
+
+    it('updates provider-level Fuel Charge % and PSS/kg once, and records it in the audit trail', async () => {
+      const patchRes = await request(app.getHttpServer())
+        .patch(`/api/v1/admin/rate-providers/${rateProviderId}`)
+        .set('Authorization', `Bearer ${adminAccessToken}`)
+        .send({ fuelChargePercent: 18, pssPerKg: 100 })
+        .expect(200);
+      const updated = patchRes.body as RateProviderDto;
+      expect(updated.fuelChargePercent).toBe(18);
+      expect(updated.pssPerKg).toBe(100);
+
+      const historyRes = await request(app.getHttpServer())
+        .get(
+          `/api/v1/admin/audit-logs?entity=RateProvider&entityId=${rateProviderId}`,
+        )
+        .set('Authorization', `Bearer ${adminAccessToken}`)
+        .expect(200);
+      expect(
+        (historyRes.body as { action: string }[]).some(
+          (e) => e.action === 'PROVIDER_CONFIG_UPDATED',
         ),
       ).toBe(true);
     });
@@ -408,6 +432,280 @@ describe('Pricing (e2e)', () => {
         .set('Authorization', `Bearer ${adminAccessToken}`)
         .send({ countryId })
         .expect(204);
+    });
+  });
+
+  describe('provider -> country drill-down and dashboard aggregation (pricing redesign)', () => {
+    it('rejects STAFF on every new pricing admin route', async () => {
+      await request(app.getHttpServer())
+        .get(`/api/v1/admin/rate-providers/${rateProviderId}`)
+        .set('Authorization', `Bearer ${staffAccessToken}`)
+        .expect(403);
+
+      await request(app.getHttpServer())
+        .get(`/api/v1/admin/rate-providers/${rateProviderId}/countries`)
+        .set('Authorization', `Bearer ${staffAccessToken}`)
+        .expect(403);
+
+      await request(app.getHttpServer())
+        .get(
+          `/api/v1/admin/rate-providers/${rateProviderId}/countries/${countryId}`,
+        )
+        .set('Authorization', `Bearer ${staffAccessToken}`)
+        .expect(403);
+
+      await request(app.getHttpServer())
+        .get(
+          `/api/v1/admin/rate-providers/${rateProviderId}/countries/${countryId}/rates`,
+        )
+        .query({ shipmentType: 'PACKAGE' })
+        .set('Authorization', `Bearer ${staffAccessToken}`)
+        .expect(403);
+
+      await request(app.getHttpServer())
+        .post('/api/v1/admin/rates/preview')
+        .set('Authorization', `Bearer ${staffAccessToken}`)
+        .send({ rateProviderId, weightKg: 2, baseRate: 100 })
+        .expect(403);
+
+      await request(app.getHttpServer())
+        .patch('/api/v1/admin/rates/bulk')
+        .set('Authorization', `Bearer ${staffAccessToken}`)
+        .send({ updates: [] })
+        .expect(403);
+
+      await request(app.getHttpServer())
+        .get('/api/v1/admin/pricing/dashboard-summary')
+        .set('Authorization', `Bearer ${staffAccessToken}`)
+        .expect(403);
+
+      await request(app.getHttpServer())
+        .get('/api/v1/admin/pricing/search')
+        .query({ q: 'e2e' })
+        .set('Authorization', `Bearer ${staffAccessToken}`)
+        .expect(403);
+    });
+
+    it('GET /admin/rate-providers/:id returns the provider with its active country count', async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/api/v1/admin/rate-providers/${rateProviderId}`)
+        .set('Authorization', `Bearer ${adminAccessToken}`)
+        .expect(200);
+      const provider = res.body as RateProviderDto;
+      expect(provider.id).toBe(rateProviderId);
+      expect(provider.activeCountryCount).toBe(1);
+    });
+
+    it('GET /admin/rate-providers/:id/countries lists the configured country with a rollup', async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/api/v1/admin/rate-providers/${rateProviderId}/countries`)
+        .set('Authorization', `Bearer ${adminAccessToken}`)
+        .expect(200);
+      const countries = res.body as {
+        countryId: string;
+        zoneId: string;
+        weightSlabCount: number;
+        availableShipmentTypes: string[];
+      }[];
+      const entry = countries.find((c) => c.countryId === countryId);
+      expect(entry).toBeDefined();
+      expect(entry?.zoneId).toBe(zoneId);
+      expect(entry?.weightSlabCount).toBe(2); // PACKAGE + DOCUMENT rates from earlier tests
+      expect(entry?.availableShipmentTypes.sort()).toEqual([
+        'DOCUMENT',
+        'PACKAGE',
+      ]);
+    });
+
+    it('GET /admin/rate-providers/:id/countries/:countryId reports per-shipment-type status', async () => {
+      const res = await request(app.getHttpServer())
+        .get(
+          `/api/v1/admin/rate-providers/${rateProviderId}/countries/${countryId}`,
+        )
+        .set('Authorization', `Bearer ${adminAccessToken}`)
+        .expect(200);
+      const detail = res.body as {
+        zoneId: string;
+        services: { shipmentType: string; weightSlabCount: number }[];
+      };
+      expect(detail.zoneId).toBe(zoneId);
+      expect(
+        detail.services.find((s) => s.shipmentType === 'PACKAGE')
+          ?.weightSlabCount,
+      ).toBe(1);
+      expect(
+        detail.services.find((s) => s.shipmentType === 'DOCUMENT')
+          ?.weightSlabCount,
+      ).toBe(1);
+      expect(
+        detail.services.find((s) => s.shipmentType === 'PARCEL')
+          ?.weightSlabCount,
+      ).toBe(0);
+    });
+
+    it('404s for a country not configured under the provider', async () => {
+      const otherCountryRes = await request(app.getHttpServer())
+        .post('/api/v1/admin/countries')
+        .set('Authorization', `Bearer ${adminAccessToken}`)
+        .send({ code: 'ZZ', name: 'E2E Pricing Unrelated Country' })
+        .expect(201);
+      const otherCountry = otherCountryRes.body as CountryDto;
+
+      await request(app.getHttpServer())
+        .get(
+          `/api/v1/admin/rate-providers/${rateProviderId}/countries/${otherCountry.id}`,
+        )
+        .set('Authorization', `Bearer ${adminAccessToken}`)
+        .expect(404);
+
+      await prisma.country.delete({ where: { id: otherCountry.id } });
+    });
+
+    let packageRateId: string;
+
+    it('GET .../rates?shipmentType=PACKAGE resolves the zone internally and returns the rate', async () => {
+      const res = await request(app.getHttpServer())
+        .get(
+          `/api/v1/admin/rate-providers/${rateProviderId}/countries/${countryId}/rates`,
+        )
+        .query({ shipmentType: 'PACKAGE' })
+        .set('Authorization', `Bearer ${adminAccessToken}`)
+        .expect(200);
+      const rates = res.body as RateDto[];
+      expect(rates).toHaveLength(1);
+      expect(rates[0].zoneId).toBe(zoneId);
+      expect(rates[0].shipmentType).toBe('PACKAGE');
+      packageRateId = rates[0].id;
+    });
+
+    it('POST /admin/rates/preview reuses the live 7-step calculation without persisting anything', async () => {
+      // Provider was set to fuelChargePercent: 18, pssPerKg: 100 earlier in this file.
+      const res = await request(app.getHttpServer())
+        .post('/api/v1/admin/rates/preview')
+        .set('Authorization', `Bearer ${adminAccessToken}`)
+        .send({
+          rateProviderId,
+          weightKg: 2,
+          baseRate: 500,
+          gstPercent: 18,
+          nationwideCut: 100,
+        })
+        .expect(201);
+
+      const pssAmount = 100 * 2; // pssPerKg * weightKg
+      const fuelChargeAmount = 500 * 0.18; // baseRate * fuelChargePercent
+      const taxableSubtotal = 500 + pssAmount + fuelChargeAmount;
+      const gstAmount = taxableSubtotal * 0.18;
+      const finalPrice = taxableSubtotal + gstAmount + 100;
+
+      expect(res.body).toMatchObject({
+        rateProviderId,
+        baseRate: 500,
+        pssAmount,
+        fuelChargeAmount,
+        taxableSubtotal,
+        gstAmount,
+        nationwideCut: 100,
+        finalPrice,
+      });
+    });
+
+    it('PATCH /admin/rates/bulk updates values only, transactionally, with one audit row per rate', async () => {
+      const res = await request(app.getHttpServer())
+        .patch('/api/v1/admin/rates/bulk')
+        .set('Authorization', `Bearer ${adminAccessToken}`)
+        .send({
+          updates: [
+            {
+              id: packageRateId,
+              baseRate: 555,
+              gstPercent: 18,
+              nationwideCut: 100,
+            },
+          ],
+          reason: 'e2e bulk edit test',
+        })
+        .expect(200);
+      const updated = res.body as RateDto[];
+      expect(updated[0].baseRate).toBe(555);
+
+      const historyRes = await request(app.getHttpServer())
+        .get(
+          `/api/v1/admin/audit-logs?entity=WeightSlab&entityId=${packageRateId}`,
+        )
+        .set('Authorization', `Bearer ${adminAccessToken}`)
+        .expect(200);
+      const history = historyRes.body as {
+        action: string;
+        reason: string | null;
+        rateProviderName: string | null;
+        zoneName: string | null;
+      }[];
+      const bulkEntry = history.find((e) => e.reason === 'e2e bulk edit test');
+      expect(bulkEntry).toBeDefined();
+      expect(bulkEntry?.action).toBe('RATE_UPDATED');
+      expect(bulkEntry?.rateProviderName).toBe('E2E Pricing Provider');
+      expect(bulkEntry?.zoneName).toBe('Zone A');
+    });
+
+    it('PATCH /admin/rates/bulk rolls back the whole transaction if any row fails', async () => {
+      await request(app.getHttpServer())
+        .patch('/api/v1/admin/rates/bulk')
+        .set('Authorization', `Bearer ${adminAccessToken}`)
+        .send({
+          updates: [
+            { id: packageRateId, baseRate: 777 },
+            { id: '00000000-0000-0000-0000-000000000000', baseRate: 1 },
+          ],
+        })
+        .expect(404);
+
+      const res = await request(app.getHttpServer())
+        .get(`/api/v1/admin/rates/${packageRateId}`)
+        .set('Authorization', `Bearer ${adminAccessToken}`)
+        .expect(200);
+      // Still 555 from the previous test, not 777 — the failed second row rolled back the first.
+      expect((res.body as RateDto).baseRate).toBe(555);
+    });
+
+    it('GET /admin/pricing/dashboard-summary reports global counts including the test data', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/api/v1/admin/pricing/dashboard-summary')
+        .set('Authorization', `Bearer ${adminAccessToken}`)
+        .expect(200);
+      expect(res.body).toMatchObject({
+        totalProviders: expect.any(Number),
+        activeCountries: expect.any(Number),
+        totalZones: expect.any(Number),
+        totalRateCards: expect.any(Number),
+        pendingChangesCount: expect.any(Number),
+      });
+      expect(res.body.totalProviders).toBeGreaterThanOrEqual(1);
+      expect(res.body.totalRateCards).toBeGreaterThanOrEqual(2);
+    });
+
+    it('GET /admin/pricing/search finds the provider/country pair by either name', async () => {
+      const byProvider = await request(app.getHttpServer())
+        .get('/api/v1/admin/pricing/search')
+        .query({ q: 'E2E Pricing Provider' })
+        .set('Authorization', `Bearer ${adminAccessToken}`)
+        .expect(200);
+      expect(
+        (byProvider.body as { countryId: string }[]).some(
+          (r) => r.countryId === countryId,
+        ),
+      ).toBe(true);
+
+      const byCountry = await request(app.getHttpServer())
+        .get('/api/v1/admin/pricing/search')
+        .query({ q: 'E2E Pricing Country' })
+        .set('Authorization', `Bearer ${adminAccessToken}`)
+        .expect(200);
+      expect(
+        (byCountry.body as { rateProviderId: string }[]).some(
+          (r) => r.rateProviderId === rateProviderId,
+        ),
+      ).toBe(true);
     });
   });
 });

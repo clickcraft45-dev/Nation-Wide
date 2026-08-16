@@ -6,6 +6,7 @@ import {
   IsOptional,
   IsPositive,
   IsString,
+  Max,
   MinLength,
   ValidateNested,
 } from 'class-validator';
@@ -23,24 +24,33 @@ export class CreateQuoteDto {
   @IsIn(SHIPMENT_TYPES)
   shipmentType!: ShipmentTypeCode;
 
+  // Anything over 100kg already routes to NEEDS_MANUAL_REVIEW rather than being priced (see
+  // QuotesService); this ceiling just rejects obviously-invalid submissions (e.g. a typo'd extra
+  // digit) outright instead of letting them flood that manual-review queue.
   @IsNumber({ maxDecimalPlaces: 2 })
   @IsPositive()
+  @Max(1000)
   weightKg!: number;
 
   @IsOptional()
   @IsString()
   description?: string;
 
+  // Optional — omitted by the new customer self-service wizard, which collects pickup logistics
+  // later via CreatePickupRequestDto instead. The admin manual-quote flow still always supplies
+  // it (see CreateAdminQuoteDto).
+  @IsOptional()
   @ValidateNested()
   @Type(() => QuoteOriginAddressDto)
-  origin!: QuoteOriginAddressDto;
+  origin?: QuoteOriginAddressDto;
 
   @ValidateNested()
   @Type(() => QuoteAddressDto)
   destination!: QuoteAddressDto;
 
+  @IsOptional()
   @IsIn(FULFILLMENT_METHODS)
-  fulfillmentMethod!: FulfillmentMethodCode;
+  fulfillmentMethod?: FulfillmentMethodCode;
 
   // Required/validated against the [today, today+7] window and forbidden for
   // WAREHOUSE_DROP_OFF at the service layer (Section: Quote lifecycle) — presence here is

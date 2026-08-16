@@ -1,43 +1,53 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #0f172a;
+  /* NationWide Logistics brand palette. Keep variable NAMES stable — every component consumes
+     these via @theme inline below, so retoning the brand only ever happens here. */
+  --background: #f7f9fc;
+  --foreground: #172033;
 
   --card: #ffffff;
-  --card-foreground: #0f172a;
+  --card-foreground: #172033;
 
-  --muted: #f8fafc;
-  --muted-foreground: #64748b;
+  --muted: #eef2f7;
+  --muted-foreground: #5b667a;
 
   --border: #e2e8f0;
-  --ring: #6366f1;
+  --ring: #1e88e5;
 
-  --primary: #4f46e5;
-  --primary-hover: #4338ca;
+  --primary: #1261a0;
+  --primary-hover: #0d4c80;
   --primary-foreground: #ffffff;
 
-  --success: #16a34a;
-  --success-bg: #f0fdf4;
-  --success-border: #bbf7d0;
+  --success: #15803d;
+  --success-bg: #ecfdf3;
+  --success-border: #bbe8cc;
 
-  --warning: #d97706;
-  --warning-bg: #fffbeb;
-  --warning-border: #fde68a;
+  --warning: #b45309;
+  --warning-bg: #fef6e7;
+  --warning-border: #f3d9a8;
 
-  --danger: #dc2626;
-  --danger-bg: #fef2f2;
-  --danger-border: #fecaca;
+  --danger: #b91c1c;
+  --danger-bg: #fdecec;
+  --danger-border: #f2bcbc;
 
-  --info: #2563eb;
-  --info-bg: #eff6ff;
-  --info-border: #bfdbfe;
+  --info: #1261a0;
+  --info-bg: #e9f2fa;
+  --info-border: #bcd8ec;
 
-  --sidebar-bg: #0f172a;
-  --sidebar-foreground: #cbd5e1;
+  /* Deep Navy brand panels — the admin nav rail, the marketing landing page's hero band, and the
+     login screen's split panel all share this treatment, per the approved reference design. */
+  --sidebar-bg: #0b2a4a;
+  --sidebar-foreground: #a9c0d6;
   --sidebar-foreground-active: #ffffff;
-  --sidebar-accent: #1e293b;
-  --sidebar-border: #1e293b;
+  --sidebar-accent: #163f66;
+  --sidebar-border: #163f66;
+
+  /* Raw brand colors for brand-only surfaces (logo, marketing accents) that shouldn't be
+     reassigned if a semantic token above is retoned later. */
+  --brand-navy: #0b2a4a;
+  --brand-blue: #1261a0;
+  --brand-blue-bright: #1e88e5;
 }
 
 @theme inline {
@@ -69,41 +79,21 @@
   --color-sidebar-foreground-active: var(--sidebar-foreground-active);
   --color-sidebar-accent: var(--sidebar-accent);
   --color-sidebar-border: var(--sidebar-border);
-  --font-sans: var(--font-geist-sans);
+  --color-brand-navy: var(--brand-navy);
+  --color-brand-blue: var(--brand-blue);
+  --color-brand-blue-bright: var(--brand-blue-bright);
+  --font-sans: var(--font-poppins);
+  /* Kept as a monospace utility for tracking/order/AWB numbers — not part of the brand type
+     scale, just a legibility choice for codes, used throughout admin + tracking screens. */
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #f1f5f9;
-
-    --card: #111827;
-    --card-foreground: #f1f5f9;
-
-    --muted: #1e293b;
-    --muted-foreground: #94a3b8;
-
-    --border: #1f2937;
-    --ring: #818cf8;
-
-    --primary: #6366f1;
-    --primary-hover: #818cf8;
-    --primary-foreground: #ffffff;
-
-    --success-bg: #052e16;
-    --success-border: #14532d;
-
-    --warning-bg: #451a03;
-    --warning-border: #78350f;
-
-    --danger-bg: #450a0a;
-    --danger-border: #7f1d1d;
-
-    --info-bg: #172554;
-    --info-border: #1e3a8a;
-  }
-}
+/* No @media (prefers-color-scheme: dark) override — the approved design is a single light
+   theme (background/cards/tables always white/#F7F9FC), with Deep Navy reserved for the
+   sidebar/hero brand panels above. Letting the OS's dark-mode setting repaint the whole app
+   navy was fighting that design outright — every surface (page background, table rows, cards)
+   would flip dark for any visitor on a dark-mode system, not just the sidebar. If a real
+   dark-mode *feature* is ever wanted, it should be an explicit in-app toggle, not automatic. */
 
 body {
   background: var(--background);

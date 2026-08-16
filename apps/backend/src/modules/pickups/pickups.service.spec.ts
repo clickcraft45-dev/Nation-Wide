@@ -7,7 +7,10 @@ const basePickup = {
   status: 'SCHEDULED',
   weightVerifiedKg: null,
   notes: null,
-  quote: { customerId: 'customer-1', customer: { name: 'A', phone: '+911234567890' } },
+  quote: {
+    customerId: 'customer-1',
+    customer: { name: 'A', phone: '+911234567890' },
+  },
 };
 
 describe('PickupsService', () => {
@@ -32,7 +35,10 @@ describe('PickupsService', () => {
       auditLog: { create: jest.fn().mockResolvedValue(undefined) },
     };
     notificationsService = { enqueue: jest.fn().mockResolvedValue(undefined) };
-    service = new PickupsService(prisma as never, notificationsService as never);
+    service = new PickupsService(
+      prisma as never,
+      notificationsService as never,
+    );
   });
 
   describe('updateStatus — PICKUP method transitions', () => {
@@ -54,7 +60,10 @@ describe('PickupsService', () => {
     });
 
     it('rejects transitioning out of a terminal state', async () => {
-      prisma.pickup.findUnique.mockResolvedValue({ ...basePickup, status: 'PICKED_UP' });
+      prisma.pickup.findUnique.mockResolvedValue({
+        ...basePickup,
+        status: 'PICKED_UP',
+      });
       await expect(
         service.updateStatus('pickup-1', { status: 'PENDING' }, 'actor-1'),
       ).rejects.toThrow(BadRequestException);
@@ -103,11 +112,17 @@ describe('PickupsService', () => {
         status: 'SCHEDULED',
       });
 
-      await service.updateStatus('pickup-1', { status: 'DROPPED_OFF' }, 'actor-1');
+      await service.updateStatus(
+        'pickup-1',
+        { status: 'DROPPED_OFF' },
+        'actor-1',
+      );
 
       expect(prisma.auditLog.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ action: 'WAREHOUSE_DROP_OFF_CONFIRMED' }),
+          data: expect.objectContaining({
+            action: 'WAREHOUSE_DROP_OFF_CONFIRMED',
+          }),
         }),
       );
     });
@@ -127,7 +142,9 @@ describe('PickupsService', () => {
   describe('findOne', () => {
     it('throws NotFoundException for an unknown pickup', async () => {
       prisma.pickup.findUnique.mockResolvedValue(null);
-      await expect(service.findOne('missing')).rejects.toThrow(NotFoundException);
+      await expect(service.findOne('missing')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 

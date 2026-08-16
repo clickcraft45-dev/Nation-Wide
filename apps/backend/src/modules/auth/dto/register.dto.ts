@@ -15,7 +15,10 @@ export class RegisterDto {
   @IsEmail()
   email!: string;
 
+  // 10, not the older 8 — length is what actually raises brute-force cost (current NIST 800-63B
+  // guidance favors length over arbitrary complexity rules). Login's own MinLength deliberately
+  // stays at 8 so this doesn't lock out any account created under the previous policy.
   @IsString()
-  @MinLength(8)
+  @MinLength(10)
   password!: string;
 }

@@ -47,6 +47,11 @@ export interface AuditLogEntryDto {
   entityId: string;
   before: unknown;
   after: unknown;
+  reason: string | null;
+  // Resolved live for WeightSlab entries only (see AdminService.listAuditLogs) — null for every
+  // other entity type.
+  rateProviderName: string | null;
+  zoneName: string | null;
   createdAt: string; // ISO 8601
 }
 

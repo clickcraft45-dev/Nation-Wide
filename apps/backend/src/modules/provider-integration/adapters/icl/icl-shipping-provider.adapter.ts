@@ -183,7 +183,9 @@ function parseICLTime(time: string): { hours: number; minutes: number } | null {
   if (!digits) return null;
   const minutes = Number(digits.slice(-2));
   const hours = Number(digits.slice(0, -2) || '0');
-  return Number.isNaN(hours) || Number.isNaN(minutes) ? null : { hours, minutes };
+  return Number.isNaN(hours) || Number.isNaN(minutes)
+    ? null
+    : { hours, minutes };
 }
 
 // ICL dates are "DD/MM/YYYY"; returns null for blank/unparseable values so callers can fall
@@ -314,7 +316,8 @@ export class ICLShippingProviderAdapter implements ShippingProvider {
     }
 
     const { status: currentStatus, matched } = mapRawStatus(record.Status);
-    const isDuplicateOfBooking = events.length > 0 && currentStatus === 'PICKED_UP';
+    const isDuplicateOfBooking =
+      events.length > 0 && currentStatus === 'PICKED_UP';
 
     if (!matched) {
       this.logger.warn(

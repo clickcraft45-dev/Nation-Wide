@@ -1,4 +1,4 @@
-import { IsIn, IsOptional, IsPositive } from 'class-validator';
+import { IsIn, IsOptional, IsPositive, Max } from 'class-validator';
 import {
   PAYMENT_METHODS,
   PAYMENT_STATUSES,
@@ -16,5 +16,6 @@ export class UpdateOrderPaymentDto {
 
   @IsOptional()
   @IsPositive()
+  @Max(1_000_000)
   paidAmount?: number;
 }

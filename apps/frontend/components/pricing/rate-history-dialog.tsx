@@ -8,10 +8,20 @@ import { TableSkeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/page-state";
 import { History } from "lucide-react";
 
-// Reuses the existing /admin/audit-logs endpoint scoped to this one rate — no dedicated
-// rate-history endpoint needed, every create/update/activate/deactivate already writes a
-// field-level AuditLog row against entity 'WeightSlab'.
-export function RateHistoryDialog({ trigger, rateId }: { trigger: ReactNode; rateId: string }) {
+// Reuses the existing /admin/audit-logs endpoint scoped to one entity row — no dedicated
+// history endpoint needed, every create/update/activate/deactivate already writes a
+// field-level AuditLog row (entity 'WeightSlab' for rates, 'RateProvider' for provider config).
+export function RateHistoryDialog({
+  trigger,
+  rateId,
+  entity = "WeightSlab",
+  title = "Rate history",
+}: {
+  trigger: ReactNode;
+  rateId: string;
+  entity?: string;
+  title?: string;
+}) {
   const [open, setOpen] = useState(false);
   const [entries, setEntries] = useState<AuditLogEntryDto[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -19,7 +29,7 @@ export function RateHistoryDialog({ trigger, rateId }: { trigger: ReactNode; rat
   function load() {
     setIsLoading(true);
     apiClient
-      .get<AuditLogEntryDto[]>(`/admin/audit-logs?entity=WeightSlab&entityId=${rateId}`)
+      .get<AuditLogEntryDto[]>(`/admin/audit-logs?entity=${entity}&entityId=${rateId}`)
       .then(setEntries)
       .finally(() => setIsLoading(false));
   }
@@ -31,13 +41,13 @@ export function RateHistoryDialog({ trigger, rateId }: { trigger: ReactNode; rat
     // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, rateId]);
+  }, [open, rateId, entity]);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <span onClick={() => setOpen(true)}>{trigger}</span>
       {open && (
-        <DialogContent title="Rate history">
+        <DialogContent title={title}>
           <div className="max-h-96 space-y-3 overflow-y-auto">
             {isLoading && <TableSkeleton columns={2} />}
             {!isLoading && entries.length === 0 && (

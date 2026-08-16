@@ -1,5 +1,12 @@
-import { Type } from 'class-transformer';
-import { IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import {
+  IsArray,
+  IsInt,
+  IsOptional,
+  IsString,
+  Max,
+  Min,
+} from 'class-validator';
 
 export class QueryAuditLogsDto {
   @IsOptional()
@@ -9,6 +16,28 @@ export class QueryAuditLogsDto {
   @IsOptional()
   @IsString()
   entityId?: string;
+
+  // Comma-separated in the query string, e.g. ?entities=WeightSlab,RateProvider — the pricing
+  // Rate History view scopes to these two without excluding either via a single `entity` filter.
+  @IsOptional()
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.split(',') : value,
+  )
+  @IsArray()
+  @IsString({ each: true })
+  entities?: string[];
+
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @IsOptional()
+  @IsString()
+  dateFrom?: string;
+
+  @IsOptional()
+  @IsString()
+  dateTo?: string;
 
   @IsOptional()
   @Type(() => Number)

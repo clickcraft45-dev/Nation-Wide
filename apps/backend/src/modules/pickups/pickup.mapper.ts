@@ -11,8 +11,8 @@ export function toPickupDto(pickup: PickupWithDetails): PickupDto {
     id: pickup.id,
     quoteId: pickup.quoteId,
     orderId: pickup.orderId,
-    method: pickup.method as FulfillmentMethodCode,
-    status: pickup.status as PickupStatusCode,
+    method: pickup.method,
+    status: pickup.status,
     scheduledDate: pickup.scheduledDate
       ? pickup.scheduledDate.toISOString().slice(0, 10)
       : null,

@@ -45,6 +45,8 @@ describe('findOverlappingSlabs', () => {
 
   it('returns null for an empty or single-slab list', () => {
     expect(findOverlappingSlabs([])).toBeNull();
-    expect(findOverlappingSlabs([{ weightFromKg: 1, weightToKg: 2 }])).toBeNull();
+    expect(
+      findOverlappingSlabs([{ weightFromKg: 1, weightToKg: 2 }]),
+    ).toBeNull();
   });
 });

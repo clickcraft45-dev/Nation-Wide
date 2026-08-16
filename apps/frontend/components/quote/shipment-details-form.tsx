@@ -58,13 +58,13 @@ function maxPickupDateIso(): string {
 export interface ShipmentDetailsPayload {
   shipmentType: ShipmentTypeCode;
   description?: string;
-  origin: Omit<AddressForm, "addressLine2"> & {
+  origin?: Omit<AddressForm, "addressLine2"> & {
     addressLine2?: string;
     instructions?: string;
     country: string;
   };
   destination: Omit<AddressForm, "addressLine2"> & { addressLine2?: string; country: string };
-  fulfillmentMethod: "PICKUP" | "WAREHOUSE_DROP_OFF";
+  fulfillmentMethod?: "PICKUP" | "WAREHOUSE_DROP_OFF";
   pickupDate?: string;
   pickupTimeSlot?: string;
 }
@@ -76,18 +76,26 @@ export interface ShipmentDetailsPayload {
 // price the customer already compared against was computed for a specific shipment type, so
 // letting this form silently change it after the fact would reintroduce a price/shipment-type
 // mismatch.
+//
+// collectOriginAndFulfillment controls the Pickup/origin + fulfillment-method cards: the admin
+// manual-quote wizard (app/admin/.../quotes/new) still needs them, since it creates an order
+// immediately (legacy path). The customer self-service wizard passes false — pickup logistics
+// are collected later, on the PickupRequest page, only once a Pickup Partner is ready to be
+// assigned (Section: Updated customer flow).
 export function ShipmentDetailsForm({
   destinationCountry,
   shipmentType,
   customer,
   onSubmit,
   isSubmitting,
+  collectOriginAndFulfillment = true,
 }: {
   destinationCountry: CountryDto;
   shipmentType: ShipmentTypeCode;
   customer: CustomerDto | null;
   onSubmit: (payload: ShipmentDetailsPayload) => void;
   isSubmitting: boolean;
+  collectOriginAndFulfillment?: boolean;
 }) {
   const [description, setDescription] = useState("");
   const [origin, setOrigin] = useState<AddressForm & { instructions: string; country: string }>({
@@ -115,15 +123,15 @@ export function ShipmentDetailsForm({
 
   function validate(): boolean {
     const next: Record<string, string> = {};
-    const requiredOriginFields: (keyof AddressForm)[] = [
+    const requiredFields: (keyof AddressForm)[] = [
       "name", "phone", "addressLine1", "city", "state", "postalCode",
     ];
-    for (const field of requiredOriginFields) {
-      if (!origin[field].trim()) next[`origin.${field}`] = "Required.";
+    for (const field of requiredFields) {
+      if (collectOriginAndFulfillment && !origin[field].trim()) next[`origin.${field}`] = "Required.";
       if (!destination[field].trim()) next[`destination.${field}`] = "Required.";
     }
 
-    if (fulfillmentMethod === "PICKUP") {
+    if (collectOriginAndFulfillment && fulfillmentMethod === "PICKUP") {
       if (!pickupDate) {
         next.pickupDate = "Choose a pickup date.";
       } else if (pickupDate < todayIso() || pickupDate > maxPickupDateIso()) {
@@ -143,17 +151,19 @@ export function ShipmentDetailsForm({
     onSubmit({
       shipmentType,
       description: description.trim() || undefined,
-      origin: {
-        name: origin.name.trim(),
-        phone: origin.phone.trim(),
-        addressLine1: origin.addressLine1.trim(),
-        addressLine2: origin.addressLine2.trim() || undefined,
-        city: origin.city.trim(),
-        state: origin.state.trim(),
-        postalCode: origin.postalCode.trim(),
-        country: origin.country.trim(),
-        instructions: origin.instructions.trim() || undefined,
-      },
+      origin: collectOriginAndFulfillment
+        ? {
+            name: origin.name.trim(),
+            phone: origin.phone.trim(),
+            addressLine1: origin.addressLine1.trim(),
+            addressLine2: origin.addressLine2.trim() || undefined,
+            city: origin.city.trim(),
+            state: origin.state.trim(),
+            postalCode: origin.postalCode.trim(),
+            country: origin.country.trim(),
+            instructions: origin.instructions.trim() || undefined,
+          }
+        : undefined,
       destination: {
         name: destination.name.trim(),
         phone: destination.phone.trim(),
@@ -164,9 +174,10 @@ export function ShipmentDetailsForm({
         postalCode: destination.postalCode.trim(),
         country: destinationCountry.name,
       },
-      fulfillmentMethod,
-      pickupDate: fulfillmentMethod === "PICKUP" ? pickupDate : undefined,
-      pickupTimeSlot: fulfillmentMethod === "PICKUP" ? pickupTimeSlot : undefined,
+      fulfillmentMethod: collectOriginAndFulfillment ? fulfillmentMethod : undefined,
+      pickupDate: collectOriginAndFulfillment && fulfillmentMethod === "PICKUP" ? pickupDate : undefined,
+      pickupTimeSlot:
+        collectOriginAndFulfillment && fulfillmentMethod === "PICKUP" ? pickupTimeSlot : undefined,
     });
   }
 
@@ -210,6 +221,7 @@ export function ShipmentDetailsForm({
         </CardContent>
       </Card>
 
+      {collectOriginAndFulfillment && (
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -298,6 +310,7 @@ export function ShipmentDetailsForm({
           </div>
         </CardContent>
       </Card>
+      )}
 
       <Card>
         <CardHeader>
@@ -373,6 +386,7 @@ export function ShipmentDetailsForm({
         </CardContent>
       </Card>
 
+      {collectOriginAndFulfillment && (
       <Card>
         <CardHeader>
           <CardTitle>How would you like to send your parcel?</CardTitle>
@@ -462,6 +476,7 @@ export function ShipmentDetailsForm({
           )}
         </CardContent>
       </Card>
+      )}
 
       <Button type="submit" size="lg" isLoading={isSubmitting} disabled={isSubmitting}>
         {isSubmitting ? "Submitting…" : "Continue"}

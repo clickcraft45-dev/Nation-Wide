@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { apiClient, ApiError } from "@/lib/api-client";
+import { useAuth } from "@/state/auth-context";
 import { useToast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
 import { Label, FieldError } from "@/components/ui/input";
@@ -14,13 +15,14 @@ export function ChangePasswordForm() {
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { showToast } = useToast();
+  const { logout } = useAuth();
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
 
-    if (newPassword.length < 8) {
-      setError("New password must be at least 8 characters.");
+    if (newPassword.length < 10) {
+      setError("New password must be at least 10 characters.");
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -31,10 +33,16 @@ export function ChangePasswordForm() {
     setIsSubmitting(true);
     try {
       await apiClient.patch("/auth/change-password", { currentPassword, newPassword });
-      showToast({ variant: "success", title: "Password changed" });
-      setCurrentPassword("");
-      setNewPassword("");
-      setConfirmPassword("");
+      // The backend revokes this session's refresh token as part of the password change (so a
+      // stolen token can't outlive it) — sign out immediately rather than leaving the current
+      // access token to fail silently on its next refresh. The dashboard layouts already redirect
+      // to /login once `user` clears.
+      showToast({
+        variant: "success",
+        title: "Password changed",
+        description: "Please sign in again with your new password.",
+      });
+      await logout();
     } catch (err) {
       setError(
         err instanceof ApiError && err.status === 401

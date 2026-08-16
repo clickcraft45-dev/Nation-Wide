@@ -13,6 +13,7 @@ import {
   type QuoteStatusCode,
 } from '@nationwide/shared-types';
 import { PrismaService } from '../../database/prisma.service';
+import { resolvePagination } from '../../common/utils/pagination.util';
 import { OrdersService } from '../orders/orders.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NOTIFICATION_TEMPLATES } from '../notifications/templates';
@@ -106,15 +107,18 @@ export class QuotesService {
           shipmentType: dto.shipmentType,
           weightKg: dto.weightKg,
           description: dto.description ?? null,
-          originName: dto.origin.name,
-          originPhone: dto.origin.phone,
-          originAddressLine1: dto.origin.addressLine1,
-          originAddressLine2: dto.origin.addressLine2 ?? null,
-          originCity: dto.origin.city,
-          originState: dto.origin.state,
-          originPostalCode: dto.origin.postalCode,
-          originCountry: dto.origin.country,
-          originInstructions: dto.origin.instructions ?? null,
+          // origin is omitted entirely by the new customer self-service wizard — pickup
+          // logistics move to PickupRequest instead (see CreatePickupRequestDto). The admin
+          // manual-quote flow still always supplies it.
+          originName: dto.origin?.name ?? null,
+          originPhone: dto.origin?.phone ?? null,
+          originAddressLine1: dto.origin?.addressLine1 ?? null,
+          originAddressLine2: dto.origin?.addressLine2 ?? null,
+          originCity: dto.origin?.city ?? null,
+          originState: dto.origin?.state ?? null,
+          originPostalCode: dto.origin?.postalCode ?? null,
+          originCountry: dto.origin?.country ?? null,
+          originInstructions: dto.origin?.instructions ?? null,
           destName: dto.destination.name,
           destPhone: dto.destination.phone,
           destAddressLine1: dto.destination.addressLine1,
@@ -123,7 +127,7 @@ export class QuotesService {
           destState: dto.destination.state,
           destPostalCode: dto.destination.postalCode,
           destCountry: dto.destination.country,
-          fulfillmentMethod: dto.fulfillmentMethod,
+          fulfillmentMethod: dto.fulfillmentMethod ?? null,
           pickupDate: dto.pickupDate ? new Date(dto.pickupDate) : null,
           pickupTimeSlot: dto.pickupTimeSlot ?? null,
           status,
@@ -251,9 +255,22 @@ export class QuotesService {
       );
     }
 
-    const { order } =
-      await this.ordersService.createOrderWithShipment(customerId);
-    await this.finalizeAcceptedQuote(quote, order);
+    // fulfillmentMethod set → the legacy admin manual-quote path (full logistics already
+    // supplied at quote-creation time): unchanged behavior, order created immediately.
+    // fulfillmentMethod null → the new customer self-service path: the customer has now
+    // committed to this price, but pickup logistics haven't been submitted yet (see
+    // PickupRequestsService.create) — no order until a Pickup Partner verifies and accepts.
+    if (quote.fulfillmentMethod) {
+      const { order } =
+        await this.ordersService.createOrderWithShipment(customerId);
+      await this.finalizeAcceptedQuote(quote, order);
+    } else {
+      await this.transitionToPendingPickupRequest(
+        id,
+        'QUOTED',
+        quote.customerId,
+      );
+    }
 
     return this.findOneOrThrow(id);
   }
@@ -288,26 +305,44 @@ export class QuotesService {
       );
     }
 
-    // Conditional claim, not check-then-act — closes a race against a concurrent admin
-    // manual-quote override (or a double-submitted select) landing on the same RATED quote.
-    const claim = await this.prisma.quote.updateMany({
-      where: { id, status: 'RATED' },
-      data: { status: 'ACCEPTED' },
-    });
-    if (claim.count !== 1) {
-      throw new BadRequestException(
-        'This quote is no longer available for selection',
-      );
-    }
+    if (quote.fulfillmentMethod) {
+      // Legacy admin manual-quote path — unchanged behavior. Conditional claim, not
+      // check-then-act — closes a race against a concurrent admin override (or a
+      // double-submitted select) landing on the same RATED quote.
+      const claim = await this.prisma.quote.updateMany({
+        where: { id, status: 'RATED' },
+        data: { status: 'ACCEPTED' },
+      });
+      if (claim.count !== 1) {
+        throw new BadRequestException(
+          'This quote is no longer available for selection',
+        );
+      }
 
-    const { order } =
-      await this.ordersService.createOrderWithShipment(customerId);
-    await this.finalizeAcceptedQuote(quote, order, { selectedOption: option });
+      const { order } =
+        await this.ordersService.createOrderWithShipment(customerId);
+      await this.finalizeAcceptedQuote(quote, order, {
+        selectedOption: option,
+      });
+    } else {
+      // New customer self-service path — the customer has now committed to this option, but
+      // no order until a Pickup Partner verifies and accepts (see PickupRequestsService).
+      await this.transitionToPendingPickupRequest(id, 'RATED', customerId, {
+        selectedOptionId: option.id,
+        quotedAmount: option.finalPrice.toNumber(),
+        quotedCurrency: option.currency,
+      });
+    }
 
     return this.findOneOrThrow(id);
   }
 
-  findAllAdmin(query: QueryQuotesDto): Promise<QuoteWithCustomer[]> {
+  // total is only computed when pagination was actually requested — see
+  // CustomersService.findAll for why this is a non-breaking opt-in rather than a
+  // response-shape change.
+  async findAllAdmin(
+    query: QueryQuotesDto,
+  ): Promise<{ data: QuoteWithCustomer[]; total: number | null }> {
     const where: Prisma.QuoteWhereInput = {};
     if (query.status) where.status = query.status;
     if (query.search) {
@@ -319,11 +354,17 @@ export class QuotesService {
         ],
       };
     }
-    return this.prisma.quote.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      ...withCustomer,
-    });
+    const paging = resolvePagination(query);
+    const [data, total] = await Promise.all([
+      this.prisma.quote.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        ...withCustomer,
+        ...paging,
+      }),
+      paging ? this.prisma.quote.count({ where }) : Promise.resolve(null),
+    ]);
+    return { data, total };
   }
 
   findOneAdmin(id: string): Promise<QuoteWithCustomer> {
@@ -403,6 +444,28 @@ export class QuotesService {
       },
     });
 
+    // A quote directly rejected by staff can leave an active PickupRequest orphaned (still
+    // ASSIGNED/OUT_FOR_PICKUP with no quote to point back to) unless it's cascaded here too.
+    const pickupRequest = await this.prisma.pickupRequest.findUnique({
+      where: { quoteId: id },
+    });
+    const nonTerminalPickupRequestStatuses = [
+      'PENDING_ASSIGNMENT',
+      'ASSIGNED',
+      'SCHEDULED',
+      'OUT_FOR_PICKUP',
+      'VERIFICATION_PENDING',
+    ];
+    if (
+      pickupRequest &&
+      nonTerminalPickupRequestStatuses.includes(pickupRequest.status)
+    ) {
+      await this.prisma.pickupRequest.update({
+        where: { id: pickupRequest.id },
+        data: { status: 'CANCELLED' },
+      });
+    }
+
     await this.notificationsService.enqueue(
       quote.customerId,
       'WHATSAPP',
@@ -413,10 +476,45 @@ export class QuotesService {
     return this.findOneOrThrow(id);
   }
 
+  // The new customer self-service path (Quote.fulfillmentMethod null) — the customer has
+  // committed to a price (RATED via selectOption, or QUOTED via acceptQuote) but hasn't
+  // submitted pickup logistics yet, so no order/Pickup row until PickupRequestsService.
+  // acceptParcel runs. Conditional claim, not check-then-act, for the same race-closing reason
+  // the legacy selectOption path already used.
+  private async transitionToPendingPickupRequest(
+    id: string,
+    fromStatus: 'QUOTED' | 'RATED',
+    customerId: string,
+    extra?: {
+      selectedOptionId: string;
+      quotedAmount: number;
+      quotedCurrency: string;
+    },
+  ): Promise<void> {
+    const claim = await this.prisma.quote.updateMany({
+      where: { id, status: fromStatus },
+      data: {
+        status: 'PENDING_PICKUP_REQUEST',
+        ...(extra ?? {}),
+      },
+    });
+    if (claim.count !== 1) {
+      throw new BadRequestException('This quote is no longer available');
+    }
+
+    await this.notificationsService.enqueue(
+      customerId,
+      'WHATSAPP',
+      NOTIFICATION_TEMPLATES.PICKUP_REQUEST_NEEDED,
+      {},
+    );
+  }
+
   // Shared by acceptQuote (manual-quote path) and selectOption (auto-priced path). The optional
   // spread means the manual-quote path's payload to prisma.quote.update stays byte-identical to
   // before this was extracted — selectedOptionId/quotedAmount/quotedCurrency are only present
-  // when opts is passed.
+  // when opts is passed. Only ever called on the legacy admin manual-quote path, where
+  // fulfillmentMethod is always set — see acceptQuote/selectOption's branch.
   private async finalizeAcceptedQuote(
     quote: QuoteWithCustomer,
     order: { id: string },
@@ -426,7 +524,7 @@ export class QuotesService {
       data: {
         quoteId: quote.id,
         orderId: order.id,
-        method: quote.fulfillmentMethod,
+        method: quote.fulfillmentMethod!,
         scheduledDate: quote.pickupDate,
         scheduledTimeSlot: quote.pickupTimeSlot,
       },

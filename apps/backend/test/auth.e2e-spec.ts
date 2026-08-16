@@ -9,6 +9,7 @@ import type { App } from 'supertest/types';
 import type { LoginResponseDto } from '@nationwide/shared-types';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/database/prisma.service';
+import { AuthService } from '../src/modules/auth/auth.service';
 import type { JwtPayload } from '../src/modules/auth/types/jwt-payload.type';
 
 interface AdminPingResponseDto {
@@ -23,12 +24,16 @@ const TEST_CUSTOMER_PHONE = '+919876500097';
 const TEST_CUSTOMER_PASSWORD = 'CustomerPass123';
 const TEST_DISABLED_EMAIL = 'e2e-disabled-staff@nationwide.dev';
 const TEST_DISABLED_PASSWORD = 'DisabledPass123';
+const TEST_PW_CHANGE_EMAIL = 'e2e-password-change-staff@nationwide.dev';
+const TEST_PW_CHANGE_OLD_PASSWORD = 'OldPassword123';
+const TEST_PW_CHANGE_NEW_PASSWORD = 'NewPassword456';
 
 describe('Auth (e2e)', () => {
   let app: INestApplication<App>;
   let prisma: PrismaService;
   let jwtService: JwtService;
   let configService: ConfigService;
+  let authService: AuthService;
 
   // Populated once each by the tests that log in, then reused by later tests — keeps the
   // total number of /auth/login calls in this file well under the login endpoint's own
@@ -56,6 +61,7 @@ describe('Auth (e2e)', () => {
     prisma = app.get(PrismaService);
     jwtService = app.get(JwtService);
     configService = app.get(ConfigService);
+    authService = app.get(AuthService);
 
     await prisma.adminUser.upsert({
       where: { email: TEST_ADMIN_EMAIL },
@@ -78,13 +84,29 @@ describe('Auth (e2e)', () => {
       },
     });
 
+    await prisma.adminUser.upsert({
+      where: { email: TEST_PW_CHANGE_EMAIL },
+      update: {
+        passwordHash: await bcrypt.hash(TEST_PW_CHANGE_OLD_PASSWORD, 10),
+      },
+      create: {
+        email: TEST_PW_CHANGE_EMAIL,
+        passwordHash: await bcrypt.hash(TEST_PW_CHANGE_OLD_PASSWORD, 10),
+        role: 'STAFF',
+      },
+    });
+
     await prisma.customer.deleteMany({ where: { email: TEST_CUSTOMER_EMAIL } });
     await prisma.customer.deleteMany({ where: { phone: TEST_CUSTOMER_PHONE } });
   });
 
   afterAll(async () => {
     await prisma.adminUser.deleteMany({
-      where: { email: { in: [TEST_ADMIN_EMAIL, TEST_DISABLED_EMAIL] } },
+      where: {
+        email: {
+          in: [TEST_ADMIN_EMAIL, TEST_DISABLED_EMAIL, TEST_PW_CHANGE_EMAIL],
+        },
+      },
     });
     await prisma.customer.deleteMany({ where: { email: TEST_CUSTOMER_EMAIL } });
     await app.close();
@@ -170,6 +192,53 @@ describe('Auth (e2e)', () => {
     expect((res.body as { message: string }).message).toBe(
       'Invalid credentials',
     );
+  });
+
+  it('changing a password revokes the existing refresh token (AUTH-1 fix)', async () => {
+    const agent = request.agent(app.getHttpServer());
+
+    const loginRes = await agent
+      .post('/api/v1/auth/login')
+      .send({
+        email: TEST_PW_CHANGE_EMAIL,
+        password: TEST_PW_CHANGE_OLD_PASSWORD,
+      })
+      .expect(200);
+    const { accessToken } = loginRes.body as LoginResponseDto;
+
+    // The refresh cookie set by login above still works, pre-change.
+    await agent.post('/api/v1/auth/refresh').expect(200);
+
+    await agent
+      .patch('/api/v1/auth/change-password')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        currentPassword: TEST_PW_CHANGE_OLD_PASSWORD,
+        newPassword: TEST_PW_CHANGE_NEW_PASSWORD,
+      })
+      .expect(204);
+
+    // Same agent, same (still-unexpired) cookie jar — the refresh token stored server-side was
+    // revoked as part of the password change, so this must now fail even though the cookie
+    // itself hasn't been cleared client-side.
+    await agent.post('/api/v1/auth/refresh').expect(401);
+
+    // The new password works; the old one no longer does. Checked via AuthService directly
+    // (not another /auth/login HTTP call) so this doesn't eat into the login endpoint's own
+    // 5-requests/60s throttle bucket, which the whole file shares — see the rate-limit test
+    // at the bottom of this file.
+    await expect(
+      authService.authenticate(
+        TEST_PW_CHANGE_EMAIL,
+        TEST_PW_CHANGE_NEW_PASSWORD,
+      ),
+    ).resolves.toBeDefined();
+    await expect(
+      authService.authenticate(
+        TEST_PW_CHANGE_EMAIL,
+        TEST_PW_CHANGE_OLD_PASSWORD,
+      ),
+    ).rejects.toThrow();
   });
 
   describe('customer self-registration and unified login', () => {

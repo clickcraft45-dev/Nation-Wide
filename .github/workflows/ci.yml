@@ -44,13 +44,18 @@ jobs:
       JWT_REFRESH_EXPIRES_IN: "7d"
       PORT: 4000
       WHATSAPP_WEBHOOK_VERIFY_TOKEN: "ci-only-whatsapp-verify-token"
+      WHATSAPP_APP_SECRET: "ci-only-whatsapp-app-secret"
 
     steps:
+      # Pinned to a commit SHA rather than the floating `v4` tag (INFRA-4) — these actions run
+      # with repo/secrets access, and a tag can be silently repointed by a compromised upstream
+      # without any change on this repo's side. Bump deliberately by re-resolving the tag's
+      # current SHA, not by editing the SHA by hand.
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "20"
           cache: "npm"
@@ -85,7 +90,7 @@ jobs:
       - name: Production runtime smoke test
         working-directory: apps/backend
         run: |
-          node dist/main.js &
+          node dist/src/main.js &
           SERVER_PID=$!
           for i in $(seq 1 20); do
             if curl -sf http://localhost:4000/api/v1 > /dev/null; then
@@ -102,4 +107,3 @@ jobs:
 
       - name: Security scan (npm audit)
         run: npm audit --audit-level=high
-        continue-on-error: true

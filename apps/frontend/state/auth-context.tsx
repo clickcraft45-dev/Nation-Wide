@@ -24,6 +24,7 @@ interface AuthContextValue {
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (input: RegisterInput) => Promise<void>;
+  completeGoogleSignup: (pendingToken: string, phone: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -70,6 +71,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(res.user);
   }, []);
 
+  // Second half of new-customer Google sign-up — see /register/google. The pendingToken proves
+  // a verified Google identity server-side; this just supplies the phone number that identity
+  // doesn't reliably come with.
+  const completeGoogleSignup = useCallback(async (pendingToken: string, phone: string) => {
+    const res = await apiClient.post<LoginResponseDto>("/auth/google/complete", {
+      pendingToken,
+      phone,
+    });
+    setAccessToken(res.accessToken);
+    setUser(res.user);
+  }, []);
+
   const logout = useCallback(async () => {
     try {
       await apiClient.post("/auth/logout", {});
@@ -80,7 +93,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, register, logout }}>
+    <AuthContext.Provider
+      value={{ user, isLoading, login, register, completeGoogleSignup, logout }}
+    >
       {children}
     </AuthContext.Provider>
   );

@@ -34,7 +34,9 @@ function toAdminRateQuoteOptionDto(option: QuoteOption): RateQuoteOptionDto {
 }
 
 // Slim, customer-safe shape — never includes baseRate/PSS/fuel charge/GST/margin.
-function toCustomerRateQuoteOptionDto(option: QuoteOption): CustomerRateQuoteOptionDto {
+function toCustomerRateQuoteOptionDto(
+  option: QuoteOption,
+): CustomerRateQuoteOptionDto {
   return {
     id: option.id,
     rateProviderId: option.rateProviderId,
@@ -58,20 +60,24 @@ function toQuoteDtoBase<TOption>(
   return {
     id: quote.id,
     customerId: quote.customerId,
-    shipmentType: quote.shipmentType as ShipmentTypeCode,
+    shipmentType: quote.shipmentType,
     weightKg: quote.weightKg.toNumber(),
     description: quote.description,
-    origin: {
-      name: quote.originName,
-      phone: quote.originPhone,
-      addressLine1: quote.originAddressLine1,
-      addressLine2: quote.originAddressLine2,
-      city: quote.originCity,
-      state: quote.originState,
-      postalCode: quote.originPostalCode,
-      country: quote.originCountry,
-      instructions: quote.originInstructions,
-    },
+    // Null on the new customer self-service flow (pickup logistics live on PickupRequest
+    // instead) — originName is the sole discriminator since all origin fields go null together.
+    origin: quote.originName
+      ? {
+          name: quote.originName,
+          phone: quote.originPhone!,
+          addressLine1: quote.originAddressLine1!,
+          addressLine2: quote.originAddressLine2,
+          city: quote.originCity!,
+          state: quote.originState!,
+          postalCode: quote.originPostalCode!,
+          country: quote.originCountry!,
+          instructions: quote.originInstructions,
+        }
+      : null,
     destination: {
       name: quote.destName,
       phone: quote.destPhone,
@@ -82,19 +88,25 @@ function toQuoteDtoBase<TOption>(
       postalCode: quote.destPostalCode,
       country: quote.destCountry,
     },
-    fulfillmentMethod: quote.fulfillmentMethod as FulfillmentMethodCode,
-    pickupDate: quote.pickupDate ? quote.pickupDate.toISOString().slice(0, 10) : null,
+    fulfillmentMethod: quote.fulfillmentMethod,
+    pickupDate: quote.pickupDate
+      ? quote.pickupDate.toISOString().slice(0, 10)
+      : null,
     pickupTimeSlot: quote.pickupTimeSlot as PickupTimeSlot | null,
-    status: quote.status as QuoteStatusCode,
-    reviewReason: quote.reviewReason as QuoteReviewReasonCode | null,
+    status: quote.status,
+    reviewReason: quote.reviewReason,
     quotedAmount: quote.quotedAmount ? quote.quotedAmount.toNumber() : null,
     quotedCurrency: quote.quotedCurrency,
     quotedAt: quote.quotedAt ? quote.quotedAt.toISOString() : null,
     rejectionReason: quote.rejectionReason,
     orderId: quote.orderId,
     rateQuoteOptions: quote.rateQuoteOptions.map(mapOption),
-    selectedOption: quote.selectedOption ? mapOption(quote.selectedOption) : null,
-    optionsExpireAt: quote.optionsExpireAt ? quote.optionsExpireAt.toISOString() : null,
+    selectedOption: quote.selectedOption
+      ? mapOption(quote.selectedOption)
+      : null,
+    optionsExpireAt: quote.optionsExpireAt
+      ? quote.optionsExpireAt.toISOString()
+      : null,
     createdAt: quote.createdAt.toISOString(),
     updatedAt: quote.updatedAt.toISOString(),
   };
@@ -104,7 +116,9 @@ export function toQuoteDto(quote: QuoteWithCustomer): QuoteDto {
   return toQuoteDtoBase(quote, toCustomerRateQuoteOptionDto);
 }
 
-export function toQuoteAdminDetailDto(quote: QuoteWithCustomer): QuoteAdminDetailDto {
+export function toQuoteAdminDetailDto(
+  quote: QuoteWithCustomer,
+): QuoteAdminDetailDto {
   return {
     ...toQuoteDtoBase(quote, toAdminRateQuoteOptionDto),
     internalNotes: quote.internalNotes,

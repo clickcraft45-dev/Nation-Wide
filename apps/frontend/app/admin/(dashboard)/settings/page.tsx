@@ -8,10 +8,11 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { ChangePasswordForm } from "@/components/settings/change-password-form";
 
 export default function AdminSettingsPage() {
-  const { user, logout } = useAuth();
+  const { user, isLoading, logout } = useAuth();
   const router = useRouter();
 
   async function handleLogout() {
@@ -33,16 +34,26 @@ export default function AdminSettingsPage() {
           <CardTitle>Manager profile</CardTitle>
         </CardHeader>
         <CardContent>
-          {user && (
+          {isLoading ? (
             <div className="flex items-center gap-3">
-              <Avatar label={user.email} className="h-11 w-11 text-sm" />
-              <div>
-                <p className="text-sm font-medium text-foreground">{user.email}</p>
-                <Badge variant="neutral" className="mt-1">
-                  {user.role}
-                </Badge>
+              <Skeleton className="h-11 w-11 rounded-full" />
+              <div className="space-y-2">
+                <Skeleton className="h-4 w-40" />
+                <Skeleton className="h-4 w-16" />
               </div>
             </div>
+          ) : (
+            user && (
+              <div className="flex items-center gap-3">
+                <Avatar label={user.email} className="h-11 w-11 text-sm" />
+                <div>
+                  <p className="text-sm font-medium text-foreground">{user.email}</p>
+                  <Badge variant="neutral" className="mt-1">
+                    {user.role}
+                  </Badge>
+                </div>
+              </div>
+            )
           )}
         </CardContent>
       </Card>

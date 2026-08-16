@@ -18,6 +18,14 @@ export const NOTIFICATION_TEMPLATES = {
   // Distinct from PICKED_UP's 'pickup_confirmation' (that one's a tracking-status update);
   // this fires once for either a pickup or a warehouse drop-off being confirmed by staff.
   PICKUP_CONFIRMED: 'pickup_or_dropoff_confirmed',
+  // Pickup Partner workflow (customer self-service path — see PickupRequest).
+  PICKUP_REQUEST_NEEDED: 'pickup_request_needed',
+  PICKUP_REQUEST_RECEIVED: 'pickup_request_received',
+  PICKUP_PARTNER_ASSIGNED: 'pickup_partner_assigned',
+  PICKUP_VERIFICATION_COMPLETE: 'pickup_verification_complete',
+  PAYMENT_COLLECTED: 'payment_collected',
+  ORDER_CREATED_FROM_PICKUP: 'order_created_from_pickup',
+  PICKUP_REJECTED: 'pickup_rejected',
 } as const;
 
 const STATUS_TEMPLATE_MAP: Record<TrackingStatusCode, string> = {

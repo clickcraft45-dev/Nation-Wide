@@ -3,6 +3,7 @@ import type {
   OrderStatusCode,
   QuoteStatusCode,
   PickupStatusCode,
+  PickupRequestStatusCode,
   PaymentStatusCode,
 } from "@nationwide/shared-types";
 import { Badge, type BadgeProps } from "./badge";
@@ -59,6 +60,8 @@ const QUOTE_STATUS_VARIANT: Record<QuoteStatusCode, BadgeProps["variant"]> = {
   RATED: "info",
   NEEDS_MANUAL_REVIEW: "warning",
   QUOTED: "info",
+  PENDING_PICKUP_REQUEST: "warning",
+  PICKUP_REQUESTED: "info",
   ACCEPTED: "success",
   REJECTED: "danger",
   CANCELLED: "neutral",
@@ -84,6 +87,23 @@ const PICKUP_STATUS_VARIANT: Record<PickupStatusCode, BadgeProps["variant"]> = {
 export function PickupStatusBadge({ status }: { status: PickupStatusCode }) {
   return (
     <Badge variant={PICKUP_STATUS_VARIANT[status]}>{status.replace(/_/g, " ")}</Badge>
+  );
+}
+
+const PICKUP_REQUEST_STATUS_VARIANT: Record<PickupRequestStatusCode, BadgeProps["variant"]> = {
+  PENDING_ASSIGNMENT: "warning",
+  ASSIGNED: "info",
+  SCHEDULED: "info",
+  OUT_FOR_PICKUP: "info",
+  VERIFICATION_PENDING: "warning",
+  COMPLETED: "success",
+  CANCELLED: "neutral",
+  REJECTED: "danger",
+};
+
+export function PickupRequestStatusBadge({ status }: { status: PickupRequestStatusCode }) {
+  return (
+    <Badge variant={PICKUP_REQUEST_STATUS_VARIANT[status]}>{status.replace(/_/g, " ")}</Badge>
   );
 }
 

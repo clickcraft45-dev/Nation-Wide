@@ -13,8 +13,6 @@ export function toRateDto(rate: RateWithDetails): RateDto {
     weightFromKg: rate.weightFromKg.toNumber(),
     weightToKg: rate.weightToKg.toNumber(),
     baseRate: rate.baseRate.toNumber(),
-    pssAmount: rate.pssAmount.toNumber(),
-    fuelChargePercent: rate.fuelChargePercent.toNumber(),
     gstPercent: rate.gstPercent.toNumber(),
     nationwideCut: rate.nationwideCut.toNumber(),
     isActive: rate.isActive,

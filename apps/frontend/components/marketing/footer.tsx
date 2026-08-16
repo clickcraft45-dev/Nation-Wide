@@ -1,22 +1,25 @@
-import Link from "next/link";
-import { Package, Mail, Phone } from "lucide-react";
+"use client";
 
-// Placeholder contact details — replace with the real support email/phone once provided.
-const CONTACT_EMAIL = "support@nationwide.example";
-const CONTACT_PHONE = "+91 00000 00000";
+import Link from "next/link";
+import { Mail, Phone } from "lucide-react";
+import { useCurrentYear } from "@/lib/utils/use-current-year";
+import { useAuthGate } from "@/lib/auth/use-auth-gate";
+import { Logo } from "@/components/brand/logo";
+import { CONTACT_EMAIL, CONTACT_PHONE } from "@/lib/constants/contact";
 
 export function MarketingFooter() {
+  const currentYear = useCurrentYear();
+  const gate = useAuthGate();
+
   return (
-    <footer className="border-t border-border bg-card">
+    <footer id="contact" className="border-t border-border bg-card">
       <div className="mx-auto max-w-6xl px-6 py-12">
-        <div className="grid gap-10 sm:grid-cols-4">
-          <div className="sm:col-span-2">
-            <div className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary">
-                <Package className="h-4 w-4 text-white" aria-hidden />
-              </div>
-              <span className="text-base font-semibold text-foreground">NationWide</span>
-            </div>
+        <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-4">
+          <div>
+            <Logo variant="horizontal" size="sm" />
+            <p className="mt-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Delivering trust worldwide
+            </p>
             <p className="mt-3 max-w-sm text-sm text-muted-foreground">
               Reliable domestic and international shipping, with tracking built in from day
               one.
@@ -24,33 +27,62 @@ export function MarketingFooter() {
           </div>
 
           <div>
-            <p className="text-sm font-semibold text-foreground">Quick links</p>
+            <p className="text-sm font-semibold text-foreground">Company</p>
             <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
               <li>
-                <a href="#track" className="hover:text-foreground">
-                  Track a shipment
-                </a>
-              </li>
-              <li>
-                <a href="#quote" className="hover:text-foreground">
-                  Get a quote
-                </a>
-              </li>
-              <li>
-                <Link href="/login" className="hover:text-foreground">
-                  Sign in
+                <Link href="/#about" className="hover:text-foreground">
+                  About Us
                 </Link>
               </li>
               <li>
-                <Link href="/register" className="hover:text-foreground">
-                  Create account
+                <Link href="/#services" className="hover:text-foreground">
+                  Services
+                </Link>
+              </li>
+              <li>
+                <Link href="/#how-it-works" className="hover:text-foreground">
+                  How It Works
+                </Link>
+              </li>
+              <li>
+                <Link href="/#contact" className="hover:text-foreground">
+                  Contact
                 </Link>
               </li>
             </ul>
           </div>
 
           <div>
-            <p className="text-sm font-semibold text-foreground">Contact</p>
+            <p className="text-sm font-semibold text-foreground">Shipping</p>
+            <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
+              <li>
+                <button onClick={() => gate("/quote")} className="hover:text-foreground">
+                  Get a Quote
+                </button>
+              </li>
+              <li>
+                <Link href="/#track" className="hover:text-foreground">
+                  Track Shipment
+                </Link>
+              </li>
+              <li>
+                <button onClick={() => gate("/dashboard")} className="hover:text-foreground">
+                  Schedule Pickup
+                </button>
+              </li>
+              <li>
+                <a
+                  href={`mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent("Question about shipping")}`}
+                  className="hover:text-foreground"
+                >
+                  FAQs
+                </a>
+              </li>
+            </ul>
+          </div>
+
+          <div>
+            <p className="text-sm font-semibold text-foreground">Support</p>
             <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
               <li className="flex items-center gap-2">
                 <Mail className="h-4 w-4" aria-hidden />
@@ -64,12 +96,27 @@ export function MarketingFooter() {
                   {CONTACT_PHONE}
                 </a>
               </li>
+              <li>
+                <Link href="/terms" className="hover:text-foreground">
+                  Terms
+                </Link>
+              </li>
+              <li>
+                <Link href="/privacy" className="hover:text-foreground">
+                  Privacy Policy
+                </Link>
+              </li>
+              <li>
+                <Link href="/shipping-guidelines" className="hover:text-foreground">
+                  Shipping Guidelines
+                </Link>
+              </li>
             </ul>
           </div>
         </div>
 
         <div className="mt-10 border-t border-border pt-6 text-xs text-muted-foreground">
-          © {new Date().getFullYear()} NationWide. All rights reserved.
+          © {currentYear ?? ""} NationWide Logistics. All rights reserved.
         </div>
       </div>
     </footer>

@@ -65,6 +65,13 @@ class EnvironmentVariables {
   @IsString()
   WHATSAPP_WEBHOOK_VERIFY_TOKEN?: string;
 
+  // Meta App Secret — signs the X-Hub-Signature-256 header on every inbound webhook POST.
+  // Optional so the app still boots before a real WABA exists; the webhook POST handler itself
+  // rejects with 401 if this isn't set (see WhatsAppWebhookController).
+  @IsOptional()
+  @IsString()
+  WHATSAPP_APP_SECRET?: string;
+
   // Optional so the app still boots when ICL isn't the active adapter (e.g. local dev on the
   // stub). ICLShippingProviderAdapter itself throws a clear error if invoked without these set.
   @IsOptional()
@@ -78,6 +85,21 @@ class EnvironmentVariables {
   @IsOptional()
   @IsString()
   ICL_API_PASSWORD?: string;
+
+  // Optional so the app still boots without Google sign-in configured — GoogleConfiguredGuard
+  // gives a clear "not configured" response if /auth/google is hit before these are set, rather
+  // than crashing the whole app the way getOrThrow() would at boot.
+  @IsOptional()
+  @IsString()
+  GOOGLE_CLIENT_ID?: string;
+
+  @IsOptional()
+  @IsString()
+  GOOGLE_CLIENT_SECRET?: string;
+
+  @IsOptional()
+  @IsString()
+  GOOGLE_CALLBACK_URL?: string;
 }
 
 export function validateEnv(

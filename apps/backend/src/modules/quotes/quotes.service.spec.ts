@@ -92,6 +92,7 @@ describe('QuotesService', () => {
       updateMany: jest.Mock;
     };
     pickup: { create: jest.Mock };
+    pickupRequest: { findUnique: jest.Mock; update: jest.Mock };
     auditLog: { create: jest.Mock };
   };
   let ordersService: { createOrderWithShipment: jest.Mock };
@@ -110,6 +111,10 @@ describe('QuotesService', () => {
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       pickup: { create: jest.fn().mockResolvedValue({ id: 'pickup-1' }) },
+      pickupRequest: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        update: jest.fn().mockResolvedValue(undefined),
+      },
       auditLog: { create: jest.fn().mockResolvedValue(undefined) },
     };
     ordersService = {

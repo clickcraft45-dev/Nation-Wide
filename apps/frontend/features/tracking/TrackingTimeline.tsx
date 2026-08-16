@@ -1,6 +1,7 @@
 import type { TrackingResultDto } from "@nationwide/shared-types";
 import { Card, CardContent } from "@/components/ui/card";
 import { TrackingStatusBadge } from "@/components/ui/status-badge";
+import { Timeline } from "@/components/ui/timeline";
 
 export function TrackingTimeline({ result }: { result: TrackingResultDto }) {
   return (
@@ -19,17 +20,13 @@ export function TrackingTimeline({ result }: { result: TrackingResultDto }) {
           )}
         </CardContent>
       </Card>
-      <ol className="space-y-3">
-        {result.events.map((event, i) => (
-          <li key={i} className="border-l-2 border-border pl-4">
-            <p className="text-sm font-medium text-foreground">{event.displayLabel}</p>
-            <p className="text-xs text-muted-foreground">
-              {new Date(event.eventTime).toLocaleString()}
-              {event.location ? ` — ${event.location}` : ""}
-            </p>
-          </li>
-        ))}
-      </ol>
+      <Timeline
+        events={result.events.map((event) => ({
+          label: event.displayLabel,
+          timestamp: new Date(event.eventTime).toLocaleString(),
+          location: event.location,
+        }))}
+      />
     </div>
   );
 }

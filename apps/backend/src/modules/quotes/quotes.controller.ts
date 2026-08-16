@@ -7,6 +7,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import type { QuoteDto, QuotePreviewResultDto } from '@nationwide/shared-types';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -19,11 +20,17 @@ import { CreateQuoteDto } from './dto/create-quote.dto';
 import { SelectOptionDto } from './dto/select-option.dto';
 import { QuotePreviewQueryDto } from './dto/quote-preview.dto';
 
+// Each quote creation runs the full pricing engine and writes rows — tighter than the lenient
+// 300/min global default so a scripted customer account can't use it as a low-grade
+// resource-exhaustion vector.
+const QUOTE_CREATE_THROTTLE = { default: { limit: 10, ttl: 60_000 } };
+
 @Controller('quotes')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class QuotesController {
   constructor(private readonly quotesService: QuotesService) {}
 
+  @Throttle(QUOTE_CREATE_THROTTLE)
   @Post()
   @Roles('CUSTOMER')
   async create(

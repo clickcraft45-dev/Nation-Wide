@@ -29,6 +29,51 @@ services:
       timeout: 5s
       retries: 5
 
+  # backend/frontend are containerized only for smoke-testing the production images or as a
+  # deploy starting point — `npm run dev` runs them natively against the postgres/redis
+  # containers above, not through these two services.
+  backend:
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "4000:4000"
+    environment:
+      DATABASE_URL: postgresql://nationwide:nationwide_dev@postgres:5432/nationwide?schema=public
+      REDIS_URL: redis://redis:6379
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?set a real secret in .env}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?set a real secret in .env}
+      JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN:-15m}
+      JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
+      PORT: 4000
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3004}
+      TRACKING_PROVIDER_TIMEOUT_MS: ${TRACKING_PROVIDER_TIMEOUT_MS:-6000}
+      TRACKING_CACHE_TTL_ACTIVE_SECONDS: ${TRACKING_CACHE_TTL_ACTIVE_SECONDS:-300}
+      TRACKING_CACHE_TTL_TERMINAL_SECONDS: ${TRACKING_CACHE_TTL_TERMINAL_SECONDS:-86400}
+      WHATSAPP_WEBHOOK_VERIFY_TOKEN: ${WHATSAPP_WEBHOOK_VERIFY_TOKEN:-dev-only-whatsapp-verify-token}
+      ICL_TRACKING_API_URL: ${ICL_TRACKING_API_URL:-https://cloud.iclinternational.in/api/v1/Tracking/Tracking}
+      ICL_API_USER_ID: ${ICL_API_USER_ID:-changeme}
+      ICL_API_PASSWORD: ${ICL_API_PASSWORD:-changeme}
+
+  frontend:
+    build:
+      context: .
+      dockerfile: apps/frontend/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "3004:3000"
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:4000/api/v1}
+      PORT: 3000
+
 volumes:
   postgres_data:
   redis_data:

@@ -45,7 +45,10 @@ function mockRequestOnce(
 ) {
   const mod = module === 'http' ? http : https;
   (mod.request as unknown as jest.Mock).mockImplementationOnce(
-    (_options: unknown, callback: (res: EventEmitter & { statusCode: number }) => void) => {
+    (
+      _options: unknown,
+      callback: (res: EventEmitter & { statusCode: number }) => void,
+    ) => {
       const req = makeFakeRequest();
       onRequest?.(req);
       // Fired synchronously (not setImmediate/queueMicrotask): several of these tests run
@@ -68,7 +71,10 @@ function mockRequestOnce(
 // req back) would fire on an object with no listeners yet and the event would be lost. Instead
 // this hands the req back via onRequest so the test can emit once trackShipment() has run its
 // synchronous setup (everything up to its first real await) and the listener is attached.
-function mockTimeoutOnce(module: 'http' | 'https', onRequest: (req: FakeRequest) => void) {
+function mockTimeoutOnce(
+  module: 'http' | 'https',
+  onRequest: (req: FakeRequest) => void,
+) {
   const mod = module === 'http' ? http : https;
   (mod.request as unknown as jest.Mock).mockImplementationOnce(() => {
     const req = makeFakeRequest();
@@ -370,7 +376,8 @@ describe('ICLShippingProviderAdapter', () => {
     );
     const adapter = new ICLShippingProviderAdapter(
       buildConfigService({
-        ICL_TRACKING_API_URL: 'https://cloud.iclinternational.in/api/v1/Tracking/Tracking',
+        ICL_TRACKING_API_URL:
+          'https://cloud.iclinternational.in/api/v1/Tracking/Tracking',
       }),
     );
     await adapter.trackShipment('AWB-HTTPS');
@@ -463,7 +470,9 @@ describe('ICLShippingProviderAdapter', () => {
       const result = await adapter.trackShipment('6000005372');
 
       const delivered = result.events[result.events.length - 1];
-      expect(delivered.eventTime.toISOString()).toBe('2021-11-29T13:03:00.000Z');
+      expect(delivered.eventTime.toISOString()).toBe(
+        '2021-11-29T13:03:00.000Z',
+      );
       const pickedUp = result.events[0];
       expect(pickedUp.eventTime.toISOString()).toBe('2021-11-26T13:50:00.000Z');
     });
@@ -477,7 +486,8 @@ describe('ICLShippingProviderAdapter', () => {
         (e) => e.rawStatus === 'With delivery courier',
       );
       const arrivedAtFacility = result.events.find(
-        (e) => e.rawStatus === 'Arrived at Delivery Facility in EAST WINDSOR,NJ-USA',
+        (e) =>
+          e.rawStatus === 'Arrived at Delivery Facility in EAST WINDSOR,NJ-USA',
       );
       expect(withCourier?.status).toBe('OUT_FOR_DELIVERY');
       expect(arrivedAtFacility?.status).toBe('IN_TRANSIT');
@@ -488,7 +498,9 @@ describe('ICLShippingProviderAdapter', () => {
       const adapter = new ICLShippingProviderAdapter(buildConfigService());
       const result = await adapter.trackShipment('6000005372');
 
-      const deliveredEvents = result.events.filter((e) => e.status === 'DELIVERED');
+      const deliveredEvents = result.events.filter(
+        (e) => e.status === 'DELIVERED',
+      );
       expect(deliveredEvents).toHaveLength(1);
       expect(deliveredEvents[0].rawStatus).toBe('Delivered - Signed for by');
     });

@@ -14,8 +14,17 @@ import { QuoteStatusBadge } from "@/components/ui/status-badge";
 function AddressBlock({
   address,
 }: {
-  address: QuoteAdminDetailDto["origin"] | QuoteAdminDetailDto["destination"];
+  address: QuoteAdminDetailDto["origin"] | QuoteAdminDetailDto["destination"] | null;
 }) {
+  if (!address) {
+    // The self-service flow collects the pickup address later, on the PickupRequest, not here.
+    return (
+      <p className="text-sm text-muted-foreground">
+        Not collected yet — pickup address is captured when the customer submits their pickup
+        request.
+      </p>
+    );
+  }
   return (
     <div className="space-y-1 text-sm">
       <p className="font-medium text-foreground">{address.name}</p>

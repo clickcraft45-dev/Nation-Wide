@@ -22,6 +22,7 @@ enum AdminRole {
   CUSTOMER
   STAFF
   ADMIN
+  PICKUP_PARTNER
 }
 
 enum NotificationChannel {
@@ -55,11 +56,20 @@ enum FulfillmentMethod {
 // shipment types the engine can't touch (OTHER/oversized) or destinations with no active rate
 // card (NO_RATE_AVAILABLE); those still get a staff-entered price via the unchanged manual-quote
 // flow. SUBMITTED is retained only for pre-existing rows created before the engine shipped.
+// PENDING_PICKUP_REQUEST / PICKUP_REQUESTED are the new self-service-flow states: the customer
+// has committed to a price (RATED→PENDING_PICKUP_REQUEST or QUOTED→PENDING_PICKUP_REQUEST) but no
+// Order exists yet; PICKUP_REQUESTED means a PickupRequest row now exists and is awaiting a
+// Pickup Partner. ACCEPTED still means "an Order exists" — on this new path it's only reached
+// once a Pickup Partner completes verification+payment+acceptance (see PickupRequestsService),
+// not directly from selectOption/acceptQuote. The legacy admin manual-quote path (Quote.
+// fulfillmentMethod set) is unaffected and still jumps straight to ACCEPTED as before.
 enum QuoteStatus {
   SUBMITTED
   RATED
   NEEDS_MANUAL_REVIEW
   QUOTED
+  PENDING_PICKUP_REQUEST
+  PICKUP_REQUESTED
   ACCEPTED
   REJECTED
   CANCELLED
@@ -86,6 +96,21 @@ enum PickupStatus {
   CANCELLED
   PICKUP_FAILED
   DROPPED_OFF
+}
+
+// The new pre-order lifecycle: a customer's self-service PickupRequest is born PENDING_ASSIGNMENT,
+// moves through partner assignment/physical collection, and only reaches COMPLETED once
+// PickupRequestsService.acceptParcel has generated the real Order (see Quote.status doc comment
+// for how this composes with the Quote state machine).
+enum PickupRequestStatus {
+  PENDING_ASSIGNMENT
+  ASSIGNED
+  SCHEDULED
+  OUT_FOR_PICKUP
+  VERIFICATION_PENDING
+  COMPLETED
+  CANCELLED
+  REJECTED
 }
 
 enum PaymentStatus {
@@ -120,9 +145,10 @@ model Customer {
   createdAt          DateTime @default(now()) @map("created_at")
   updatedAt          DateTime @updatedAt @map("updated_at")
 
-  orders        Order[]
-  quotes        Quote[]
-  notifications Notification[]
+  orders         Order[]
+  quotes         Quote[]
+  notifications  Notification[]
+  pickupRequests PickupRequest[]
 
   @@map("customers")
 }
@@ -145,11 +171,12 @@ model Order {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  customer        Customer   @relation(fields: [customerId], references: [id])
+  customer        Customer       @relation(fields: [customerId], references: [id])
   shipments       Shipment[] // 1:many — a single order can produce split shipments
   quote           Quote? // inverse of Quote.orderId, which owns the FK
   pickup          Pickup?
-  paymentMarkedBy AdminUser? @relation("OrderPaymentMarkedBy", fields: [paymentMarkedByAdminId], references: [id])
+  pickupRequest   PickupRequest? // inverse of PickupRequest.orderId, which owns the FK
+  paymentMarkedBy AdminUser?     @relation("OrderPaymentMarkedBy", fields: [paymentMarkedByAdminId], references: [id])
 
   @@index([customerId])
   @@map("orders")
@@ -167,14 +194,18 @@ model Quote {
   weightKg     Decimal          @map("weight_kg") @db.Decimal(10, 2)
   description  String?
 
-  originName         String  @map("origin_name")
-  originPhone        String  @map("origin_phone")
-  originAddressLine1 String  @map("origin_address_line1")
+  // Nullable — the new customer self-service flow (see PickupRequest) no longer collects these at
+  // quote-creation time; pickup logistics move to PickupRequest instead. Still populated (and
+  // still required at the DTO layer) by the admin manual-quote flow, which is unaffected by this
+  // redesign — see CreateAdminQuoteDto.
+  originName         String? @map("origin_name")
+  originPhone        String? @map("origin_phone")
+  originAddressLine1 String? @map("origin_address_line1")
   originAddressLine2 String? @map("origin_address_line2")
-  originCity         String  @map("origin_city")
-  originState        String  @map("origin_state")
-  originPostalCode   String  @map("origin_postal_code")
-  originCountry      String  @map("origin_country")
+  originCity         String? @map("origin_city")
+  originState        String? @map("origin_state")
+  originPostalCode   String? @map("origin_postal_code")
+  originCountry      String? @map("origin_country")
   originInstructions String? @map("origin_instructions")
 
   destName         String  @map("dest_name")
@@ -186,11 +217,15 @@ model Quote {
   destPostalCode   String  @map("dest_postal_code")
   destCountry      String  @map("dest_country")
 
-  fulfillmentMethod FulfillmentMethod @map("fulfillment_method")
+  // Nullable — null on the new customer self-service flow (logistics live on PickupRequest
+  // instead) and is exactly the discriminator QuotesService.selectOption/acceptQuote use to tell
+  // that flow apart from the legacy admin manual-quote flow (which always sets this). See the
+  // QuoteStatus doc comment above.
+  fulfillmentMethod FulfillmentMethod? @map("fulfillment_method")
   // Only set when fulfillmentMethod == PICKUP; validated at the service layer (not a DB
   // constraint, matching how OrderStatus transitions aren't DB-enforced either).
-  pickupDate        DateTime?         @map("pickup_date") @db.Date
-  pickupTimeSlot    String?           @map("pickup_time_slot") // '09:00-12:00' | '12:00-15:00' | '15:00-18:00'
+  pickupDate        DateTime?          @map("pickup_date") @db.Date
+  pickupTimeSlot    String?            @map("pickup_time_slot") // '09:00-12:00' | '12:00-15:00' | '15:00-18:00'
 
   status        QuoteStatus        @default(SUBMITTED)
   reviewReason  QuoteReviewReason? @map("review_reason")
@@ -218,6 +253,7 @@ model Quote {
   quotedBy         AdminUser?        @relation("QuoteQuotedBy", fields: [quotedByAdminId], references: [id])
   order            Order?            @relation(fields: [orderId], references: [id])
   pickup           Pickup?
+  pickupRequest    PickupRequest?
   selectedOption   RateQuoteOption?  @relation("QuoteSelectedOption", fields: [selectedOptionId], references: [id])
   rateQuoteOptions RateQuoteOption[] @relation("QuoteRateOptions")
 
@@ -261,6 +297,99 @@ model Pickup {
   @@map("pickups")
 }
 
+/// The new pre-order self-service record — created once a customer has picked a carrier and
+/// submitted pickup logistics, and lives entirely BEFORE any Order exists (unlike Pickup above,
+/// which is always created the instant a quote is accepted). A PickupRequest is assigned to a
+/// PICKUP_PARTNER AdminUser, who physically verifies the parcel (weight/shipmentType, re-priced
+/// via the same pricing engine as everywhere else), collects payment, and either accepts (which
+/// generates the real Order/Shipment — see PickupRequestsService.acceptParcel) or rejects it. No
+/// Pickup row is created for orders that go through this flow — PickupRequest alone fully covers
+/// "how the parcel physically reached us" for this path.
+model PickupRequest {
+  id         String @id @default(uuid())
+  quoteId    String @unique @map("quote_id")
+  customerId String @map("customer_id")
+
+  // Denormalized snapshot of the customer's chosen carrier/price/weight at pickup-request time —
+  // avoids re-joining Quote/RateQuoteOption for display, and gives recalculate()/verify() a
+  // stable rateProviderId to re-price against even if the customer's selectedOption changes later.
+  // Nullable — the manual-quote path (QuotesService.setManualQuote) prices a quote as a single
+  // staff-entered amount with no specific RateProvider attached at all, so a PickupRequest
+  // reached via that path has no carrier to snapshot; recalculate()/verify() fall back to
+  // re-running the full pricing engine (unfiltered) instead of re-pricing a specific provider.
+  rateProviderId    String?          @map("rate_provider_id")
+  rateProviderName  String?          @map("rate_provider_name")
+  shipmentType      ShipmentTypeCode @map("shipment_type")
+  estimatedWeightKg Decimal          @map("estimated_weight_kg") @db.Decimal(10, 2)
+  estimatedPrice    Decimal          @map("estimated_price") @db.Decimal(10, 2)
+  currency          String           @default("INR")
+
+  // Pickup logistics — customer-entered, the "Pickup Request page" fields. No destination address
+  // here; that's already on the Quote.
+  dropAtWarehouse    Boolean   @default(false) @map("drop_at_warehouse")
+  pickupContactName  String    @map("pickup_contact_name")
+  pickupContactPhone String    @map("pickup_contact_phone")
+  pickupAddressLine1 String    @map("pickup_address_line1")
+  pickupAddressLine2 String?   @map("pickup_address_line2")
+  pickupCity         String    @map("pickup_city")
+  pickupState        String    @map("pickup_state")
+  pickupPostalCode   String    @map("pickup_postal_code")
+  pickupDate         DateTime? @map("pickup_date") @db.Date // null when dropAtWarehouse
+  pickupTimeSlot     String?   @map("pickup_time_slot") // null when dropAtWarehouse
+  pickupInstructions String?   @map("pickup_instructions")
+
+  status PickupRequestStatus @default(PENDING_ASSIGNMENT)
+
+  assignedPartnerId String?   @map("assigned_partner_id")
+  assignedAt        DateTime? @map("assigned_at")
+
+  // Set the moment the partner confirms they're physically at the pickup location (mobile
+  // "Arrived at Pickup" action) — required before verify() will accept a weight correction, so
+  // the 3-step Arrived -> Verify/Pay -> Complete workflow can't be skipped.
+  arrivedAt DateTime? @map("arrived_at")
+
+  // Verification — Pickup Partner entered, at the customer's location.
+  verifiedWeightKg     Decimal?          @map("verified_weight_kg") @db.Decimal(10, 2)
+  verifiedShipmentType ShipmentTypeCode? @map("verified_shipment_type")
+  verifiedPrice        Decimal?          @map("verified_price") @db.Decimal(10, 2)
+  verificationNotes    String?           @map("verification_notes")
+  verifiedAt           DateTime?         @map("verified_at")
+
+  // Payment collection — reuses the existing PaymentMethod enum (Order also uses it), copied onto
+  // the generated Order by acceptParcel so PATCH /admin/orders/:id/payment's fields aren't stale.
+  paymentMethod      PaymentMethod? @map("payment_method")
+  collectedAmount    Decimal?       @map("collected_amount") @db.Decimal(10, 2)
+  paymentReference   String?        @map("payment_reference") // e.g. UPI transaction ref
+  paymentNotes       String?        @map("payment_notes")
+  paymentCollectedAt DateTime?      @map("payment_collected_at")
+
+  // Parcel-acceptance checklist.
+  parcelPackedProperly   Boolean? @map("parcel_packed_properly")
+  weightVerifiedFlag     Boolean? @map("weight_verified_flag")
+  restrictedItemsChecked Boolean? @map("restricted_items_checked")
+  documentsVerified      Boolean? @map("documents_verified")
+  isFragile              Boolean? @map("is_fragile")
+  insuranceRequired      Boolean? @map("insurance_required")
+  acceptanceRemarks      String?  @map("acceptance_remarks")
+
+  rejectionReason String? @map("rejection_reason")
+
+  orderId String? @unique @map("order_id") // set once acceptParcel generates the real Order
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  quote           Quote      @relation(fields: [quoteId], references: [id])
+  customer        Customer   @relation(fields: [customerId], references: [id])
+  assignedPartner AdminUser? @relation("PickupRequestAssignedPartner", fields: [assignedPartnerId], references: [id])
+  order           Order?     @relation(fields: [orderId], references: [id])
+
+  @@index([customerId])
+  @@index([status])
+  @@index([assignedPartnerId])
+  @@map("pickup_requests")
+}
+
 // ---------------------------------------------------------------------------
 // Pricing engine — deliberately independent from ShippingProvider below, which is the
 // tracking-adapter integration (ICL). RateProvider is pure admin-managed data (FedEx/UPS/DHL/
@@ -269,16 +398,23 @@ model Pickup {
 // ---------------------------------------------------------------------------
 
 model RateProvider {
-  id        String   @id @default(uuid())
-  code      String   @unique // e.g. 'FEDEX', 'UPS', 'DHL', 'DHL_EXPRESS'
-  name      String
-  isActive  Boolean  @default(true) @map("is_active")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id                String   @id @default(uuid())
+  code              String   @unique // e.g. 'FEDEX', 'UPS', 'DHL', 'DHL_EXPRESS'
+  name              String
+  isActive          Boolean  @default(true) @map("is_active")
+  // Constant across every country/weight/shipment-type this provider quotes — entered once here
+  // instead of on every WeightSlab (see WeightSlab's doc comment). The pricing engine reads these
+  // live at quote time; RateQuoteOption freezes a copy so past quotes never change retroactively
+  // when an admin updates them.
+  fuelChargePercent Decimal  @default(0) @map("fuel_charge_percent") @db.Decimal(5, 2)
+  pssPerKg          Decimal  @default(0) @map("pss_per_kg") @db.Decimal(10, 2)
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
 
-  zones            Zone[]
-  zoneCountries    ZoneCountry[]
-  rateQuoteOptions RateQuoteOption[]
+  zones             Zone[]
+  zoneCountries     ZoneCountry[]
+  rateQuoteOptions  RateQuoteOption[]
+  rateCardDocuments RateCardDocument[]
 
   @@map("rate_providers")
 }
@@ -365,21 +501,22 @@ model RateCard {
 /// Gaps between ranges are legal — a weight falling in a gap simply produces no option for that
 /// provider. Deactivating a rate (isActive: false) excludes it from new quotes without deleting
 /// it, preserving its history and any already-computed RateQuoteOption snapshots.
+/// Fuel Charge % and PSS are deliberately NOT here — they're constant per provider (PSS scales
+/// with weight, not with the country/weight-slab combination), so they live on RateProvider
+/// instead and the pricing engine reads them from there at quote time.
 model WeightSlab {
-  id                String   @id @default(uuid())
-  rateCardId        String   @map("rate_card_id")
-  weightFromKg      Decimal  @map("weight_from_kg") @db.Decimal(10, 2)
-  weightToKg        Decimal  @map("weight_to_kg") @db.Decimal(10, 2)
-  baseRate          Decimal  @map("base_rate") @db.Decimal(10, 2)
-  pssAmount         Decimal  @default(0) @map("pss_amount") @db.Decimal(10, 2)
-  fuelChargePercent Decimal  @default(0) @map("fuel_charge_percent") @db.Decimal(5, 2)
-  gstPercent        Decimal  @default(0) @map("gst_percent") @db.Decimal(5, 2)
-  nationwideCut     Decimal  @default(0) @map("nationwide_cut") @db.Decimal(10, 2)
-  isActive          Boolean  @default(true) @map("is_active")
-  createdByAdminId  String?  @map("created_by_admin_id")
-  updatedByAdminId  String?  @map("updated_by_admin_id")
-  createdAt         DateTime @default(now()) @map("created_at")
-  updatedAt         DateTime @updatedAt @map("updated_at")
+  id               String   @id @default(uuid())
+  rateCardId       String   @map("rate_card_id")
+  weightFromKg     Decimal  @map("weight_from_kg") @db.Decimal(10, 2)
+  weightToKg       Decimal  @map("weight_to_kg") @db.Decimal(10, 2)
+  baseRate         Decimal  @map("base_rate") @db.Decimal(10, 2)
+  gstPercent       Decimal  @default(0) @map("gst_percent") @db.Decimal(5, 2)
+  nationwideCut    Decimal  @default(0) @map("nationwide_cut") @db.Decimal(10, 2)
+  isActive         Boolean  @default(true) @map("is_active")
+  createdByAdminId String?  @map("created_by_admin_id")
+  updatedByAdminId String?  @map("updated_by_admin_id")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
 
   rateCard         RateCard          @relation(fields: [rateCardId], references: [id])
   createdBy        AdminUser?        @relation("WeightSlabCreatedBy", fields: [createdByAdminId], references: [id])
@@ -545,17 +682,24 @@ model AdminUser {
   role               AdminRole @default(STAFF)
   isActive           Boolean   @default(true) @map("is_active")
   hashedRefreshToken String?   @map("hashed_refresh_token")
+  // Nullable — only populated for PICKUP_PARTNER accounts today (STAFF/ADMIN rows stay NULL),
+  // generically useful for any AdminUser going forward.
+  name               String?
+  phone              String?
   createdAt          DateTime  @default(now()) @map("created_at")
   updatedAt          DateTime  @updatedAt @map("updated_at")
 
-  auditLogs           AuditLog[]
-  quotedQuotes        Quote[]      @relation("QuoteQuotedBy")
-  assignedPickups     Pickup[]     @relation("PickupAssignedStaff")
-  confirmedPickups    Pickup[]     @relation("PickupConfirmedByAdmin")
-  paymentMarkedOrders Order[]      @relation("OrderPaymentMarkedBy")
-  createdRateCards    RateCard[]   @relation("RateCardCreatedBy")
-  createdRates        WeightSlab[] @relation("WeightSlabCreatedBy")
-  updatedRates        WeightSlab[] @relation("WeightSlabUpdatedBy")
+  auditLogs                  AuditLog[]
+  quotedQuotes               Quote[]            @relation("QuoteQuotedBy")
+  assignedPickups            Pickup[]           @relation("PickupAssignedStaff")
+  confirmedPickups           Pickup[]           @relation("PickupConfirmedByAdmin")
+  paymentMarkedOrders        Order[]            @relation("OrderPaymentMarkedBy")
+  createdRateCards           RateCard[]         @relation("RateCardCreatedBy")
+  createdRates               WeightSlab[]       @relation("WeightSlabCreatedBy")
+  updatedRates               WeightSlab[]       @relation("WeightSlabUpdatedBy")
+  generatedRateCardDocuments RateCardDocument[] @relation("RateCardDocumentGeneratedBy")
+  updatedCompanySettings     CompanySettings[]  @relation("CompanySettingsUpdatedBy")
+  assignedPickupRequests     PickupRequest[]    @relation("PickupRequestAssignedPartner")
 
   @@map("admin_users")
 }
@@ -595,10 +739,78 @@ model AuditLog {
   entityId  String   @map("entity_id")
   before    Json?
   after     Json?
+  // Optional free-text note on why a change was made — surfaced in the admin Rate History view.
+  reason    String?
   createdAt DateTime @default(now()) @map("created_at")
 
   actor AdminUser @relation(fields: [actorId], references: [id])
 
   @@index([entity, entityId])
   @@map("audit_logs")
+}
+
+// ---------------------------------------------------------------------------
+// Rate Card Generator
+// ---------------------------------------------------------------------------
+
+/// Singleton — the service always reads/creates the single row. Branding/contact/legal-text
+/// config that automatically populates every generated Rate Card PDF; never hardcoded in the
+/// template itself so changing it here affects every future generation without a deploy.
+model CompanySettings {
+  id                    String   @id @default(uuid())
+  companyName           String   @default("NationWide")
+  tagline               String?
+  // Relative path under the backend's storage/ directory, e.g. "logos/<uuid>.png" — the PDF
+  // renderer reads this straight off local disk; the admin UI previews it via the /uploads
+  // static route (see main.ts).
+  logoPath              String?  @map("logo_path")
+  primaryColor          String   @default("#4F46E5") @map("primary_color")
+  website               String?
+  supportEmail          String?  @map("support_email")
+  supportPhone          String?  @map("support_phone")
+  address               String?
+  termsAndConditions    String?  @map("terms_and_conditions") @db.Text
+  footerNotes           String?  @map("footer_notes") @db.Text
+  insuranceDisclaimer   String?  @map("insurance_disclaimer") @db.Text
+  legalDisclaimer       String?  @map("legal_disclaimer") @db.Text
+  restrictedItemsNotice String?  @map("restricted_items_notice") @db.Text
+  updatedByAdminId      String?  @map("updated_by_admin_id")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  updatedBy AdminUser? @relation("CompanySettingsUpdatedBy", fields: [updatedByAdminId], references: [id])
+
+  @@map("company_settings")
+}
+
+/// One row per generated (persisted) PDF. Stores the rendered bytes directly so "Download Again"
+/// from history always re-serves the exact historical file rather than re-rendering against
+/// prices that may have changed since — the same reasoning RateQuoteOption already uses to freeze
+/// a quote's pricing at accept time. `preview` generations (see RateCardDocumentsService.preview)
+/// deliberately do NOT create a row here, so an admin iterating on a preview doesn't clutter
+/// history.
+model RateCardDocument {
+  id                 String   @id @default(uuid())
+  rateProviderId     String   @map("rate_provider_id")
+  shipmentType       String   @map("shipment_type") // DOCUMENT | PARCEL | PACKAGE
+  // Countries are selected directly (no required zone in the admin UI) — each may resolve to a
+  // different zone/rate card under the provider. Per-country transit time lives in `snapshot`
+  // only (see below), not as a column, since it's per-country rather than per-document.
+  countryIds         String[] @map("country_ids")
+  effectiveDate      DateTime @map("effective_date") @db.Date
+  templateKey        String   @default("CLASSIC") @map("template_key")
+  version            Int
+  pdf                Bytes
+  pdfSizeBytes       Int      @map("pdf_size_bytes")
+  // The structured JSON that was actually rendered — an audit trail of exactly what data produced
+  // this PDF, and the seed for any future non-PDF export format without re-deriving from pricing.
+  snapshot           Json
+  generatedByAdminId String   @map("generated_by_admin_id")
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  rateProvider RateProvider @relation(fields: [rateProviderId], references: [id])
+  generatedBy  AdminUser    @relation("RateCardDocumentGeneratedBy", fields: [generatedByAdminId], references: [id])
+
+  @@index([rateProviderId])
+  @@map("rate_card_documents")
 }

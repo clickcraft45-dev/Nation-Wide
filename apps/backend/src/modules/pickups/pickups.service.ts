@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { PickupStatusCode } from '@nationwide/shared-types';
 import { PrismaService } from '../../database/prisma.service';
@@ -27,7 +31,10 @@ const DROP_OFF_TRANSITIONS: Record<string, string[]> = {
   CANCELLED: [],
 };
 
-const TERMINAL_STATUSES = new Set<PickupStatusCode>(['PICKED_UP', 'DROPPED_OFF']);
+const TERMINAL_STATUSES = new Set<PickupStatusCode>([
+  'PICKED_UP',
+  'DROPPED_OFF',
+]);
 
 const withDetails = {
   include: {

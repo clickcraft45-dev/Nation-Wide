@@ -85,7 +85,8 @@ export default function CustomerQuotesPage() {
               <CardContent className="flex flex-col gap-3 pt-5 sm:flex-row sm:items-center sm:justify-between">
                 <div className="space-y-1">
                   <p className="text-sm font-medium text-foreground">
-                    {q.origin.city} → {q.destination.city}
+                    {q.origin ? `${q.origin.city} → ` : "To "}
+                    {q.destination.city}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     {q.shipmentType.charAt(0) + q.shipmentType.slice(1).toLowerCase()} · {q.weightKg}kg ·{" "}

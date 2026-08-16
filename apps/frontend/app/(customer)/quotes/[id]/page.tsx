@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
-import type { QuoteDto } from "@nationwide/shared-types";
+import type { QuoteDto, PickupRequestDto } from "@nationwide/shared-types";
 import { apiClient, ApiError } from "@/lib/api-client";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -12,6 +12,7 @@ import { ErrorState } from "@/components/ui/page-state";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
 import { QuoteStatusBadge } from "@/components/ui/status-badge";
+import { PickupStatusPipeline } from "@/components/pickup-requests/pickup-status-pipeline";
 
 export default function CustomerQuoteDetailPage() {
   const params = useParams<{ id: string }>();
@@ -19,6 +20,7 @@ export default function CustomerQuoteDetailPage() {
   const { showToast } = useToast();
 
   const [quote, setQuote] = useState<QuoteDto | null>(null);
+  const [pickupRequest, setPickupRequest] = useState<PickupRequestDto | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectingId, setSelectingId] = useState<string | null>(null);
@@ -36,6 +38,16 @@ export default function CustomerQuoteDetailPage() {
           return;
         }
         setQuote(found);
+        if (found.status === "PICKUP_REQUESTED" || found.status === "ACCEPTED") {
+          // Once a pickup request exists, show its live progress instead of the raw quote
+          // status (Section: Customer experience).
+          apiClient
+            .get<PickupRequestDto[]>("/pickup-requests/me")
+            .then((requests) => {
+              setPickupRequest(requests.find((r) => r.quoteId === found.id) ?? null);
+            })
+            .catch(() => undefined);
+        }
       })
       .catch((err) => {
         setError(err instanceof ApiError ? "Failed to load this quote." : "Something went wrong.");
@@ -54,7 +66,15 @@ export default function CustomerQuoteDetailPage() {
     if (!quote) return;
     setSelectingId(optionId);
     try {
-      await apiClient.post(`/quotes/${quote.id}/select-option`, { optionId });
+      const updated = await apiClient.post<QuoteDto>(`/quotes/${quote.id}/select-option`, {
+        optionId,
+      });
+      if (updated.status === "PENDING_PICKUP_REQUEST") {
+        // The new self-service path — no order yet, the customer still needs to tell us where
+        // to collect the parcel from (Section: Updated customer flow).
+        router.push(`/pickup-request/${quote.id}`);
+        return;
+      }
       showToast({ variant: "success", title: "Provider selected — your order has been created" });
       load();
     } catch {
@@ -71,7 +91,11 @@ export default function CustomerQuoteDetailPage() {
     if (!quote) return;
     setIsAccepting(true);
     try {
-      await apiClient.post(`/quotes/${quote.id}/accept`, {});
+      const updated = await apiClient.post<QuoteDto>(`/quotes/${quote.id}/accept`, {});
+      if (updated.status === "PENDING_PICKUP_REQUEST") {
+        router.push(`/pickup-request/${quote.id}`);
+        return;
+      }
       showToast({ variant: "success", title: "Quote accepted — your order has been created" });
       load();
     } catch {
@@ -113,7 +137,8 @@ export default function CustomerQuoteDetailPage() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-xl font-semibold text-foreground">
-                {quote.origin.city} → {quote.destination.city}
+                {quote.origin ? `${quote.origin.city} → ` : "To "}
+                {quote.destination.city}
               </h1>
               <p className="text-sm text-muted-foreground">
                 {quote.shipmentType.charAt(0) + quote.shipmentType.slice(1).toLowerCase()} ·{" "}
@@ -189,6 +214,34 @@ export default function CustomerQuoteDetailPage() {
                 <Button size="sm" isLoading={isAccepting} onClick={accept}>
                   Accept
                 </Button>
+              </CardContent>
+            </Card>
+          )}
+
+          {quote.status === "PENDING_PICKUP_REQUEST" && (
+            <Card>
+              <CardContent className="flex items-center justify-between pt-5">
+                <p className="text-sm text-muted-foreground">
+                  You&apos;ve chosen a provider — now tell us where to collect your parcel.
+                </p>
+                <Button size="sm" onClick={() => router.push(`/pickup-request/${quote.id}`)}>
+                  Schedule Pickup
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
+          {quote.status === "PICKUP_REQUESTED" && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Pickup progress</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {pickupRequest ? (
+                  <PickupStatusPipeline pickup={pickupRequest} />
+                ) : (
+                  <Skeleton className="h-40 w-full" />
+                )}
               </CardContent>
             </Card>
           )}

@@ -110,7 +110,13 @@ describe('ShipmentsService', () => {
       });
       expect(prisma.shipment.create).toHaveBeenCalledTimes(1);
       const [createArgs] = prisma.shipment.create.mock.calls[0] as [
-        { data: { orderId: string; providerId: string; internalTrackingNumber: string } },
+        {
+          data: {
+            orderId: string;
+            providerId: string;
+            internalTrackingNumber: string;
+          };
+        },
       ];
       expect(createArgs.data.orderId).toBe('order-1');
       expect(createArgs.data.providerId).toBe('provider-1');
@@ -143,7 +149,10 @@ describe('ShipmentsService', () => {
 
       expect(prisma.externalTrackingNumber.upsert).toHaveBeenCalledWith({
         where: {
-          shipmentId_providerId: { shipmentId: 'shipment-1', providerId: 'provider-1' },
+          shipmentId_providerId: {
+            shipmentId: 'shipment-1',
+            providerId: 'provider-1',
+          },
         },
         update: { externalTrackingNumber: 'ICL-EXTERNAL-1' },
         create: {
@@ -200,7 +209,10 @@ describe('ShipmentsService', () => {
 
       expect(prisma.externalTrackingNumber.upsert).toHaveBeenCalledWith({
         where: {
-          shipmentId_providerId: { shipmentId: 'shipment-1', providerId: 'provider-1' },
+          shipmentId_providerId: {
+            shipmentId: 'shipment-1',
+            providerId: 'provider-1',
+          },
         },
         update: { externalTrackingNumber: 'NEW-VALUE' },
         create: {

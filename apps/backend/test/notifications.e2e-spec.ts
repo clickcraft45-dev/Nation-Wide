@@ -1,9 +1,11 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import cookieParser from 'cookie-parser';
 import * as bcrypt from 'bcrypt';
+import { createHmac } from 'node:crypto';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
@@ -46,6 +48,12 @@ async function waitForStatus(
   }
 }
 
+function signWebhookPayload(secret: string, payload: unknown): string {
+  const body = JSON.stringify(payload);
+  const digest = createHmac('sha256', secret).update(body).digest('hex');
+  return `sha256=${digest}`;
+}
+
 describe('Notifications (e2e)', () => {
   let app: INestApplication<App>;
   let prisma: PrismaService;
@@ -55,13 +63,18 @@ describe('Notifications (e2e)', () => {
   let customerId: string;
   let providerId: string;
   let webhookVerifyToken: string;
+  let webhookAppSecret: string;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     }).compile();
 
-    app = moduleFixture.createNestApplication();
+    // rawBody: true mirrors main.ts's bootstrap options — the webhook signature check reads
+    // req.rawBody, which Nest only populates when this is set.
+    app = moduleFixture.createNestApplication<NestExpressApplication>({
+      rawBody: true,
+    });
     app.setGlobalPrefix('api/v1');
     app.use(cookieParser());
     app.useGlobalPipes(
@@ -79,6 +92,7 @@ describe('Notifications (e2e)', () => {
     webhookVerifyToken = configService.getOrThrow<string>(
       'WHATSAPP_WEBHOOK_VERIFY_TOKEN',
     );
+    webhookAppSecret = configService.getOrThrow<string>('WHATSAPP_APP_SECRET');
 
     const provider = await prisma.shippingProvider.upsert({
       where: { code: TEST_PROVIDER_CODE },
@@ -235,6 +249,21 @@ describe('Notifications (e2e)', () => {
     expect(sent.providerMessageId).toMatch(/^stub-wamid-/);
   });
 
+  it('rejects a webhook POST with no signature header', () => {
+    return request(app.getHttpServer())
+      .post('/api/v1/webhooks/whatsapp')
+      .send({ unexpected: 'shape' })
+      .expect(401);
+  });
+
+  it('rejects a webhook POST with an incorrect signature', () => {
+    return request(app.getHttpServer())
+      .post('/api/v1/webhooks/whatsapp')
+      .set('X-Hub-Signature-256', 'sha256=' + '0'.repeat(64))
+      .send({ unexpected: 'shape' })
+      .expect(401);
+  });
+
   it('a delivery-status webhook callback updates the matching notification', async () => {
     const notification = await prisma.notification.create({
       data: {
@@ -246,28 +275,31 @@ describe('Notifications (e2e)', () => {
       },
     });
 
+    const payload = {
+      entry: [
+        {
+          changes: [
+            {
+              value: {
+                statuses: [
+                  {
+                    id: 'test-wamid-webhook-1',
+                    status: 'delivered',
+                    timestamp: '1700000000',
+                    recipient_id: '919876500005',
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    };
+
     await request(app.getHttpServer())
       .post('/api/v1/webhooks/whatsapp')
-      .send({
-        entry: [
-          {
-            changes: [
-              {
-                value: {
-                  statuses: [
-                    {
-                      id: 'test-wamid-webhook-1',
-                      status: 'delivered',
-                      timestamp: '1700000000',
-                      recipient_id: '919876500005',
-                    },
-                  ],
-                },
-              },
-            ],
-          },
-        ],
-      })
+      .set('X-Hub-Signature-256', signWebhookPayload(webhookAppSecret, payload))
+      .send(payload)
       .expect(200);
 
     const updated = await prisma.notification.findUniqueOrThrow({
@@ -278,34 +310,39 @@ describe('Notifications (e2e)', () => {
   });
 
   it('ignores a webhook payload for an unknown providerMessageId without erroring', () => {
+    const payload = {
+      entry: [
+        {
+          changes: [
+            {
+              value: {
+                statuses: [
+                  {
+                    id: 'no-such-message-id',
+                    status: 'delivered',
+                    timestamp: '1',
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    };
+
     return request(app.getHttpServer())
       .post('/api/v1/webhooks/whatsapp')
-      .send({
-        entry: [
-          {
-            changes: [
-              {
-                value: {
-                  statuses: [
-                    {
-                      id: 'no-such-message-id',
-                      status: 'delivered',
-                      timestamp: '1',
-                    },
-                  ],
-                },
-              },
-            ],
-          },
-        ],
-      })
+      .set('X-Hub-Signature-256', signWebhookPayload(webhookAppSecret, payload))
+      .send(payload)
       .expect(200);
   });
 
-  it('tolerates a malformed webhook payload without erroring', () => {
+  it('tolerates a malformed webhook payload without erroring, given a valid signature', () => {
+    const payload = { unexpected: 'shape' };
     return request(app.getHttpServer())
       .post('/api/v1/webhooks/whatsapp')
-      .send({ unexpected: 'shape' })
+      .set('X-Hub-Signature-256', signWebhookPayload(webhookAppSecret, payload))
+      .send(payload)
       .expect(200);
   });
 });

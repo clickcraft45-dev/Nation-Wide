@@ -126,7 +126,9 @@ export class ShipmentsService {
 
     await this.prisma.$transaction([
       this.prisma.externalTrackingNumber.upsert({
-        where: { shipmentId_providerId: { shipmentId: shipment.id, providerId } },
+        where: {
+          shipmentId_providerId: { shipmentId: shipment.id, providerId },
+        },
         update: { externalTrackingNumber },
         create: { shipmentId: shipment.id, providerId, externalTrackingNumber },
       }),
@@ -146,7 +148,8 @@ export class ShipmentsService {
           before: {
             providerId: shipment.providerId,
             providerCode: shipment.provider.code,
-            externalTrackingNumber: activeMapping?.externalTrackingNumber ?? null,
+            externalTrackingNumber:
+              activeMapping?.externalTrackingNumber ?? null,
           },
           after: {
             providerId,
