@@ -1,9 +1,4 @@
-import type {
-  FulfillmentMethodCode,
-  PickupDto,
-  PickupStatusCode,
-  PickupTimeSlot,
-} from '@nationwide/shared-types';
+import type { PickupDto, PickupTimeSlot } from '@nationwide/shared-types';
 import type { PickupWithDetails } from './pickups.service';
 
 export function toPickupDto(pickup: PickupWithDetails): PickupDto {

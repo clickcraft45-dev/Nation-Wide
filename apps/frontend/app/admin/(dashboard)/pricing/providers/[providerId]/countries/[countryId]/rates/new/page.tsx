@@ -22,30 +22,31 @@ export default function NewRatePage() {
 
   useEffect(() => {
     let cancelled = false;
-    setIsLoading(true);
-    setError(null);
-    Promise.all([
-      apiClient.get<RateProviderDto>(`/admin/rate-providers/${params.providerId}`),
-      apiClient.get<CountryDetailDto>(
-        `/admin/rate-providers/${params.providerId}/countries/${params.countryId}`,
-      ),
-    ])
-      .then(([p, c]) => {
+    async function load() {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const [p, c] = await Promise.all([
+          apiClient.get<RateProviderDto>(`/admin/rate-providers/${params.providerId}`),
+          apiClient.get<CountryDetailDto>(
+            `/admin/rate-providers/${params.providerId}/countries/${params.countryId}`,
+          ),
+        ]);
         if (cancelled) return;
         setProvider(p);
         setCountry(c);
-      })
-      .catch((err) => {
+      } catch (err) {
         if (cancelled) return;
         setError(
           err instanceof ApiError && err.status === 404
             ? "Provider or country not found."
             : "Failed to load this page.",
         );
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setIsLoading(false);
-      });
+      }
+    }
+    void load();
     return () => {
       cancelled = true;
     };

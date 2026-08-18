@@ -19,30 +19,31 @@ export default function EditRatePage() {
 
   useEffect(() => {
     let cancelled = false;
-    setIsLoading(true);
-    setError(null);
-    Promise.all([
-      apiClient.get<RateDto>(`/admin/rates/${params.weightSlabId}`),
-      apiClient.get<CountryDetailDto>(
-        `/admin/rate-providers/${params.providerId}/countries/${params.countryId}`,
-      ),
-    ])
-      .then(([r, c]) => {
+    async function load() {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const [r, c] = await Promise.all([
+          apiClient.get<RateDto>(`/admin/rates/${params.weightSlabId}`),
+          apiClient.get<CountryDetailDto>(
+            `/admin/rate-providers/${params.providerId}/countries/${params.countryId}`,
+          ),
+        ]);
         if (cancelled) return;
         setRate(r);
         setCountryName(c.countryName);
-      })
-      .catch((err) => {
+      } catch (err) {
         if (cancelled) return;
         setError(
           err instanceof ApiError && err.status === 404
             ? "Rate not found."
             : "Failed to load this rate.",
         );
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setIsLoading(false);
-      });
+      }
+    }
+    void load();
     return () => {
       cancelled = true;
     };

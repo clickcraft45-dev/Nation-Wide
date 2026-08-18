@@ -1,8 +1,9 @@
 "use client";
 
-import { Globe2, Zap, PackageCheck, Briefcase } from "lucide-react";
+import { ArrowRight, Globe2, Zap, PackageCheck, Briefcase } from "lucide-react";
 import { useAuthGate } from "@/lib/auth/use-auth-gate";
 import { AssetImage } from "@/components/marketing/asset-image";
+import { SpotlightCard } from "@/components/ui/spotlight-card";
 import { SERVICE_IMAGES } from "@/lib/constants/assets";
 
 const SERVICES = [
@@ -51,27 +52,35 @@ export function MarketingServices() {
 
         <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
           {SERVICES.map((service) => (
-            <div
-              key={service.title}
-              className="overflow-hidden rounded-xl border border-border bg-card transition-shadow hover:shadow-md"
-            >
-              <div className="relative aspect-[4/3]">
-                <AssetImage src={service.image.src} alt={service.image.alt} />
-                <div className="absolute left-4 top-4 flex h-10 w-10 items-center justify-center rounded-lg bg-card text-primary shadow-sm">
-                  <service.icon className="h-5 w-5" aria-hidden />
+            <SpotlightCard key={service.title}>
+              {/* The whole card is the tap target, not just a small "Learn more" link — bigger,
+                  easier to hit reliably, which matters more here than it would on a general-
+                  audience site given who's using this (see MarketingHero's mobile-first note on
+                  the same audience). "Learn more" stays as plain text, not a nested control, so
+                  there's exactly one interactive element per card for screen readers/keyboard. */}
+              <button
+                type="button"
+                onClick={() => gate("/quote")}
+                className="flex h-full w-full flex-col text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              >
+                <div className="relative aspect-[4/3]">
+                  <AssetImage src={service.image.src} alt={service.image.alt} />
+                  <div className="absolute left-4 top-4 flex h-10 w-10 items-center justify-center rounded-lg bg-card text-primary shadow-sm">
+                    <service.icon className="h-5 w-5" aria-hidden />
+                  </div>
                 </div>
-              </div>
-              <div className="p-5">
-                <h3 className="text-base font-semibold text-foreground">{service.title}</h3>
-                <p className="mt-2 text-sm text-muted-foreground">{service.description}</p>
-                <button
-                  onClick={() => gate("/quote")}
-                  className="mt-3 text-sm font-medium text-primary hover:underline"
-                >
-                  Learn more
-                </button>
-              </div>
-            </div>
+                <div className="flex flex-1 flex-col p-5">
+                  <h3 className="text-base font-semibold text-foreground">{service.title}</h3>
+                  <p className="mt-2 flex-1 text-sm text-muted-foreground">
+                    {service.description}
+                  </p>
+                  <span className="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-primary">
+                    Learn more
+                    <ArrowRight className="h-4 w-4" aria-hidden />
+                  </span>
+                </div>
+              </button>
+            </SpotlightCard>
           ))}
         </div>
       </div>

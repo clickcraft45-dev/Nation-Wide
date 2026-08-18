@@ -117,6 +117,9 @@ function LoginPageInner() {
   // Google isn't configured yet, the backend's GoogleConfiguredGuard returns a clear error page
   // rather than a confusing "invalid_client" from Google itself.
   function handleGoogleLogin() {
+    // Not an internal Next.js route — API_BASE_URL is the backend's own origin, so this rule's
+    // "use router.push()" suggestion doesn't apply (the client router can't navigate cross-origin).
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
     window.location.href = `${API_BASE_URL}/auth/google`;
   }
 

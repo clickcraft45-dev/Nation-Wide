@@ -122,26 +122,26 @@ export default function PartnerPickupDetailPage() {
   useEffect(() => {
     if (!pickup || pickup.arrivedAt === null || pickup.verifiedAt) return;
     const weightKg = Number(debouncedWeight);
-    if (!weightKg || weightKg <= 0) {
-      setPreview(null);
-      return;
-    }
     let cancelled = false;
-    setIsRecalculating(true);
-    apiClient
-      .post<RecalculatePreviewDto>(`/partner/pickup-requests/${params.id}/recalculate`, {
-        weightKg,
-        shipmentType: verifiedShipmentType,
-      })
-      .then((result) => {
+    async function recalculate() {
+      if (!weightKg || weightKg <= 0) {
+        setPreview(null);
+        return;
+      }
+      setIsRecalculating(true);
+      try {
+        const result = await apiClient.post<RecalculatePreviewDto>(
+          `/partner/pickup-requests/${params.id}/recalculate`,
+          { weightKg, shipmentType: verifiedShipmentType },
+        );
         if (!cancelled) setPreview(result);
-      })
-      .catch(() => {
+      } catch {
         if (!cancelled) setPreview(null);
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setIsRecalculating(false);
-      });
+      }
+    }
+    void recalculate();
     return () => {
       cancelled = true;
     };

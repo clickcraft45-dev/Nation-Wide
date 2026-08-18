@@ -95,6 +95,19 @@
    would flip dark for any visitor on a dark-mode system, not just the sidebar. If a real
    dark-mode *feature* is ever wanted, it should be an explicit in-app toggle, not automatic. */
 
+/* Hard guarantee against page-level horizontal scroll, on top of (not instead of) every
+   individual overflowing element already being contained by its own overflow-hidden ancestor
+   (the hero globe's intentional edge-bleed, the auto-scrolling logo carousel). On some mobile
+   browsers a horizontal swipe/drag inside a nested scroll region (e.g. the logo carousel's
+   dragFree option) can escape and pan the whole page sideways instead of just that element,
+   leaving every section above/below shifted left until scrolled back — this stops that class of
+   bug regardless of which component causes it. Set on both html and body since browsers differ
+   on which element actually owns the document's scrolling box. */
+html,
+body {
+  overflow-x: hidden;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
@@ -152,10 +165,156 @@ body {
   animation: soft-float 4s ease-in-out infinite;
 }
 
+/* Point-mark twinkle (MarketingHowItWorks step circles) — a soft pulse ring, not a color flash,
+   so it reads as "alive" without being distracting. Each circle gets a different animation-delay
+   (set inline per step) so they twinkle asynchronously rather than all pulsing in lockstep.
+   Darkest brand blue (--brand-navy) at high opacity for a visibly deep, rich pulse rather than a
+   pale one. */
+@keyframes point-twinkle {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--brand-navy) 70%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 9px transparent;
+  }
+}
+
+.animate-point-twinkle {
+  animation: point-twinkle 2.4s ease-in-out infinite;
+}
+
+/* Small solid triangles along the how-it-works connecting line, pointing from each step toward
+   the next — .chain-arrow-right for the desktop horizontal line, .chain-arrow-down for the
+   mobile vertical one. CSS border-triangle trick (no icon/SVG needed for a plain filled shape). */
+.chain-arrow-right {
+  width: 0;
+  height: 0;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  border-left: 7px solid var(--brand-navy);
+}
+
+.chain-arrow-down {
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 7px solid var(--brand-navy);
+}
+
+/* Arrows travel a short distance across their own segment, fading out right as they'd otherwise
+   "jump" back to the start — that fade is what makes the loop read as continuous motion instead
+   of a visible reset. Each keyframe's transform bakes in the arrow's own -50% centering (Tailwind's
+   translate utilities can't compose with a running animation's transform, which replaces the
+   whole property at each step) plus the direction-of-travel offset. */
+@keyframes chain-arrow-flow-x {
+  0% {
+    transform: translate(-14px, -50%);
+    opacity: 0;
+  }
+  15%,
+  85% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(14px, -50%);
+    opacity: 0;
+  }
+}
+
+@keyframes chain-arrow-flow-y {
+  0% {
+    transform: translate(-50%, -14px);
+    opacity: 0;
+  }
+  15%,
+  85% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, 14px);
+    opacity: 0;
+  }
+}
+
+.animate-chain-arrow-x {
+  animation: chain-arrow-flow-x 1.6s ease-in-out infinite;
+}
+
+.animate-chain-arrow-y {
+  animation: chain-arrow-flow-y 1.6s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-route-draw,
   .animate-route-travel,
-  .animate-soft-float {
+  .animate-soft-float,
+  .animate-point-twinkle,
+  .animate-chain-arrow-x,
+  .animate-chain-arrow-y {
     animation: none;
   }
+
+  /* Without the animation running, these two would otherwise be stuck at their 0% keyframe state
+     (opacity: 0, off-center) rather than a sensible static resting position. */
+  .animate-chain-arrow-x,
+  .animate-chain-arrow-y {
+    opacity: 1;
+    transform: translate(-50%, -50%);
+  }
+}
+
+/* SpotlightCard (components/ui/spotlight-card.tsx) hover glow. --spotlight-x/y are card-local
+   pixel coordinates set from JS on pointermove; they default far off-canvas (-1000) so the glow
+   stays fully hidden until the pointer is actually over a given card. Brand blue only — see the
+   component file for why the original multi-hue version was dropped. Pure CSS (no Motion) since
+   it's driven by raw custom-property writes on every pointermove, not a discrete state change. */
+[data-spotlight] {
+  --spotlight-hue: 208 95% 38%;
+}
+
+[data-spotlight]::before,
+[data-spotlight]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s ease-out;
+}
+
+[data-spotlight]:hover::before,
+[data-spotlight]:hover::after {
+  opacity: 1;
+}
+
+[data-spotlight]::before {
+  background: radial-gradient(
+    280px 280px at calc(var(--spotlight-x, -1000) * 1px) calc(var(--spotlight-y, -1000) * 1px),
+    hsl(var(--spotlight-hue) / 0.4),
+    transparent 70%
+  );
+}
+
+[data-spotlight]::after {
+  border-radius: inherit;
+  padding: 2px;
+  background: radial-gradient(
+    240px 240px at calc(var(--spotlight-x, -1000) * 1px) calc(var(--spotlight-y, -1000) * 1px),
+    hsl(var(--spotlight-hue) / 1),
+    transparent 70%
+  );
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+
+/* Fades the auto-scrolling partner-logo strip (MarketingTrustedNetwork) to transparent at both
+   edges instead of a hard clip. -webkit- prefix needed for Safari. */
+.fade-edges-x {
+  -webkit-mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent);
+  mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent);
 }

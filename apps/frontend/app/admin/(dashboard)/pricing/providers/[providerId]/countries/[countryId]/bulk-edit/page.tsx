@@ -57,23 +57,23 @@ export default function BulkEditPage() {
 
   useEffect(() => {
     let cancelled = false;
-    setIsLoading(true);
-    setError(null);
-    apiClient
-      .get<RateDto[]>(
-        `/admin/rate-providers/${params.providerId}/countries/${params.countryId}/rates?shipmentType=${shipmentType}`,
-      )
-      .then((rates) => {
+    async function load() {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const rates = await apiClient.get<RateDto[]>(
+          `/admin/rate-providers/${params.providerId}/countries/${params.countryId}/rates?shipmentType=${shipmentType}`,
+        );
         if (!cancelled) setRows(toRows(rates));
-      })
-      .catch((err) => {
+      } catch (err) {
         if (!cancelled) {
           setError(err instanceof ApiError ? "Failed to load rates." : "Something went wrong.");
         }
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setIsLoading(false);
-      });
+      }
+    }
+    void load();
     return () => {
       cancelled = true;
     };

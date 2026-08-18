@@ -74,36 +74,36 @@ export function RateEditorForm({
   useEffect(() => {
     const weightKg = Number(debouncedInputs.weightFromKg);
     const base = Number(debouncedInputs.baseRate);
-    if (!debouncedInputs.weightFromKg || Number.isNaN(weightKg) || weightKg <= 0) {
-      setPreview(null);
-      return;
-    }
-    if (!debouncedInputs.baseRate || Number.isNaN(base) || base <= 0) {
-      setPreview(null);
-      return;
-    }
     let cancelled = false;
-    apiClient
-      .post<RatePreviewResultDto>("/admin/rates/preview", {
-        rateProviderId: context.rateProviderId,
-        weightKg,
-        baseRate: base,
-        gstPercent: Number(debouncedInputs.gstPercent) || 0,
-        nationwideCut: Number(debouncedInputs.nationwideCut) || 0,
-      })
-      .then((res) => {
+    async function loadPreview() {
+      if (!debouncedInputs.weightFromKg || Number.isNaN(weightKg) || weightKg <= 0) {
+        setPreview(null);
+        return;
+      }
+      if (!debouncedInputs.baseRate || Number.isNaN(base) || base <= 0) {
+        setPreview(null);
+        return;
+      }
+      try {
+        const res = await apiClient.post<RatePreviewResultDto>("/admin/rates/preview", {
+          rateProviderId: context.rateProviderId,
+          weightKg,
+          baseRate: base,
+          gstPercent: Number(debouncedInputs.gstPercent) || 0,
+          nationwideCut: Number(debouncedInputs.nationwideCut) || 0,
+        });
         if (!cancelled) {
           setPreview(res);
           setPreviewError(false);
         }
-      })
-      .catch(() => {
+      } catch {
         if (!cancelled) setPreviewError(true);
-      });
+      }
+    }
+    void loadPreview();
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedInputs, context.rateProviderId]);
 
   function fieldsPayload() {

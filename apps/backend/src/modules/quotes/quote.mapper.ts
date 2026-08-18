@@ -1,13 +1,9 @@
 import type {
   CustomerRateQuoteOptionDto,
-  FulfillmentMethodCode,
   PickupTimeSlot,
   QuoteAdminDetailDto,
   QuoteDto,
-  QuoteReviewReasonCode,
-  QuoteStatusCode,
   RateQuoteOptionDto,
-  ShipmentTypeCode,
 } from '@nationwide/shared-types';
 import type { QuoteWithCustomer } from './quotes.service';
 

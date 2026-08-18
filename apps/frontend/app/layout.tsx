@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Poppins, Geist_Mono } from "next/font/google";
+import { headers } from "next/headers";
 import "./globals.css";
 import { AuthProvider } from "@/state/auth-context";
 import { ToastProvider } from "@/components/ui/toast";
@@ -20,11 +21,18 @@ export const metadata: Metadata = {
   description: "Delivering trust worldwide — shipment tracking and logistics operations",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Reading a per-request header opts this layout (and every route under it) out of static
+  // prerendering. That's required, not incidental: middleware.ts issues a fresh CSP nonce on
+  // every request, and Next.js can only stamp that same nonce onto its own inline
+  // hydration/RSC-streaming scripts when the page is actually rendered per-request — a
+  // statically-prerendered page has no per-request nonce to inject into. See middleware.ts.
+  await headers();
+
   return (
     <html
       lang="en"
