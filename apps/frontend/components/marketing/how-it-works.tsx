@@ -1,4 +1,9 @@
+"use client";
+
+import { useRef } from "react";
+import { motion, useScroll, useTransform, type MotionValue } from "motion/react";
 import { FileText, CalendarClock, PackageCheck, Truck, MapPin } from "lucide-react";
+import { SectionHeading } from "@/components/marketing/section-heading";
 
 const STEPS = [
   {
@@ -33,31 +38,75 @@ const STEPS = [
   },
 ];
 
+// One step of the desktop timeline. Its own component so the useTransform hooks below stay out of
+// a .map() — hooks can't run in a loop whose length React can't rely on.
+function DesktopStep({
+  step,
+  threshold,
+  progress,
+}: {
+  step: (typeof STEPS)[number];
+  threshold: number;
+  progress: MotionValue<number>;
+}) {
+  // Each marker fills over the short stretch of scroll just before the line reaches it.
+  const fill = useTransform(progress, [threshold - 0.12, threshold], [0, 1]);
+  const scale = useTransform(fill, [0, 1], [0.9, 1]);
+
+  return (
+    <div className="relative flex flex-col items-center text-center">
+      <motion.div
+        style={{ scale }}
+        className="relative z-10 flex h-12 w-12 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-sm"
+      >
+        <motion.span
+          aria-hidden
+          style={{ opacity: fill }}
+          className="absolute inset-0 rounded-full bg-primary"
+        />
+        <step.icon className="relative h-5 w-5 mix-blend-difference text-white" aria-hidden />
+      </motion.div>
+      <p className="mt-4 text-xs font-semibold tracking-wide text-muted-foreground">
+        {step.number}
+      </p>
+      <h3 className="mt-1 text-sm font-semibold text-foreground">{step.title}</h3>
+      <p className="mt-2 text-xs text-muted-foreground">{step.description}</p>
+    </div>
+  );
+}
+
 export function MarketingHowItWorks() {
+  const timelineRef = useRef<HTMLDivElement>(null);
+
+  // Starts drawing when the timeline is a little way into view and finishes before it leaves.
+  const { scrollYProgress } = useScroll({
+    target: timelineRef,
+    offset: ["start 85%", "end 55%"],
+  });
+
   return (
     <section id="how-it-works" className="bg-muted py-20">
       <div className="mx-auto max-w-6xl px-6">
-        <div className="mx-auto max-w-xl text-center">
-          <h2 className="text-3xl font-semibold text-foreground">Shipping made simple</h2>
-          <p className="mt-3 text-muted-foreground">
-            From quote to delivery — here&apos;s the complete journey.
-          </p>
-        </div>
+        <SectionHeading
+          title="Shipping made simple"
+          description="From quote to delivery — here's the complete journey."
+        />
 
-        {/* Desktop: horizontal steps with a connecting line */}
-        <div className="relative mt-14 hidden lg:grid lg:grid-cols-5 lg:gap-6">
+        {/* Desktop: horizontal steps with a connecting line that draws itself as you scroll. */}
+        <div ref={timelineRef} className="relative mt-14 hidden lg:grid lg:grid-cols-5 lg:gap-6">
           <div className="pointer-events-none absolute left-0 right-0 top-6 h-px bg-border" aria-hidden />
-          {STEPS.map((step) => (
-            <div key={step.number} className="relative flex flex-col items-center text-center">
-              <div className="relative z-10 flex h-12 w-12 items-center justify-center rounded-full border border-primary/30 bg-card text-primary shadow-sm">
-                <step.icon className="h-5 w-5" aria-hidden />
-              </div>
-              <p className="mt-4 text-xs font-semibold tracking-wide text-primary">
-                {step.number}
-              </p>
-              <h3 className="mt-1 text-sm font-semibold text-foreground">{step.title}</h3>
-              <p className="mt-2 text-xs text-muted-foreground">{step.description}</p>
-            </div>
+          <motion.div
+            aria-hidden
+            style={{ scaleX: scrollYProgress }}
+            className="pointer-events-none absolute left-0 right-0 top-6 h-px origin-left bg-primary"
+          />
+          {STEPS.map((step, i) => (
+            <DesktopStep
+              key={step.number}
+              step={step}
+              threshold={i / (STEPS.length - 1)}
+              progress={scrollYProgress}
+            />
           ))}
         </div>
 

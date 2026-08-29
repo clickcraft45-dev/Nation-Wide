@@ -50,10 +50,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             key={toast.id}
             role="status"
             className={cn(
-              "flex items-start gap-3 rounded-lg border p-4 shadow-md",
+              "glass-raised glass-pill flex items-start gap-3 rounded-2xl border p-4",
               toast.variant === "success"
-                ? "border-success-border bg-success-bg"
-                : "border-danger-border bg-danger-bg",
+                ? "border-success-border bg-[color-mix(in_srgb,var(--success-bg)_86%,transparent)]"
+                : "border-danger-border bg-[color-mix(in_srgb,var(--danger-bg)_86%,transparent)]",
             )}
           >
             {toast.variant === "success" ? (

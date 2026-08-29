@@ -25,7 +25,7 @@ function QuickAction({
   return (
     <Link
       href={href}
-      className="flex flex-col items-center justify-center gap-2 rounded-xl border border-border bg-card p-4 text-center active:bg-muted/60"
+      className="glass glass-interactive flex flex-col items-center justify-center gap-2 rounded-2xl p-4 text-center active:bg-muted/60"
     >
       <span className="flex h-10 w-10 items-center justify-center rounded-full bg-info-bg text-primary">
         <Icon className="h-5 w-5" aria-hidden />
@@ -62,7 +62,7 @@ export default function CustomerDashboardPage() {
       <div className="rounded-2xl bg-primary p-5 text-white">
         <p className="text-base font-semibold">Track Your Shipment</p>
         <p className="mt-0.5 text-sm text-white/80">Enter your Order ID / Tracking ID</p>
-        <div className="mt-3 [&_input]:bg-white [&_input]:text-foreground">
+        <div className="on-dark mt-3">
           <TrackingSearchForm
             onSubmit={(trackingNumber) =>
               router.push(`/tracking?tracking=${encodeURIComponent(trackingNumber)}`)
@@ -87,7 +87,7 @@ export default function CustomerDashboardPage() {
 
       <Link
         href="/quote"
-        className="flex items-center gap-4 rounded-2xl border border-border bg-card p-4"
+        className="glass flex items-center gap-4 rounded-2xl p-4"
       >
         <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-info-bg text-primary">
           <Globe2 className="h-6 w-6" aria-hidden />
@@ -124,7 +124,7 @@ export default function CustomerDashboardPage() {
                       ? `/tracking?tracking=${shipment.internalTrackingNumber}`
                       : "/orders"
                   }
-                  className="flex items-center justify-between rounded-xl border border-border bg-card p-3 active:bg-muted/60"
+                  className="glass glass-interactive flex items-center justify-between rounded-2xl p-3 active:bg-muted/60"
                 >
                   <span className="flex items-center gap-2 font-mono text-sm text-foreground">
                     <MapPin className="h-4 w-4 text-muted-foreground" aria-hidden />

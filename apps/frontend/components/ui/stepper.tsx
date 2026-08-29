@@ -70,8 +70,8 @@ export function Stepper({
                 className={cn(
                   "flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 text-sm font-semibold",
                   status === "complete" && "border-primary bg-primary text-primary-foreground",
-                  status === "current" && "border-primary bg-card text-primary",
-                  status === "upcoming" && "border-border bg-card text-muted-foreground",
+                  status === "current" && "border-primary bg-white/80 text-primary shadow-[var(--glass-rim)]",
+                  status === "upcoming" && "border-[color:var(--glass-edge)] bg-white/50 text-muted-foreground",
                 )}
               >
                 {status === "complete" ? <Check className="h-4 w-4" aria-hidden /> : i + 1}

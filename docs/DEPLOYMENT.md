@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- PostgreSQL 16+ (managed or self-hosted)
+- MongoDB 6+ as a replica set (MongoDB Atlas — any tier; a replica set is required for Prisma transactions)
 - Redis 7+ (managed or self-hosted)
 - Node 20+ if not deploying via Docker
 - Real credentials for: JWT signing secrets, ICL Tracking API (`ICL_API_USER_ID`/`ICL_API_PASSWORD`),
@@ -23,8 +23,12 @@ container) is what the worker needs.
    the repo root, which points it at `apps/backend/Dockerfile` with the repo root as build
    context (required — the backend depends on the `packages/shared-types` workspace, same as the
    Docker Compose setup).
-2. Add Railway's Postgres and Redis plugins to the project — they inject `DATABASE_URL`/
-   `REDIS_URL` automatically; no manual connection-string wiring needed.
+2. Add Railway's Redis plugin — it injects `REDIS_URL` automatically. The database is MongoDB
+   Atlas, so set `DATABASE_URL` by hand from Atlas → Connect → Drivers. Railway's egress IPs are
+   dynamic, so Atlas Network Access has to accept `0.0.0.0/0` for the service to connect at all;
+   that makes the connection string the only thing guarding the data, so pair it with the
+   least-privilege user described under [Database access](#database-access) and treat the string
+   as a rotatable secret.
 3. Set the remaining required env vars on the service (see [`ENV_VARS.md`](./ENV_VARS.md) for the
    full list) — at minimum real (non-dev-default) `JWT_ACCESS_SECRET` and `JWT_REFRESH_SECRET`
    (e.g. `openssl rand -base64 32` for each), `JWT_ACCESS_EXPIRES_IN=15m`,
@@ -75,7 +79,7 @@ docker build -f apps/frontend/Dockerfile -t nationwide-frontend:latest .
 ```
 
 Or use the provided `docker-compose.yml`, which builds and wires both services together with
-Postgres/Redis:
+Redis (the database is Atlas — the backend service reads `apps/backend/.env` for `DATABASE_URL`):
 
 ```bash
 docker compose up --build
@@ -142,7 +146,7 @@ existing STAFF/ADMIN/PICKUP_PARTNER account is rejected by design (see
 
 ## Health checks
 
-`GET /api/v1/health` (unauthenticated) checks Postgres (`SELECT 1`) and Redis (`PING`) in
+`GET /api/v1/health` (unauthenticated) checks MongoDB (`{ ping: 1 }`) and Redis (`PING`) in
 parallel, returning `200` with `{status: "ok", checks: {database, redis}}` when both are
 reachable, `503` otherwise. Both Dockerfiles declare a `HEALTHCHECK` against this endpoint
 (backend) and `/` (frontend) — point your orchestrator's readiness/liveness probe at the same
@@ -150,8 +154,9 @@ endpoint rather than reimplementing the check.
 
 ## Backup / restore
 
-No application-level backup tooling exists — back up Postgres using your hosting provider's
-standard mechanism (e.g. `pg_dump`/managed automated snapshots). The one non-database piece of
+No application-level backup tooling exists — back up MongoDB using Atlas's own mechanism
+(automated cloud backups on M10+, or scheduled `mongodump` against the cluster on M0/M2/M5,
+which have no built-in snapshots). The one non-database piece of
 state is `apps/backend/storage/uploads/` (uploaded company logos) — include it in your backup plan
 if you're not running on ephemeral storage, or move it to object storage (S3-compatible) before a
 production deploy, since the container filesystem is not persisted across restarts/redeploys as
@@ -160,7 +165,7 @@ configured today.
 ## CI/CD
 
 `.github/workflows/ci.yml` runs on every push/PR to `main`: install → build shared-types →
-generate Prisma client → `migrate deploy` against a Postgres service container → lint → unit
+generate Prisma client → `db push` against a throwaway single-node MongoDB replica set → lint → unit
 tests (backend + frontend, `--workspaces --if-present` picks up both automatically) → backend
 e2e tests → build both apps → seed → a production-runtime smoke test (boots the built backend,
 hits `/api/v1` and `/api/v1/tracking/NW-DEMOTRACK1`) → `npm audit --audit-level=high`, which
@@ -177,26 +182,30 @@ chosen.
 
 ## Database access
 
-Every environment's `DATABASE_URL` should connect as a dedicated, least-privilege role — never
-the Postgres instance superuser (INFRA-5). The local `docker-compose.yml` connects as the
-official Postgres image's default init user for dev-only convenience; that is **not** a template
-for production. On a managed Postgres provider (Railway, RDS, Cloud SQL, etc.), create a scoped
-role explicitly rather than relying on whatever default the provisioning flow hands you:
+Every environment's `DATABASE_URL` should connect as a dedicated, least-privilege user — never
+an `atlasAdmin` or project-owner credential (INFRA-5). In Atlas → Database Access → Add New
+Database User, choose **Specific Privileges** and grant `readWrite` on the `nationwide` database
+only, rather than accepting the `Atlas admin` / `Read and write to any database` default the
+quickstart flow hands you. A leaked app credential should not be able to read other databases,
+create users, or drop the cluster.
 
-```sql
-CREATE ROLE nationwide_app WITH LOGIN PASSWORD '...' NOSUPERUSER NOCREATEDB NOCREATEROLE;
-GRANT ALL PRIVILEGES ON SCHEMA public TO nationwide_app;
-GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO nationwide_app;
-GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO nationwide_app;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO nationwide_app;
-```
+This matters more here than it would elsewhere, because of how Atlas network access works:
 
-Before go-live, confirm what the production `DATABASE_URL` actually connects as:
+- **Atlas Network Access is an IP allowlist, and it is the outer perimeter.** A non-allowlisted
+  client is rejected during the TLS handshake, before authentication.
+- **Private networking (PrivateLink, VPC peering) requires M10+.** On the free/shared tiers it is
+  simply unavailable, so an allowlist entry is the only control there is.
+- Platforms with dynamic egress IPs (Railway, most PaaS) and developer laptops on residential
+  connections therefore end up on `0.0.0.0/0`. That is a deliberate tradeoff, not an oversight —
+  but it means **TLS plus the connection string are the entire defence**, so:
+  - keep `DATABASE_URL` out of git (`apps/backend/.env` is gitignored; `.env.example` carries
+    only placeholders),
+  - use a long random password unique to this cluster,
+  - rotate it if it is ever pasted into a chat, ticket, log, or CI output,
+  - keep the user scoped as above so the blast radius of a rotation-lag window is one database.
 
-```sql
-SELECT current_user, usesuper FROM pg_user WHERE usename = current_user;
--- usesuper must be false
-```
+CI never touches Atlas — it runs its own throwaway MongoDB container, so no allowlist entry
+exists for GitHub's runners.
 
 ## Auth audit trail
 

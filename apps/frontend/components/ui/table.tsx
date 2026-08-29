@@ -3,24 +3,33 @@ import { cn } from "@/lib/utils/cn";
 
 export function Table({ className, ...props }: HTMLAttributes<HTMLTableElement>) {
   return (
-    <div className="w-full overflow-x-auto rounded-lg border border-border">
+    <div className="glass w-full overflow-x-auto rounded-2xl">
       <table className={cn("w-full border-collapse text-sm", className)} {...props} />
     </div>
   );
 }
 
 export function TableHeader({ className, ...props }: HTMLAttributes<HTMLTableSectionElement>) {
-  return <thead className={cn("bg-muted", className)} {...props} />;
+  return <thead
+      className={cn(
+        "border-b border-[color:var(--glass-edge)] bg-white/55 backdrop-saturate-150",
+        className,
+      )}
+      {...props}
+    />;
 }
 
 export function TableBody({ className, ...props }: HTMLAttributes<HTMLTableSectionElement>) {
-  return <tbody className={cn("divide-y divide-border", className)} {...props} />;
+  return <tbody
+      className={cn("divide-y divide-[color:var(--glass-edge)]", className)}
+      {...props}
+    />;
 }
 
 export function TableRow({ className, ...props }: HTMLAttributes<HTMLTableRowElement>) {
   return (
     <tr
-      className={cn("transition-colors hover:bg-muted/60", className)}
+      className={cn("transition-colors hover:bg-white/55", className)}
       {...props}
     />
   );

@@ -24,11 +24,11 @@ export function StatCard({
   className?: string;
 }) {
   return (
-    <div className={cn("rounded-lg border border-border bg-card p-4", className)}>
+    <div className={cn("glass rounded-2xl p-4", className)}>
       <div className="flex items-center justify-between gap-2">
         <p className="text-xs font-medium text-muted-foreground">{label}</p>
         {Icon && (
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-info-bg text-primary">
+          <div className="glass-rim flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/70 text-primary">
             <Icon className="h-4 w-4" aria-hidden />
           </div>
         )}

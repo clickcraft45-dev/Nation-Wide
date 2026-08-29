@@ -33,7 +33,7 @@ export function PricingQuickActions() {
           <Link
             key={action.href}
             href={action.href}
-            className="flex flex-col items-center gap-2 rounded-lg border border-border bg-card px-4 py-5 text-center transition-colors hover:border-primary hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="glass glass-interactive glass-sheen flex flex-col items-center gap-2 rounded-2xl px-4 py-5 text-center transition-colors hover:border-primary hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <Icon className="h-5 w-5 text-primary" aria-hidden />
             <span className="text-xs font-medium text-foreground">{action.label}</span>

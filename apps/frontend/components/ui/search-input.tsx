@@ -15,7 +15,7 @@ export function SearchInput({
       <input
         type="search"
         className={cn(
-          "h-9 w-full rounded-md border border-border bg-card pl-9 pr-3 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          "glass-field h-9 w-full rounded-full pl-9 pr-3 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           className,
         )}
         {...props}

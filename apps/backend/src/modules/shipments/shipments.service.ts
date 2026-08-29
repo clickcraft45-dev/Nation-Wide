@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import {
   ConflictException,
   Injectable,
@@ -11,6 +10,7 @@ import { RedisService } from '../../database/redis.service';
 import { trackingCacheKey } from '../tracking/tracking-cache-key';
 import { NotificationsService } from '../notifications/notifications.service';
 import { templateForTrackingStatus } from '../notifications/templates';
+import { nextSequenceNumber } from './sequence';
 import { formatInternalTrackingNumber } from './tracking-number';
 
 const MANUAL_OVERRIDE_RAW_STATUS = 'MANUAL_OVERRIDE';
@@ -38,26 +38,23 @@ export class ShipmentsService {
     private readonly notificationsService: NotificationsService,
   ) {}
 
-  // Two-step create-then-format: the customer-facing number embeds the DB-assigned
-  // sequenceNumber (Section: sequential tracking numbers), which Postgres only assigns once
-  // the row is actually inserted — so a syntactically-unique placeholder goes in first, then
-  // gets overwritten with the real formatted number now that the sequence value is known. This
-  // window is momentary and the placeholder is never returned to a caller.
+  // The customer-facing number embeds a sequential counter (Section: sequential tracking
+  // numbers) plus the row's creation date, so the number is allocated first and the row is
+  // written once — no placeholder-then-overwrite dance is needed now that the sequence value
+  // does not come from the insert itself.
   async createForOrder(orderId: string, providerId: string): Promise<Shipment> {
-    const created = await this.prisma.shipment.create({
+    const sequenceNumber = await nextSequenceNumber(this.prisma);
+    const createdAt = new Date();
+
+    return this.prisma.shipment.create({
       data: {
         orderId,
         providerId,
-        internalTrackingNumber: `PENDING-${randomUUID()}`,
-      },
-    });
-
-    return this.prisma.shipment.update({
-      where: { id: created.id },
-      data: {
+        sequenceNumber,
+        createdAt,
         internalTrackingNumber: formatInternalTrackingNumber(
-          created.sequenceNumber,
-          created.createdAt,
+          sequenceNumber,
+          createdAt,
         ),
       },
     });
@@ -216,7 +213,7 @@ export class ShipmentsService {
       }),
     ]);
 
-    await this.redis.del(trackingCacheKey(internalTrackingNumber));
+    await this.redis.cacheDel(trackingCacheKey(internalTrackingNumber));
 
     await this.notificationsService.enqueue(
       shipment.order.customerId,

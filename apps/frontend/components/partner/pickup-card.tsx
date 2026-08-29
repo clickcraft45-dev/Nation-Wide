@@ -36,7 +36,7 @@ export function PickupCard({ pickup }: { pickup: PickupRequestDto }) {
           openDetail();
         }
       }}
-      className="cursor-pointer rounded-xl border border-border bg-card p-4 outline-none transition-colors active:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring"
+      className="glass glass-interactive cursor-pointer rounded-2xl p-4 outline-none active:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring"
     >
       <div className="flex items-start justify-between gap-2">
         <p className="text-base font-semibold text-foreground">{pickup.pickupContactName}</p>

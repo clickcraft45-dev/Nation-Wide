@@ -26,7 +26,7 @@ export function PriceBreakdown({
   className?: string;
 }) {
   return (
-    <div className={cn("rounded-lg border border-border bg-card", className)}>
+    <div className={cn("glass rounded-2xl", className)}>
       <div className="divide-y divide-border px-4">
         {lines.map((line, i) => (
           <div key={i} className="flex items-center justify-between gap-4 py-2.5 text-sm">

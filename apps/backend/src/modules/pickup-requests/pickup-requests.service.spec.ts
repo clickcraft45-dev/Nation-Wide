@@ -6,7 +6,7 @@ import {
 import { PickupRequestsService } from './pickup-requests.service';
 
 function decimalLike(value: number) {
-  return { toNumber: () => value };
+  return value;
 }
 
 const baseQuote = {

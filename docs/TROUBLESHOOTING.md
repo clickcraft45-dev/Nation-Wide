@@ -15,14 +15,21 @@ startup) do not — rebuild manually after changing anything under `packages/sha
 ## `/api/v1/health` returns 503
 
 The response body tells you which check failed (`checks.database` / `checks.redis`). Most common
-causes: `DATABASE_URL`/`REDIS_URL` pointing at the wrong host/port (check for port collisions with
-other local projects — this repo intentionally uses non-default ports 5433/6380, see
-`docker-compose.yml`), or Postgres/Redis containers not actually running (`docker compose ps`).
+causes: the Redis container not actually running (`docker compose ps`; note this repo uses the
+non-default port 6380, see `docker-compose.yml`), or `DATABASE_URL` not reaching Atlas.
+
+A `checks.database` failure that reports `received fatal alert: InternalError` against every
+shard host is Atlas refusing the TLS handshake, not a bad password: the cluster is paused, or your
+current IP is not in **Atlas → Network Access**. DNS resolving and TCP 27017 connecting does not
+rule this out — Atlas rejects at the TLS layer, after the socket opens.
 
 ## Login fails with "Invalid email or password" for a seeded account
 
-Seeded emails are `admin@nationwide.dev` and `partner@nationwide.dev` by default (override via
-`SEED_ADMIN_EMAIL`/`SEED_PICKUP_PARTNER_EMAIL`). Password is `ChangeMe123!` unless
+Seeded emails are `admin@nationwide.dev`, `pickup@nationwide.com` and `customer@nationwide.dev`
+by default (override via `SEED_ADMIN_EMAIL`/`SEED_PICKUP_PARTNER_EMAIL`/`SEED_CUSTOMER_EMAIL`;
+the seed prints the full table on every run). The customer signs in against the `customers`
+collection, not `admin_users` — a Customer row with a null `password_hash` is rejected exactly
+like an unknown email, so re-run `npm run db:seed` if that account was created by staff. Password is `ChangeMe123!` unless
 `SEED_ADMIN_PASSWORD`/`SEED_PICKUP_PARTNER_PASSWORD` was set when you ran `npm run db:seed`. If
 you've re-seeded with a custom password, the old default no longer works.
 

@@ -20,7 +20,22 @@ const DEFAULT_PROVIDER_CODE = 'ICL';
 const IN_TRANSIT_STATUSES = ['PICKED_UP', 'IN_TRANSIT', 'OUT_FOR_DELIVERY'];
 
 const withShipments = {
-  include: { shipments: true, quote: { select: { id: true } } },
+  include: {
+    shipments: true,
+    // The route columns the admin Orders table shows. An admin manual quote carries the whole
+    // origin address; the self-service flow leaves those null and puts the pickup location on
+    // the PickupRequest instead, so both are pulled and the mapper picks whichever exists.
+    quote: {
+      select: {
+        id: true,
+        originCity: true,
+        originCountry: true,
+        destCity: true,
+        destCountry: true,
+      },
+    },
+    pickupRequest: { select: { pickupCity: true, pickupState: true } },
+  },
 };
 export type OrderWithShipments = Prisma.OrderGetPayload<typeof withShipments>;
 
@@ -209,7 +224,7 @@ export class OrdersService {
         before: {
           paymentStatus: before.paymentStatus,
           paymentMethod: before.paymentMethod,
-          paidAmount: before.paidAmount ? before.paidAmount.toNumber() : null,
+          paidAmount: before.paidAmount ? before.paidAmount : null,
         },
         after: {
           paymentStatus: dto.paymentStatus,

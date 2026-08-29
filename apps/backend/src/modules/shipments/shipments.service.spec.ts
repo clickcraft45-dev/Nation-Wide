@@ -36,8 +36,9 @@ describe('ShipmentsService', () => {
     trackingEvent: { create: jest.Mock };
     auditLog: { create: jest.Mock };
     $transaction: jest.Mock;
+    $runCommandRaw: jest.Mock;
   };
-  let redis: { del: jest.Mock };
+  let redis: { cacheDel: jest.Mock };
   let notificationsService: { enqueue: jest.Mock };
   let service: ShipmentsService;
   let auditLogCalls: AuditLogCallArgs[];
@@ -74,8 +75,10 @@ describe('ShipmentsService', () => {
       $transaction: jest
         .fn()
         .mockImplementation((ops: unknown[]) => Promise.all(ops)),
+      // Stands in for the `counters` findAndModify that replaces the Postgres sequence.
+      $runCommandRaw: jest.fn().mockResolvedValue({ value: { value: 42 } }),
     };
-    redis = { del: jest.fn() };
+    redis = { cacheDel: jest.fn() };
     notificationsService = { enqueue: jest.fn().mockResolvedValue(undefined) };
     service = new ShipmentsService(
       prisma as never,
@@ -85,47 +88,45 @@ describe('ShipmentsService', () => {
   });
 
   describe('createForOrder', () => {
-    it('creates a placeholder row, then formats the real tracking number from the DB-assigned sequenceNumber', async () => {
+    it('allocates a sequence number from the counters collection and formats the tracking number from it', async () => {
       const createdAt = new Date('2026-07-24T00:00:00.000Z');
-      prisma.shipment.create.mockResolvedValue({
-        id: 's-1',
-        sequenceNumber: 42,
-        createdAt,
-        internalTrackingNumber: 'PENDING-placeholder',
-      });
-      prisma.shipment.update.mockResolvedValue({
-        id: 's-1',
-        sequenceNumber: 42,
-        createdAt,
-        internalTrackingNumber: 'NW-26-00000042',
-      });
+      prisma.shipment.create.mockImplementation(
+        ({ data }: { data: Record<string, unknown> }) =>
+          Promise.resolve({ id: 's-1', ...data }),
+      );
 
       const result = await service.createForOrder('order-1', 'provider-1');
 
-      expect(result).toEqual({
-        id: 's-1',
-        sequenceNumber: 42,
-        createdAt,
-        internalTrackingNumber: 'NW-26-00000042',
-      });
+      expect(prisma.$runCommandRaw).toHaveBeenCalledTimes(1);
+      const [command] = prisma.$runCommandRaw.mock.calls[0] as [
+        { findAndModify: string; update: unknown; upsert: boolean },
+      ];
+      expect(command.findAndModify).toBe('counters');
+      expect(command.upsert).toBe(true);
+
       expect(prisma.shipment.create).toHaveBeenCalledTimes(1);
       const [createArgs] = prisma.shipment.create.mock.calls[0] as [
         {
           data: {
             orderId: string;
             providerId: string;
+            sequenceNumber: number;
+            createdAt: Date;
             internalTrackingNumber: string;
           };
         },
       ];
       expect(createArgs.data.orderId).toBe('order-1');
       expect(createArgs.data.providerId).toBe('provider-1');
-      expect(createArgs.data.internalTrackingNumber).toMatch(/^PENDING-/);
+      expect(createArgs.data.sequenceNumber).toBe(42);
+      expect(createArgs.data.internalTrackingNumber).toBe(
+        `NW-${String(createArgs.data.createdAt.getFullYear()).slice(2)}-00000042`,
+      );
 
-      expect(prisma.shipment.update).toHaveBeenCalledWith({
-        where: { id: 's-1' },
-        data: { internalTrackingNumber: 'NW-26-00000042' },
-      });
+      // The row is written once now — no placeholder to overwrite.
+      expect(prisma.shipment.update).not.toHaveBeenCalled();
+      expect(result).toMatchObject({ id: 's-1', sequenceNumber: 42 });
+      expect(createdAt).toBeInstanceOf(Date);
     });
   });
 
@@ -400,7 +401,7 @@ describe('ShipmentsService', () => {
         note: 'Carrier data was stale',
       });
 
-      expect(redis.del).toHaveBeenCalledWith('tracking:NW-1');
+      expect(redis.cacheDel).toHaveBeenCalledWith('tracking:NW-1');
       expect(notificationsService.enqueue).toHaveBeenCalledWith(
         'customer-1',
         'WHATSAPP',

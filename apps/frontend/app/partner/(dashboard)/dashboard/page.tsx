@@ -138,7 +138,7 @@ export default function PartnerDashboardHomePage() {
       {!isLoading && upcomingDates.length > 0 && (
         <div className="space-y-2">
           <h2 className="text-sm font-semibold text-foreground">Upcoming</h2>
-          <div className="divide-y divide-border rounded-xl border border-border bg-card">
+          <div className="glass divide-y divide-[color:var(--glass-edge)] rounded-2xl">
             {upcomingDates.map(([date, count]) => (
               <Link
                 key={date}
@@ -173,7 +173,7 @@ export default function PartnerDashboardHomePage() {
 
 function StatChip({ label, value }: { label: string; value: number | string | undefined }) {
   return (
-    <div className="rounded-xl border border-border bg-card px-3 py-3 text-center">
+    <div className="glass rounded-2xl px-3 py-3 text-center">
       {value === undefined ? (
         <Skeleton className="mx-auto h-6 w-10" />
       ) : (

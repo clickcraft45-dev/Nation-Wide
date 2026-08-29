@@ -19,7 +19,7 @@ Customer-facing shipment tracking platform. See [`docs/architecture-research.doc
 
 - Frontend: Next.js + TypeScript (`apps/frontend`)
 - Backend: NestJS + TypeScript, modular monolith (`apps/backend`)
-- Database: PostgreSQL via Prisma (`apps/backend/prisma`)
+- Database: MongoDB (Atlas) via Prisma (`apps/backend/prisma`)
 - Cache/Queue: Redis + BullMQ
 - Shared types: `packages/shared-types`
 
@@ -28,8 +28,8 @@ Customer-facing shipment tracking platform. See [`docs/architecture-research.doc
 Requires Docker, Node 20+.
 
 ```bash
-# 1. start Postgres + Redis
-docker compose up -d
+# 1. start Redis (the database is MongoDB Atlas, no local container)
+docker compose up -d redis
 
 # 2. install dependencies
 npm install
@@ -37,10 +37,11 @@ npm install
 # 3. set up env files
 cp apps/backend/.env.example apps/backend/.env
 
-# 4. run migrations (already applied if you're continuing this repo)
-cd apps/backend && npx prisma migrate dev
+# 4. sync the schema (MongoDB has no migration history — db push creates collections + indexes)
+cd apps/backend && npx prisma db push
 
-# 5. seed a dev admin user (admin@nationwide.dev / ChangeMe123! by default)
+# 5. seed the three dev logins — admin@nationwide.dev, pickup@nationwide.com and
+#    customer@nationwide.dev, all ChangeMe123! by default (the seed prints the table)
 npm run db:seed
 
 # 6. build shared-types (required before running backend/frontend — see note below)
@@ -88,10 +89,13 @@ cache immediately), `GET /api/v1/admin/integrations/:providerCode/health` (error
 `api_request_logs`), `GET /api/v1/admin/audit-logs`. Frontend pages: `/admin/login`,
 `/admin/shipments`, `/admin/integrations`, `/admin/audit-logs`.
 
-Note: this machine also runs unrelated projects' containers on several default ports — Postgres/Redis
-on 5432/6379 (another project) and 3000-3003 (a persistent IDE container) — so this repo uses fixed
-ports chosen to avoid all of them: backend `4000`, frontend `3004`, Postgres `5433`, Redis `6380`
-(see `scripts/ports.cjs` and `docker-compose.yml`). Adjust if that's not the case in your environment.
+Note: this machine also runs unrelated projects' containers on several default ports — Redis on
+6379 (another project) and 3000-3003 (a persistent IDE container) — so this repo uses fixed ports
+chosen to avoid all of them: backend `4000`, frontend `3004`, Redis `6380` (see
+`scripts/ports.cjs` and `docker-compose.yml`). Adjust if that's not the case in your environment.
+The database is MongoDB Atlas in every environment — nothing local to run, but your current IP has
+to be in Atlas → Network Access or the connection fails during the TLS handshake (see
+[Troubleshooting](docs/TROUBLESHOOTING.md)).
 
 ## Project structure
 
@@ -113,8 +117,8 @@ Phase 1 (Foundation) complete: monorepo scaffold, Docker Compose, CI skeleton, c
 (Section 10 entities) migrated. Staging deployment still pending.
 
 Phase 2 (Authentication) complete: JWT access/refresh tokens with rotation, RBAC guards
-(customer/staff/admin), a seeded dev admin user, and a CI pipeline that runs migrations + e2e
-tests against a real Postgres service container.
+(customer/staff/admin), a seeded dev admin user, and a CI pipeline that runs the schema sync +
+e2e tests against a real MongoDB replica set.
 
 Phase 3 (Customer system) complete: Customer CRUD (staff/admin only), E.164 phone validation,
 DPDP-compliant consent capture (`consentGivenAt`/`consentSource` stamped server-side at creation,

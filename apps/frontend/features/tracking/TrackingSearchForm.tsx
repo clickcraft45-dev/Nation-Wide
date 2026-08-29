@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { SearchInput } from "@/components/ui/search-input";
-import { Button } from "@/components/ui/button";
+import { LiquidButton } from "@/components/ui/liquid-glass-button";
 import { cn } from "@/lib/utils/cn";
 
 interface TrackingSearchFormProps {
@@ -28,7 +28,7 @@ export function TrackingSearchForm({
 
   return (
     <form
-      className="flex w-full max-w-md flex-col gap-3 sm:flex-row sm:gap-2"
+      className="flex w-full max-w-lg flex-col gap-3 sm:flex-row sm:gap-2"
       onSubmit={(e) => {
         e.preventDefault();
         if (value.trim()) onSubmit(value.trim());
@@ -38,18 +38,19 @@ export function TrackingSearchForm({
         <SearchInput
           value={value}
           onChange={(e) => setValue(e.target.value)}
-          placeholder="Enter Order ID / Tracking ID"
+          placeholder="Order ID / Tracking ID"
           className="h-11 pl-10 text-base"
         />
       </div>
-      <Button
+      <LiquidButton
         type="submit"
+        variant="primary"
         size="lg"
         isLoading={isLoading}
         className={cn("w-full sm:w-auto", submitButtonClassName)}
       >
         {isLoading ? "Searching…" : "Track Shipment"}
-      </Button>
+      </LiquidButton>
     </form>
   );
 }

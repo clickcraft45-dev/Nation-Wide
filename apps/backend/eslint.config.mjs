@@ -32,4 +32,18 @@ export default tseslint.config(
       "prettier/prettier": ["error", { endOfLine: "auto" }],
     },
   },
+  // Test files only. Jest mocks are `any` by construction — `jest.fn()`, `as unknown as`
+  // service doubles, and `supertest`'s untyped `res.body` — so the no-unsafe-* family fires on
+  // ordinary, correct test code and says nothing about runtime risk. Production code under
+  // src/ keeps every one of these rules at full strength; only the doubles are exempt.
+  {
+    files: ['**/*.spec.ts', 'test/**/*.ts'],
+    rules: {
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-unsafe-call': 'off',
+      '@typescript-eslint/no-unsafe-return': 'off',
+      '@typescript-eslint/no-unsafe-argument': 'off',
+    },
+  },
 );

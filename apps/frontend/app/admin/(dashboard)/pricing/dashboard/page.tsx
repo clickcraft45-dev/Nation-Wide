@@ -67,7 +67,6 @@ export default function PricingDashboardPage() {
       return;
     }
     // Live search-as-you-type is a one-shot lookup per keystroke (debounced), not a subscription.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsSearching(true);
     apiClient
       .get<PricingSearchResultDto[]>(

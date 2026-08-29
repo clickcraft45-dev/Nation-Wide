@@ -115,7 +115,7 @@ export default function AdminQuotesPage() {
       <div className="flex flex-col gap-3 sm:flex-row">
         <div className="sm:w-72">
           <SearchInput
-            placeholder="Search by customer name, email, or phone…"
+            placeholder="Customer name, email or phone"
             value={search}
             onChange={(e) => {
               setSearch(e.target.value);

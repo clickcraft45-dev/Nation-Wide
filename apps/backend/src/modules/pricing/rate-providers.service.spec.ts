@@ -1,9 +1,8 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
 import { RateProvidersService } from './rate-providers.service';
 
 function decimal(value: number) {
-  return new Prisma.Decimal(value);
+  return value;
 }
 
 function makeProvider(overrides: Record<string, unknown> = {}) {

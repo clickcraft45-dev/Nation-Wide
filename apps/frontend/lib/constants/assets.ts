@@ -2,23 +2,9 @@
 // through this file rather than being hardcoded in components, so swapping in the final
 // photography/logos later is a one-line change per asset — no component or layout edits.
 //
-// Everything here is currently a hand-authored placeholder (see apps/frontend/public/assets/) —
-// swap the path (and, where the final asset is a photo, the extension to .webp/.avif) once real
-// assets are supplied.
-
-// Separate mobile/desktop hero art so the mobile crop is composed for its own aspect ratio
-// rather than an automatic crop of the desktop image. Both point at placeholders today; swap
-// each independently once real photography is supplied (e.g. hero-mobile.webp / hero-desktop.webp).
-export const HERO_IMAGE = {
-  mobile: {
-    src: "/assets/images/hero-mobile-placeholder.svg",
-    alt: "Illustration of global logistics — air, ocean and road freight moving parcels worldwide",
-  },
-  desktop: {
-    src: "/assets/images/hero-logistics-placeholder.svg",
-    alt: "Illustration of global logistics — air, ocean and road freight moving parcels worldwide",
-  },
-};
+// The images here are hand-authored placeholders (see apps/frontend/public/assets/) — swap the
+// path, and where the final asset is a photo the extension to .webp/.avif, once real assets are
+// supplied. PARTNER_NETWORKS at the bottom is not a placeholder; see its own note.
 
 export const SERVICE_IMAGES = {
   international: {
@@ -39,21 +25,14 @@ export const SERVICE_IMAGES = {
   },
 } as const;
 
-export const ABOUT_IMAGE = {
-  src: "/assets/images/about-logistics-placeholder.svg",
-  alt: "NationWide Logistics network operations",
-};
-
 export const WORLD_MAP_IMAGE = {
   src: "/assets/images/world-map-placeholder.svg",
   alt: "World map showing NationWide Logistics' global reach",
 };
 
-// Placeholder partner marks — replace with authorized carrier/partner logos once provided.
-// Add or remove entries here; PartnerNetwork renders whatever this array contains.
-export const PARTNER_LOGOS = [
-  { name: "Partner network 1", src: "/assets/partners/partner-placeholder-01.svg" },
-  { name: "Partner network 2", src: "/assets/partners/partner-placeholder-02.svg" },
-  { name: "Partner network 3", src: "/assets/partners/partner-placeholder-03.svg" },
-  { name: "Partner network 4", src: "/assets/partners/partner-placeholder-04.svg" },
-] as const;
+// The carrier networks NationWide actually quotes and books against — the same four rate
+// providers the pricing engine is seeded with (apps/backend/prisma/seed.ts). Rendered as plain
+// text wordmarks, deliberately: reproducing a carrier's trademarked logo art needs their
+// authorisation, whereas naming the carriers you genuinely resell does not. The rail used to
+// show four grey placeholder SVGs, which on a live site read as logos that had failed to load.
+export const PARTNER_NETWORKS = ["DHL", "DHL Express", "FedEx", "UPS"] as const;

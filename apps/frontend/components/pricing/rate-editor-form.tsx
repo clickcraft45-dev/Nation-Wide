@@ -75,6 +75,8 @@ export function RateEditorForm({
     const weightKg = Number(debouncedInputs.weightFromKg);
     const base = Number(debouncedInputs.baseRate);
     if (!debouncedInputs.weightFromKg || Number.isNaN(weightKg) || weightKg <= 0) {
+      // Dropping a now-stale preview when the inputs stop being valid — one render, not a loop.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setPreview(null);
       return;
     }
@@ -103,7 +105,6 @@ export function RateEditorForm({
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedInputs, context.rateProviderId]);
 
   function fieldsPayload() {

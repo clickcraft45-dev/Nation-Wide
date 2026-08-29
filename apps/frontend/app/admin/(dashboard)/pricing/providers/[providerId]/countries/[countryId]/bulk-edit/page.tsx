@@ -57,6 +57,9 @@ export default function BulkEditPage() {
 
   useEffect(() => {
     let cancelled = false;
+    // A one-shot fetch keyed on the route params, not a subscription — clearing the previous
+    // result's loading/error state before it is the intended single re-render.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsLoading(true);
     setError(null);
     apiClient

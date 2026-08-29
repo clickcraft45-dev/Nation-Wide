@@ -60,8 +60,8 @@ export function Sidebar({
                     className={cn(
                       "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                       isActive
-                        ? "bg-primary text-primary-foreground"
-                        : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground-active",
+                        ? "bg-white text-[#0b0b0c] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.9),0_6px_16px_-8px_rgba(0,0,0,0.6)]"
+                        : "text-sidebar-foreground hover:bg-white/10 hover:text-sidebar-foreground-active",
                     )}
                   >
                     <Icon className="h-4 w-4 shrink-0" aria-hidden />
@@ -79,7 +79,7 @@ export function Sidebar({
   return (
     <>
       {/* Desktop */}
-      <aside className="hidden w-60 shrink-0 flex-col border-r border-sidebar-border bg-sidebar-bg lg:flex">
+      <aside className="glass-dark hidden w-60 shrink-0 flex-col border-r lg:flex">
         {content}
       </aside>
 
@@ -87,11 +87,11 @@ export function Sidebar({
       {mobileOpen && (
         <div className="fixed inset-0 z-40 lg:hidden">
           <div
-            className="absolute inset-0 bg-black/50"
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
             onClick={onCloseMobile}
             aria-hidden
           />
-          <aside className="relative flex h-full w-60 flex-col bg-sidebar-bg shadow-xl">
+          <aside className="glass-dark relative flex h-full w-60 flex-col border-r">
             {content}
           </aside>
         </div>

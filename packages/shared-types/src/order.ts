@@ -28,6 +28,15 @@ export interface OrderDto {
   paidAt: string | null; // ISO 8601
   createdAt: string; // ISO 8601
   updatedAt: string; // ISO 8601
+  /**
+   * Where the parcel is going out from and where it is headed, as display labels for list views
+   * ("New Delhi, India"). Assembled server-side because the two customer flows keep the route in
+   * different places: an admin manual quote carries the full origin and destination addresses,
+   * while the self-service flow moves pickup logistics onto the PickupRequest and leaves the
+   * quote's origin columns null. Null only when neither record exists yet.
+   */
+  origin: string | null;
+  destination: string | null;
   shipments: ShipmentSummaryDto[];
 }
 

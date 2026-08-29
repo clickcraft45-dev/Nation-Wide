@@ -7,5 +7,6 @@ export * from "./provider";
 export * from "./quote";
 export * from "./pickup";
 export * from "./pickup-request";
+export * from "./pincode";
 export * from "./pricing";
 export * from "./rate-card";

@@ -147,9 +147,7 @@ export class PricingEngineService {
     weightKg: number,
   ): MatchedWeightSlab | undefined {
     return slabs.find(
-      (slab) =>
-        slab.weightFromKg.toNumber() <= weightKg &&
-        weightKg <= slab.weightToKg.toNumber(),
+      (slab) => slab.weightFromKg <= weightKg && weightKg <= slab.weightToKg,
     );
   }
 
@@ -178,8 +176,8 @@ export class PricingEngineService {
 
     const breakdown = calculateFinalPrice({
       baseRate: input.baseRate,
-      fuelChargePercent: provider.fuelChargePercent.toNumber(),
-      pssPerKg: provider.pssPerKg.toNumber(),
+      fuelChargePercent: provider.fuelChargePercent,
+      pssPerKg: provider.pssPerKg,
       weightKg: input.weightKg,
       gstPercent: input.gstPercent ?? 0,
       nationwideCut: input.nationwideCut ?? 0,
@@ -201,13 +199,12 @@ export class PricingEngineService {
     // constant across every country/weight for this provider until an admin updates the
     // provider's config; see RateProvider's schema doc comment.
     const breakdown = calculateFinalPrice({
-      baseRate: slab.baseRate.toNumber(),
-      fuelChargePercent:
-        rateCard.zone.rateProvider.fuelChargePercent.toNumber(),
-      pssPerKg: rateCard.zone.rateProvider.pssPerKg.toNumber(),
+      baseRate: slab.baseRate,
+      fuelChargePercent: rateCard.zone.rateProvider.fuelChargePercent,
+      pssPerKg: rateCard.zone.rateProvider.pssPerKg,
       weightKg,
-      gstPercent: slab.gstPercent.toNumber(),
-      nationwideCut: slab.nationwideCut.toNumber(),
+      gstPercent: slab.gstPercent,
+      nationwideCut: slab.nationwideCut,
     });
 
     return {

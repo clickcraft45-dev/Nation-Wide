@@ -5,7 +5,7 @@ export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
       className={cn(
-        "rounded-lg border border-border bg-card text-card-foreground shadow-sm",
+        "glass rounded-2xl text-card-foreground",
         className,
       )}
       {...props}
@@ -51,7 +51,7 @@ export function CardFooter({
   return (
     <div
       className={cn(
-        "flex items-center border-t border-border px-5 py-3",
+        "flex items-center border-t border-[color:var(--glass-edge)] px-5 py-3",
         className,
       )}
       {...props}

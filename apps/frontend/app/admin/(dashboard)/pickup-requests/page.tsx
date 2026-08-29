@@ -78,8 +78,8 @@ export default function AdminPickupRequestsPage() {
 
       <div className="flex flex-col gap-3 sm:flex-row">
         <SearchInput
-          className="sm:max-w-xs"
-          placeholder="Search by customer name or phone…"
+          className="sm:w-72"
+          placeholder="Customer name or phone"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           aria-label="Search pickup requests"

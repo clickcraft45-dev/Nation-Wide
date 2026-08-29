@@ -9,6 +9,8 @@ import { apiClient, ApiError } from "@/lib/api-client";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input, Label, FieldError } from "@/components/ui/input";
+import { DateField } from "@/components/ui/date-field";
+import { PincodeInput } from "@/components/ui/pincode-input";
 import { NativeSelect } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/ui/page-state";
@@ -285,11 +287,17 @@ export default function PickupRequestPage() {
                   </div>
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="postal-code">Postal Code</Label>
-                  <Input
+                  <Label htmlFor="postal-code">PIN Code</Label>
+                  {/* Verified against India Post; a hit fills City/State so the address and the
+                      PIN the partner drives to can't disagree. */}
+                  <PincodeInput
                     id="postal-code"
                     value={pickupPostalCode}
-                    onChange={(e) => setPickupPostalCode(e.target.value)}
+                    onChange={setPickupPostalCode}
+                    onResolved={({ city, state }) => {
+                      setPickupCity((prev) => (prev.trim() === "" ? city : prev));
+                      setPickupState((prev) => (prev.trim() === "" ? state : prev));
+                    }}
                     error={Boolean(errors.pickupPostalCode)}
                   />
                   {errors.pickupPostalCode && <FieldError>{errors.pickupPostalCode}</FieldError>}
@@ -298,13 +306,14 @@ export default function PickupRequestPage() {
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <Label htmlFor="pickup-date">Pickup Date</Label>
-                    <Input
+                    <DateField
                       id="pickup-date"
-                      type="date"
+                      title="Pickup date"
+                      subtitle="When should we collect it?"
                       min={todayIso()}
                       max={maxPickupDateIso()}
                       value={pickupDate}
-                      onChange={(e) => setPickupDate(e.target.value)}
+                      onChange={setPickupDate}
                       error={Boolean(errors.pickupDate)}
                     />
                     {errors.pickupDate && <FieldError>{errors.pickupDate}</FieldError>}

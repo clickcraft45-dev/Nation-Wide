@@ -240,8 +240,8 @@ export class RateProvidersService {
 
   private toConfigSnapshot(provider: RateProvider): Prisma.InputJsonValue {
     return {
-      fuelChargePercent: provider.fuelChargePercent.toNumber(),
-      pssPerKg: provider.pssPerKg.toNumber(),
+      fuelChargePercent: provider.fuelChargePercent,
+      pssPerKg: provider.pssPerKg,
     };
   }
 

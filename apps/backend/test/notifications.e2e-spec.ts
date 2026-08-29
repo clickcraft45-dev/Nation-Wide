@@ -10,6 +10,7 @@ import request from 'supertest';
 import type { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/database/prisma.service';
+import { nextSequenceNumber } from '../src/modules/shipments/sequence';
 
 const TEST_STAFF_EMAIL = 'e2e-notifications-staff@nationwide.dev';
 const TEST_STAFF_PASSWORD = 'CorrectHorseBattery1';
@@ -228,6 +229,7 @@ describe('Notifications (e2e)', () => {
       data: {
         orderId: order.id,
         providerId,
+        sequenceNumber: await nextSequenceNumber(prisma),
         internalTrackingNumber: 'NW-NOTIF-E2E-1',
       },
     });

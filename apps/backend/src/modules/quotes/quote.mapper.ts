@@ -1,13 +1,9 @@
 import type {
   CustomerRateQuoteOptionDto,
-  FulfillmentMethodCode,
   PickupTimeSlot,
   QuoteAdminDetailDto,
   QuoteDto,
-  QuoteReviewReasonCode,
-  QuoteStatusCode,
   RateQuoteOptionDto,
-  ShipmentTypeCode,
 } from '@nationwide/shared-types';
 import type { QuoteWithCustomer } from './quotes.service';
 
@@ -20,15 +16,15 @@ function toAdminRateQuoteOptionDto(option: QuoteOption): RateQuoteOptionDto {
     rateProviderId: option.rateProviderId,
     rateProviderName: option.rateProvider.name,
     currency: option.currency,
-    baseRate: option.baseRate.toNumber(),
-    pssAmount: option.pssAmount.toNumber(),
-    fuelChargePercent: option.fuelChargePercent.toNumber(),
-    fuelChargeAmount: option.fuelChargeAmount.toNumber(),
-    taxableSubtotal: option.taxableSubtotal.toNumber(),
-    gstPercent: option.gstPercent.toNumber(),
-    gstAmount: option.gstAmount.toNumber(),
-    nationwideCut: option.nationwideCut.toNumber(),
-    finalPrice: option.finalPrice.toNumber(),
+    baseRate: option.baseRate,
+    pssAmount: option.pssAmount,
+    fuelChargePercent: option.fuelChargePercent,
+    fuelChargeAmount: option.fuelChargeAmount,
+    taxableSubtotal: option.taxableSubtotal,
+    gstPercent: option.gstPercent,
+    gstAmount: option.gstAmount,
+    nationwideCut: option.nationwideCut,
+    finalPrice: option.finalPrice,
     createdAt: option.createdAt.toISOString(),
   };
 }
@@ -42,7 +38,7 @@ function toCustomerRateQuoteOptionDto(
     rateProviderId: option.rateProviderId,
     rateProviderName: option.rateProvider.name,
     currency: option.currency,
-    finalPrice: option.finalPrice.toNumber(),
+    finalPrice: option.finalPrice,
     createdAt: option.createdAt.toISOString(),
   };
 }
@@ -61,7 +57,7 @@ function toQuoteDtoBase<TOption>(
     id: quote.id,
     customerId: quote.customerId,
     shipmentType: quote.shipmentType,
-    weightKg: quote.weightKg.toNumber(),
+    weightKg: quote.weightKg,
     description: quote.description,
     // Null on the new customer self-service flow (pickup logistics live on PickupRequest
     // instead) — originName is the sole discriminator since all origin fields go null together.
@@ -95,7 +91,7 @@ function toQuoteDtoBase<TOption>(
     pickupTimeSlot: quote.pickupTimeSlot as PickupTimeSlot | null,
     status: quote.status,
     reviewReason: quote.reviewReason,
-    quotedAmount: quote.quotedAmount ? quote.quotedAmount.toNumber() : null,
+    quotedAmount: quote.quotedAmount ? quote.quotedAmount : null,
     quotedCurrency: quote.quotedCurrency,
     quotedAt: quote.quotedAt ? quote.quotedAt.toISOString() : null,
     rejectionReason: quote.rejectionReason,

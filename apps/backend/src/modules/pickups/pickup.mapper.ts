@@ -1,9 +1,4 @@
-import type {
-  FulfillmentMethodCode,
-  PickupDto,
-  PickupStatusCode,
-  PickupTimeSlot,
-} from '@nationwide/shared-types';
+import type { PickupDto, PickupTimeSlot } from '@nationwide/shared-types';
 import type { PickupWithDetails } from './pickups.service';
 
 export function toPickupDto(pickup: PickupWithDetails): PickupDto {
@@ -20,9 +15,7 @@ export function toPickupDto(pickup: PickupWithDetails): PickupDto {
     assignedStaffEmail: pickup.assignedStaff?.email ?? null,
     confirmedByAdminEmail: pickup.confirmedByAdmin?.email ?? null,
     confirmedAt: pickup.confirmedAt ? pickup.confirmedAt.toISOString() : null,
-    weightVerifiedKg: pickup.weightVerifiedKg
-      ? pickup.weightVerifiedKg.toNumber()
-      : null,
+    weightVerifiedKg: pickup.weightVerifiedKg ? pickup.weightVerifiedKg : null,
     notes: pickup.notes,
     customerName: pickup.quote.customer.name,
     customerPhone: pickup.quote.customer.phone,
