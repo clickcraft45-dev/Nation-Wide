@@ -3,11 +3,10 @@ import {
   ConflictException,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
 import { RatesService } from './rates.service';
 
 function decimal(value: number) {
-  return new Prisma.Decimal(value);
+  return value;
 }
 
 function makeRate(overrides: Record<string, unknown> = {}) {

@@ -7,6 +7,7 @@ import type { TrackingResultDto } from '@nationwide/shared-types';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/database/prisma.service';
 import { RedisService } from '../src/database/redis.service';
+import { nextSequenceNumber } from '../src/modules/shipments/sequence';
 
 const TEST_CUSTOMER_PHONE = '+919876500003';
 const TEST_PROVIDER_CODE = 'ICL';
@@ -121,6 +122,7 @@ describe('Tracking (e2e)', () => {
       data: {
         orderId: order.id,
         providerId,
+        sequenceNumber: await nextSequenceNumber(prisma),
         internalTrackingNumber: 'NW-E2E-UNMAPPED',
       },
     });
@@ -141,6 +143,7 @@ describe('Tracking (e2e)', () => {
       data: {
         orderId: order.id,
         providerId,
+        sequenceNumber: await nextSequenceNumber(prisma),
         internalTrackingNumber: 'NW-E2E-MAPPED',
       },
     });

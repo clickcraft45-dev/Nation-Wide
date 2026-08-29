@@ -3,6 +3,22 @@ import type { Response } from 'express';
 import { PrismaService } from './database/prisma.service';
 import { RedisService } from './database/redis.service';
 
+// A probe has to answer inside the orchestrator's own timeout or the container is treated as
+// dead rather than degraded, and neither dependency bounds itself anywhere near that: Prisma's
+// MongoDB server-selection timeout is 30s, and an unreachable Redis is retried for ~10s. Both
+// were measured against this app. A dependency that has not answered in two seconds is not
+// healthy, whatever it says afterwards.
+const CHECK_TIMEOUT_MS = 2000;
+
+function withTimeout<T>(work: Promise<T>): Promise<T | 'timeout'> {
+  return Promise.race([
+    work,
+    new Promise<'timeout'>((resolve) =>
+      setTimeout(() => resolve('timeout'), CHECK_TIMEOUT_MS).unref(),
+    ),
+  ]);
+}
+
 interface HealthCheckResult {
   status: 'ok' | 'error';
   checks: {
@@ -43,8 +59,8 @@ export class HealthController {
 
   private async checkDatabase(): Promise<'ok' | 'error'> {
     try {
-      await this.prisma.$queryRaw`SELECT 1`;
-      return 'ok';
+      const result = await withTimeout(this.prisma.$runCommandRaw({ ping: 1 }));
+      return result === 'timeout' ? 'error' : 'ok';
     } catch {
       return 'error';
     }
@@ -52,7 +68,7 @@ export class HealthController {
 
   private async checkRedis(): Promise<'ok' | 'error'> {
     try {
-      const pong = await this.redis.ping();
+      const pong = await withTimeout(this.redis.ping());
       return pong === 'PONG' ? 'ok' : 'error';
     } catch {
       return 'error';

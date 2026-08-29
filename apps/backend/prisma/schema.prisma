@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "mongodb"
   url      = env("DATABASE_URL")
 }
 
@@ -132,7 +132,7 @@ enum PaymentMethod {
 // ---------------------------------------------------------------------------
 
 model Customer {
-  id                 String   @id @default(uuid())
+  id                 String   @id @default(uuid()) @map("_id")
   name               String
   phone              String   @unique // E.164 normalized
   email              String?  @unique // required + unique only for self-registered (login-capable) customers
@@ -154,7 +154,7 @@ model Customer {
 }
 
 model Order {
-  id         String      @id @default(uuid())
+  id         String      @id @default(uuid()) @map("_id")
   customerId String      @map("customer_id")
   status     OrderStatus @default(PENDING)
 
@@ -164,7 +164,7 @@ model Order {
   // needs a real transaction ledger.
   paymentStatus          PaymentStatus  @default(PENDING) @map("payment_status")
   paymentMethod          PaymentMethod? @map("payment_method")
-  paidAmount             Decimal?       @map("paid_amount") @db.Decimal(10, 2)
+  paidAmount             Float?       @map("paid_amount")
   paidAt                 DateTime?      @map("paid_at")
   paymentMarkedByAdminId String?        @map("payment_marked_by_admin_id")
 
@@ -187,11 +187,11 @@ model Order {
 /// flat/inline rather than a separate Address model, matching this codebase's existing
 /// non-normalized style (Customer.address is a single field too).
 model Quote {
-  id         String @id @default(uuid())
+  id         String @id @default(uuid()) @map("_id")
   customerId String @map("customer_id")
 
   shipmentType ShipmentTypeCode @map("shipment_type")
-  weightKg     Decimal          @map("weight_kg") @db.Decimal(10, 2)
+  weightKg     Float          @map("weight_kg")
   description  String?
 
   // Nullable — the new customer self-service flow (see PickupRequest) no longer collects these at
@@ -224,14 +224,14 @@ model Quote {
   fulfillmentMethod FulfillmentMethod? @map("fulfillment_method")
   // Only set when fulfillmentMethod == PICKUP; validated at the service layer (not a DB
   // constraint, matching how OrderStatus transitions aren't DB-enforced either).
-  pickupDate        DateTime?          @map("pickup_date") @db.Date
+  pickupDate        DateTime?          @map("pickup_date")
   pickupTimeSlot    String?            @map("pickup_time_slot") // '09:00-12:00' | '12:00-15:00' | '15:00-18:00'
 
   status        QuoteStatus        @default(SUBMITTED)
   reviewReason  QuoteReviewReason? @map("review_reason")
   internalNotes String?            @map("internal_notes") // staff-only, never serialized to customer DTOs
 
-  quotedAmount    Decimal?  @map("quoted_amount") @db.Decimal(10, 2)
+  quotedAmount    Float?  @map("quoted_amount")
   quotedCurrency  String?   @default("INR") @map("quoted_currency")
   quotedByAdminId String?   @map("quoted_by_admin_id")
   quotedAt        DateTime? @map("quoted_at")
@@ -254,7 +254,9 @@ model Quote {
   order            Order?            @relation(fields: [orderId], references: [id])
   pickup           Pickup?
   pickupRequest    PickupRequest?
-  selectedOption   RateQuoteOption?  @relation("QuoteSelectedOption", fields: [selectedOptionId], references: [id])
+  // NoAction because Quote.selectedOption ⇄ RateQuoteOption.quote is a reference cycle, and
+  // MongoDB emulates referential actions in the client rather than in the database.
+  selectedOption   RateQuoteOption?  @relation("QuoteSelectedOption", fields: [selectedOptionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   rateQuoteOptions RateQuoteOption[] @relation("QuoteRateOptions")
 
   @@index([customerId])
@@ -267,21 +269,21 @@ model Quote {
 /// identical status/confirmation metadata, so one model covers both rather than two
 /// near-duplicates).
 model Pickup {
-  id      String  @id @default(uuid())
+  id      String  @id @default(uuid()) @map("_id")
   quoteId String  @unique @map("quote_id")
   orderId String? @unique @map("order_id") // denorm convenience for the admin order-detail join
 
   method FulfillmentMethod
   status PickupStatus      @default(SCHEDULED) // only the terminal state differs: PICKED_UP vs DROPPED_OFF
 
-  scheduledDate     DateTime? @map("scheduled_date") @db.Date // PICKUP only, copied from the quote
+  scheduledDate     DateTime? @map("scheduled_date") // PICKUP only, copied from the quote
   scheduledTimeSlot String?   @map("scheduled_time_slot") // PICKUP only
 
   assignedStaffId    String?   @map("assigned_staff_id")
   confirmedByAdminId String?   @map("confirmed_by_admin_id") // who marked PICKED_UP / DROPPED_OFF
   confirmedAt        DateTime? @map("confirmed_at")
 
-  weightVerifiedKg Decimal? @map("weight_verified_kg") @db.Decimal(10, 2)
+  weightVerifiedKg Float? @map("weight_verified_kg")
   notes            String?
 
   createdAt DateTime @default(now()) @map("created_at")
@@ -306,7 +308,7 @@ model Pickup {
 /// Pickup row is created for orders that go through this flow — PickupRequest alone fully covers
 /// "how the parcel physically reached us" for this path.
 model PickupRequest {
-  id         String @id @default(uuid())
+  id         String @id @default(uuid()) @map("_id")
   quoteId    String @unique @map("quote_id")
   customerId String @map("customer_id")
 
@@ -320,8 +322,8 @@ model PickupRequest {
   rateProviderId    String?          @map("rate_provider_id")
   rateProviderName  String?          @map("rate_provider_name")
   shipmentType      ShipmentTypeCode @map("shipment_type")
-  estimatedWeightKg Decimal          @map("estimated_weight_kg") @db.Decimal(10, 2)
-  estimatedPrice    Decimal          @map("estimated_price") @db.Decimal(10, 2)
+  estimatedWeightKg Float          @map("estimated_weight_kg")
+  estimatedPrice    Float          @map("estimated_price")
   currency          String           @default("INR")
 
   // Pickup logistics — customer-entered, the "Pickup Request page" fields. No destination address
@@ -334,7 +336,7 @@ model PickupRequest {
   pickupCity         String    @map("pickup_city")
   pickupState        String    @map("pickup_state")
   pickupPostalCode   String    @map("pickup_postal_code")
-  pickupDate         DateTime? @map("pickup_date") @db.Date // null when dropAtWarehouse
+  pickupDate         DateTime? @map("pickup_date") // null when dropAtWarehouse
   pickupTimeSlot     String?   @map("pickup_time_slot") // null when dropAtWarehouse
   pickupInstructions String?   @map("pickup_instructions")
 
@@ -349,16 +351,16 @@ model PickupRequest {
   arrivedAt DateTime? @map("arrived_at")
 
   // Verification — Pickup Partner entered, at the customer's location.
-  verifiedWeightKg     Decimal?          @map("verified_weight_kg") @db.Decimal(10, 2)
+  verifiedWeightKg     Float?          @map("verified_weight_kg")
   verifiedShipmentType ShipmentTypeCode? @map("verified_shipment_type")
-  verifiedPrice        Decimal?          @map("verified_price") @db.Decimal(10, 2)
+  verifiedPrice        Float?          @map("verified_price")
   verificationNotes    String?           @map("verification_notes")
   verifiedAt           DateTime?         @map("verified_at")
 
   // Payment collection — reuses the existing PaymentMethod enum (Order also uses it), copied onto
   // the generated Order by acceptParcel so PATCH /admin/orders/:id/payment's fields aren't stale.
   paymentMethod      PaymentMethod? @map("payment_method")
-  collectedAmount    Decimal?       @map("collected_amount") @db.Decimal(10, 2)
+  collectedAmount    Float?       @map("collected_amount")
   paymentReference   String?        @map("payment_reference") // e.g. UPI transaction ref
   paymentNotes       String?        @map("payment_notes")
   paymentCollectedAt DateTime?      @map("payment_collected_at")
@@ -398,7 +400,7 @@ model PickupRequest {
 // ---------------------------------------------------------------------------
 
 model RateProvider {
-  id                String   @id @default(uuid())
+  id                String   @id @default(uuid()) @map("_id")
   code              String   @unique // e.g. 'FEDEX', 'UPS', 'DHL', 'DHL_EXPRESS'
   name              String
   isActive          Boolean  @default(true) @map("is_active")
@@ -406,8 +408,8 @@ model RateProvider {
   // instead of on every WeightSlab (see WeightSlab's doc comment). The pricing engine reads these
   // live at quote time; RateQuoteOption freezes a copy so past quotes never change retroactively
   // when an admin updates them.
-  fuelChargePercent Decimal  @default(0) @map("fuel_charge_percent") @db.Decimal(5, 2)
-  pssPerKg          Decimal  @default(0) @map("pss_per_kg") @db.Decimal(10, 2)
+  fuelChargePercent Float  @default(0) @map("fuel_charge_percent")
+  pssPerKg          Float  @default(0) @map("pss_per_kg")
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
 
@@ -420,7 +422,7 @@ model RateProvider {
 }
 
 model Country {
-  id        String   @id @default(uuid())
+  id        String   @id @default(uuid()) @map("_id")
   code      String   @unique // ISO 3166-1 alpha-2
   name      String
   isActive  Boolean  @default(true) @map("is_active")
@@ -436,7 +438,7 @@ model Country {
 /// DHL "Zone 11") — zone definitions are never shared across providers, see ZoneCountry. The
 /// admin manages zones directly (unlike RateCard, which stays an invisible grouping key).
 model Zone {
-  id             String   @id @default(uuid())
+  id             String   @id @default(uuid()) @map("_id")
   rateProviderId String   @map("rate_provider_id")
   name           String
   createdAt      DateTime @default(now()) @map("created_at")
@@ -456,7 +458,7 @@ model Zone {
 /// key (see ZonesService.assignCountry), never a find-then-write, to avoid a TOCTOU race on the
 /// first-ever assignment of a country under a provider.
 model ZoneCountry {
-  id             String @id @default(uuid())
+  id             String @id @default(uuid()) @map("_id")
   zoneId         String @map("zone_id")
   countryId      String @map("country_id")
   rateProviderId String @map("rate_provider_id")
@@ -477,7 +479,7 @@ model ZoneCountry {
 /// zoneId -> Zone.rateProviderId, and duplicating it here would let the two silently diverge
 /// (Postgres can't enforce two FKs agree with each other declaratively).
 model RateCard {
-  id               String   @id @default(uuid())
+  id               String   @id @default(uuid()) @map("_id")
   zoneId           String   @map("zone_id")
   shipmentType     String   @map("shipment_type") // DOCUMENT | PARCEL | PACKAGE — never OTHER
   currency         String   @default("INR")
@@ -505,13 +507,13 @@ model RateCard {
 /// with weight, not with the country/weight-slab combination), so they live on RateProvider
 /// instead and the pricing engine reads them from there at quote time.
 model WeightSlab {
-  id               String   @id @default(uuid())
+  id               String   @id @default(uuid()) @map("_id")
   rateCardId       String   @map("rate_card_id")
-  weightFromKg     Decimal  @map("weight_from_kg") @db.Decimal(10, 2)
-  weightToKg       Decimal  @map("weight_to_kg") @db.Decimal(10, 2)
-  baseRate         Decimal  @map("base_rate") @db.Decimal(10, 2)
-  gstPercent       Decimal  @default(0) @map("gst_percent") @db.Decimal(5, 2)
-  nationwideCut    Decimal  @default(0) @map("nationwide_cut") @db.Decimal(10, 2)
+  weightFromKg     Float  @map("weight_from_kg")
+  weightToKg       Float  @map("weight_to_kg")
+  baseRate         Float  @map("base_rate")
+  gstPercent       Float  @default(0) @map("gst_percent")
+  nationwideCut    Float  @default(0) @map("nationwide_cut")
   isActive         Boolean  @default(true) @map("is_active")
   createdByAdminId String?  @map("created_by_admin_id")
   updatedByAdminId String?  @map("updated_by_admin_id")
@@ -531,24 +533,24 @@ model WeightSlab {
 /// percentage value is duplicated here (not just referenced) so a historical quote never changes
 /// when the admin later edits or deactivates the rate it was computed from.
 model RateQuoteOption {
-  id                String   @id @default(uuid())
+  id                String   @id @default(uuid()) @map("_id")
   quoteId           String   @map("quote_id")
   rateProviderId    String   @map("rate_provider_id")
   rateCardId        String   @map("rate_card_id")
   weightSlabId      String   @map("weight_slab_id")
   currency          String
-  baseRate          Decimal  @map("base_rate") @db.Decimal(10, 2)
-  pssAmount         Decimal  @map("pss_amount") @db.Decimal(10, 2)
-  fuelChargePercent Decimal  @map("fuel_charge_percent") @db.Decimal(5, 2)
-  fuelChargeAmount  Decimal  @map("fuel_charge_amount") @db.Decimal(10, 2)
-  taxableSubtotal   Decimal  @map("taxable_subtotal") @db.Decimal(10, 2)
-  gstPercent        Decimal  @map("gst_percent") @db.Decimal(5, 2)
-  gstAmount         Decimal  @map("gst_amount") @db.Decimal(10, 2)
-  nationwideCut     Decimal  @map("nationwide_cut") @db.Decimal(10, 2)
-  finalPrice        Decimal  @map("final_price") @db.Decimal(10, 2)
+  baseRate          Float  @map("base_rate")
+  pssAmount         Float  @map("pss_amount")
+  fuelChargePercent Float  @map("fuel_charge_percent")
+  fuelChargeAmount  Float  @map("fuel_charge_amount")
+  taxableSubtotal   Float  @map("taxable_subtotal")
+  gstPercent        Float  @map("gst_percent")
+  gstAmount         Float  @map("gst_amount")
+  nationwideCut     Float  @map("nationwide_cut")
+  finalPrice        Float  @map("final_price")
   createdAt         DateTime @default(now()) @map("created_at")
 
-  quote           Quote        @relation("QuoteRateOptions", fields: [quoteId], references: [id])
+  quote           Quote        @relation("QuoteRateOptions", fields: [quoteId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   rateProvider    RateProvider @relation(fields: [rateProviderId], references: [id])
   rateCard        RateCard     @relation(fields: [rateCardId], references: [id])
   weightSlab      WeightSlab   @relation(fields: [weightSlabId], references: [id])
@@ -559,7 +561,7 @@ model RateQuoteOption {
 }
 
 model ShippingProvider {
-  id           String   @id @default(uuid())
+  id           String   @id @default(uuid()) @map("_id")
   code         String   @unique // e.g. 'ICL'
   name         String
   adapterClass String   @map("adapter_class") // e.g. 'ICLAdapter'
@@ -577,13 +579,13 @@ model ShippingProvider {
 }
 
 model Shipment {
-  id                     String    @id @default(uuid())
+  id                     String    @id @default(uuid()) @map("_id")
   orderId                String    @map("order_id")
   internalTrackingNumber String    @unique @map("internal_tracking_number")
   // DB-assigned, gapless-enough monotonic counter backing internalTrackingNumber's numeric
   // suffix (see tracking-number.ts) — lets staff/customers eyeball creation order and total
   // parcel volume from the tracking number itself, per explicit product decision.
-  sequenceNumber         Int       @unique @default(autoincrement()) @map("sequence_number")
+  sequenceNumber         Int       @unique @map("sequence_number")
   providerId             String    @map("provider_id")
   currentStatus          String?   @map("current_status") // denormalized cache of latest canonical status code
   lastSyncedAt           DateTime? @map("last_synced_at")
@@ -604,7 +606,7 @@ model Shipment {
 /// One Shipment can map to many ExternalTrackingNumbers (one per provider/leg used),
 /// even though today it is effectively 1:1 with ICL. See architecture doc Section 10.
 model ExternalTrackingNumber {
-  id                     String   @id @default(uuid())
+  id                     String   @id @default(uuid()) @map("_id")
   shipmentId             String   @map("shipment_id")
   providerId             String   @map("provider_id")
   externalTrackingNumber String   @map("external_tracking_number")
@@ -621,7 +623,7 @@ model ExternalTrackingNumber {
 }
 
 model TrackingStatus {
-  id           String @id @default(uuid())
+  id           String @id @default(uuid()) @map("_id")
   code         String @unique // PICKED_UP, IN_TRANSIT, OUT_FOR_DELIVERY, DELIVERED, EXCEPTION, ...
   displayLabel String @map("display_label")
 
@@ -632,7 +634,7 @@ model TrackingStatus {
 
 /// Append-only permanent tracking history for a shipment.
 model TrackingEvent {
-  id                       String   @id @default(uuid())
+  id                       String   @id @default(uuid()) @map("_id")
   shipmentId               String   @map("shipment_id")
   providerId               String   @map("provider_id")
   externalTrackingNumberId String?  @map("external_tracking_number_id")
@@ -654,7 +656,7 @@ model TrackingEvent {
 
 /// Audit/debug trail for every outbound call to a shipping provider.
 model ApiRequestLog {
-  id              String   @id @default(uuid())
+  id              String   @id @default(uuid()) @map("_id")
   providerId      String   @map("provider_id")
   shipmentId      String?  @map("shipment_id")
   requestUrl      String   @map("request_url")
@@ -676,7 +678,7 @@ model ApiRequestLog {
 // ---------------------------------------------------------------------------
 
 model AdminUser {
-  id                 String    @id @default(uuid())
+  id                 String    @id @default(uuid()) @map("_id")
   email              String    @unique
   passwordHash       String    @map("password_hash")
   role               AdminRole @default(STAFF)
@@ -709,7 +711,7 @@ model AdminUser {
 // ---------------------------------------------------------------------------
 
 model Notification {
-  id                String              @id @default(uuid())
+  id                String              @id @default(uuid()) @map("_id")
   customerId        String              @map("customer_id")
   channel           NotificationChannel
   template          String
@@ -732,7 +734,7 @@ model Notification {
 // ---------------------------------------------------------------------------
 
 model AuditLog {
-  id        String   @id @default(uuid())
+  id        String   @id @default(uuid()) @map("_id")
   actorId   String   @map("actor_id")
   action    String
   entity    String
@@ -757,7 +759,7 @@ model AuditLog {
 /// config that automatically populates every generated Rate Card PDF; never hardcoded in the
 /// template itself so changing it here affects every future generation without a deploy.
 model CompanySettings {
-  id                    String   @id @default(uuid())
+  id                    String   @id @default(uuid()) @map("_id")
   companyName           String   @default("NationWide")
   tagline               String?
   // Relative path under the backend's storage/ directory, e.g. "logos/<uuid>.png" — the PDF
@@ -769,11 +771,11 @@ model CompanySettings {
   supportEmail          String?  @map("support_email")
   supportPhone          String?  @map("support_phone")
   address               String?
-  termsAndConditions    String?  @map("terms_and_conditions") @db.Text
-  footerNotes           String?  @map("footer_notes") @db.Text
-  insuranceDisclaimer   String?  @map("insurance_disclaimer") @db.Text
-  legalDisclaimer       String?  @map("legal_disclaimer") @db.Text
-  restrictedItemsNotice String?  @map("restricted_items_notice") @db.Text
+  termsAndConditions    String?  @map("terms_and_conditions")
+  footerNotes           String?  @map("footer_notes")
+  insuranceDisclaimer   String?  @map("insurance_disclaimer")
+  legalDisclaimer       String?  @map("legal_disclaimer")
+  restrictedItemsNotice String?  @map("restricted_items_notice")
   updatedByAdminId      String?  @map("updated_by_admin_id")
   createdAt             DateTime @default(now()) @map("created_at")
   updatedAt             DateTime @updatedAt @map("updated_at")
@@ -790,14 +792,14 @@ model CompanySettings {
 /// deliberately do NOT create a row here, so an admin iterating on a preview doesn't clutter
 /// history.
 model RateCardDocument {
-  id                 String   @id @default(uuid())
+  id                 String   @id @default(uuid()) @map("_id")
   rateProviderId     String   @map("rate_provider_id")
   shipmentType       String   @map("shipment_type") // DOCUMENT | PARCEL | PACKAGE
   // Countries are selected directly (no required zone in the admin UI) — each may resolve to a
   // different zone/rate card under the provider. Per-country transit time lives in `snapshot`
   // only (see below), not as a column, since it's per-country rather than per-document.
   countryIds         String[] @map("country_ids")
-  effectiveDate      DateTime @map("effective_date") @db.Date
+  effectiveDate      DateTime @map("effective_date")
   templateKey        String   @default("CLASSIC") @map("template_key")
   version            Int
   pdf                Bytes
@@ -813,4 +815,14 @@ model RateCardDocument {
 
   @@index([rateProviderId])
   @@map("rate_card_documents")
+}
+
+/// Monotonic sequence counters, one document per sequence name. MongoDB has no autoincrement,
+/// so ShipmentsService bumps this with a single atomic $inc (see nextSequenceNumber) and uses
+/// the returned value as Shipment.sequenceNumber — same guarantee the Postgres sequence gave.
+model Counter {
+  id    String @id @map("_id") /// the sequence name, e.g. "shipment"
+  value Int    @default(0)
+
+  @@map("counters")
 }

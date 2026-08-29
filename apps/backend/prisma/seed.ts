@@ -2,11 +2,20 @@ import { randomUUID } from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { formatInternalTrackingNumber } from '../src/modules/shipments/tracking-number';
+import { nextSequenceNumber } from '../src/modules/shipments/sequence';
 
 const prisma = new PrismaClient();
 
 const SEED_ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL ?? 'admin@nationwide.dev';
 const SEED_ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD ?? 'ChangeMe123!';
+
+// The demo Customer below is login-capable (email + passwordHash), so all three roles the app
+// has — ADMIN, PICKUP_PARTNER, CUSTOMER — can be signed into straight after a seed. Customers
+// authenticate off the customers table, not admin_users; AuthService.findAccountByEmail checks
+// admin_users first and falls through, so these emails must never collide with the two above.
+const SEED_CUSTOMER_EMAIL = process.env.SEED_CUSTOMER_EMAIL ?? 'customer@nationwide.dev';
+const SEED_CUSTOMER_PASSWORD = process.env.SEED_CUSTOMER_PASSWORD ?? 'ChangeMe123!';
+const SEED_CUSTOMER_PHONE = '+911234500000';
 
 async function main() {
   const passwordHash = await bcrypt.hash(SEED_ADMIN_PASSWORD, 10);
@@ -85,16 +94,23 @@ async function main() {
   console.log(`Seeded ${TRACKING_STATUSES.length} canonical tracking statuses.`);
 
   // Local-dev-only demo data so the /track page has a real tracking number to look up.
+  // Unlike the admin upsert above, this one backfills on update: the row predates the seeded
+  // password, and a staff-created Customer with no passwordHash is rejected at login as if it
+  // didn't exist (AuthService.authenticate). Re-running the seed is how you reset it.
+  const customerPasswordHash = await bcrypt.hash(SEED_CUSTOMER_PASSWORD, 10);
   const demoCustomer = await prisma.customer.upsert({
-    where: { phone: '+911234500000' },
-    update: {},
+    where: { phone: SEED_CUSTOMER_PHONE },
+    update: { email: SEED_CUSTOMER_EMAIL, passwordHash: customerPasswordHash, isActive: true },
     create: {
       name: 'Demo Customer',
-      phone: '+911234500000',
-      consentSource: 'staff_entry',
+      phone: SEED_CUSTOMER_PHONE,
+      email: SEED_CUSTOMER_EMAIL,
+      passwordHash: customerPasswordHash,
+      consentSource: 'signup_form',
       consentGivenAt: new Date(),
     },
   });
+  console.log(`Seeded customer user: ${demoCustomer.email} (role: CUSTOMER)`);
 
   const demoOrder = await prisma.order.upsert({
     where: { id: '00000000-0000-0000-0000-000000000001' },
@@ -113,6 +129,7 @@ async function main() {
     create: {
       orderId: demoOrder.id,
       providerId: iclProvider.id,
+      sequenceNumber: await nextSequenceNumber(prisma),
       internalTrackingNumber: demoInternalTrackingNumber,
     },
   });
@@ -174,6 +191,18 @@ async function main() {
   if (process.env.SEED_BULK_DEMO_DATA === 'true') {
     await seedBulkDemoData(admin.id, iclProvider.id);
   }
+
+  console.log();
+  console.log('Dev login credentials (override with the SEED_* env vars):');
+  console.table([
+    { role: 'ADMIN', email: SEED_ADMIN_EMAIL, password: SEED_ADMIN_PASSWORD },
+    {
+      role: 'PICKUP_PARTNER',
+      email: SEED_PICKUP_PARTNER_EMAIL,
+      password: SEED_PICKUP_PARTNER_PASSWORD,
+    },
+    { role: 'CUSTOMER', email: SEED_CUSTOMER_EMAIL, password: SEED_CUSTOMER_PASSWORD },
+  ]);
 }
 
 const FIRST_NAMES = [
@@ -244,6 +273,7 @@ async function seedBulkDemoData(adminId: string, providerId: string): Promise<vo
       data: {
         orderId: order.id,
         providerId,
+        sequenceNumber: await nextSequenceNumber(prisma),
         internalTrackingNumber: `PENDING-${randomUUID()}`,
         currentStatus: status === 'CANCELLED' ? null : pick(TRACKING_CODES),
         createdAt,

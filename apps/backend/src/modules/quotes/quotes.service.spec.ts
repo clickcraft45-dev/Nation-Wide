@@ -7,7 +7,7 @@ import { Prisma } from '@prisma/client';
 import { QuotesService } from './quotes.service';
 
 function decimal(value: number) {
-  return new Prisma.Decimal(value);
+  return value;
 }
 
 function submissionKeyCollisionError(): Prisma.PrismaClientKnownRequestError {

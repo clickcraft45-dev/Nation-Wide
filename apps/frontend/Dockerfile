@@ -14,6 +14,14 @@ RUN npm ci
 FROM deps AS build
 COPY packages/shared-types packages/shared-types
 COPY apps/frontend apps/frontend
+# NEXT_PUBLIC_* variables are inlined into the client bundle by `next build`, so they have to be
+# present at BUILD time — setting them on the container at runtime does nothing. They arrive as
+# build args (docker-compose passes them under build.args) rather than runtime env vars, which is
+# what the compose file used to do and why a containerised frontend always called localhost:4000.
+ARG NEXT_PUBLIC_API_BASE_URL=http://localhost:4000/api/v1
+ARG NEXT_PUBLIC_SITE_URL=http://localhost:3004
+ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
+ENV NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL
 RUN npm run build --workspace=packages/shared-types
 # next.config.ts sets output: "standalone" — traces only the node_modules this app actually
 # needs into .next/standalone, so the runtime stage never ships the full monorepo node_modules.

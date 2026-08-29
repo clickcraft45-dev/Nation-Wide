@@ -3,11 +3,18 @@ import { cn } from "@/lib/utils/cn";
 /**
  * NationWide Logistics logo.
  *
- * PLACEHOLDER MARK — no final logo files exist yet (confirmed with the brand owner). This is a
- * coded stand-in built from the brief's described elements (N monogram, globe/motion swoosh,
- * directional arrow) so every screen has a working, on-brand mark today. Swap the internals of
- * `NwMark` for the real asset when it's supplied — every call site already goes through this one
- * component, so nothing downstream needs to change.
+ * THE MARK — "Rise N". One continuous stroke draws the N (stem, diagonal, stem), and an
+ * arrowhead crowns the right stem so that stem-plus-head reads as an upward arrow and as the
+ * letter at the same time. Two shapes, one stroke weight, one ink: the previous placeholder
+ * stacked three separate ideas (monogram + globe swoosh + a detached arrow breaking the badge
+ * edge), which turned to mud at favicon size and needed a second colour to stay legible.
+ *
+ * Constraints it is built to (docs/BRAND_BRIEF_PROMPT.md): legible at 16px, recognisable in a
+ * single flat ink, no gradient and no baked-in shadow, and readable embossed on black glass.
+ *
+ * Every screen renders the mark through this one component, so retoning or replacing it happens
+ * here and nowhere else. `app/icon.svg` and `app/apple-icon.png` carry the same geometry as
+ * static files, because Next.js needs those on disk — keep the three in sync.
  */
 
 export type LogoVariant =
@@ -16,7 +23,7 @@ export type LogoVariant =
   | "stacked" // mark above wordmark, centered — auth screens, splash
   | "compact" // mark + "NationWide" only, no subheading — tight mobile topbars
   | "mono" // single dark ink, no background fill — print / light surfaces
-  | "reverse"; // single white ink, no background fill — dark/navy surfaces
+  | "reverse"; // single white ink, no background fill — dark/near-black surfaces
 
 export type LogoSize = "sm" | "md" | "lg";
 
@@ -26,11 +33,18 @@ const WORDMARK_TEXT: Record<LogoSize, string> = {
   md: "text-base",
   lg: "text-xl",
 };
+// Floor of 9px: the eyebrow is uppercase and tracked out 0.22em, and below 9px that combination
+// stops being letters and becomes texture.
 const SUBHEADING_TEXT: Record<LogoSize, string> = {
-  sm: "text-[8px]",
-  md: "text-[9px]",
+  sm: "text-[9px]",
+  md: "text-[10px]",
   lg: "text-[11px]",
 };
+
+/** The N, drawn in one unbroken stroke: up the left stem, down the diagonal, up the right stem. */
+const N_PATH = "M10.5 30V14L25.5 30V10";
+/** The arrowhead, apex landing on the right stem's top cap so stem and head fuse into one arrow. */
+const ARROW_PATH = "M21.9 13.6L25.5 10L29.1 13.6";
 
 function NwMark({
   size,
@@ -41,43 +55,31 @@ function NwMark({
   tone: "brand" | "mono" | "reverse";
   className?: string;
 }) {
-  // "brand": full-color badge (Logistics Blue) with a white glyph and a Bright Blue arrow accent.
-  // "mono"/"reverse": outline-only glyph in a single ink color, no badge fill — for print and
-  // dark surfaces respectively, per the brief's required logo variants.
-  const flat = tone !== "brand";
+  // "brand": near-black rounded-square badge carrying a white glyph.
+  // "mono"/"reverse": the bare glyph in a single ink, no badge — for print and for the dark
+  // panels respectively, per the brief's required variants.
+  const badge = tone === "brand";
 
   return (
     <svg
       viewBox="0 0 40 40"
       width={size}
       height={size}
-      className={cn(flat && (tone === "reverse" ? "text-white" : "text-foreground"), className)}
+      className={cn(!badge && (tone === "reverse" ? "text-white" : "text-foreground"), className)}
       role="img"
       aria-label="NationWide Logistics"
     >
-      {!flat && <rect x="1" y="1" width="38" height="38" rx="10" className="fill-brand-blue" />}
-
-      {/* Globe meridian / motion swoosh */}
-      <path
-        d="M7 27C13 16 27 13 34 18"
+      {badge && <rect x="1" y="1" width="38" height="38" rx="10" className="fill-brand-navy" />}
+      <g
         fill="none"
-        strokeWidth="2.25"
+        strokeWidth="3.4"
         strokeLinecap="round"
-        className={flat ? "stroke-current opacity-40" : "stroke-white opacity-45"}
-      />
-
-      {/* N monogram, built from two verticals + a diagonal */}
-      <g className={flat ? "fill-current" : "fill-white"}>
-        <rect x="9" y="10" width="4.6" height="20" rx="1" />
-        <rect x="26.4" y="10" width="4.6" height="20" rx="1" />
-        <polygon points="13.6,10 19.6,10 26.4,30 20.4,30" />
+        strokeLinejoin="round"
+        className={badge ? "stroke-white" : "stroke-current"}
+      >
+        <path d={N_PATH} />
+        <path d={ARROW_PATH} />
       </g>
-
-      {/* Directional arrow — upward/right movement, breaking past the mark's top-right edge */}
-      <polygon
-        points="28.5,9.5 36,2 36,9.5"
-        className={flat ? "fill-current opacity-80" : "fill-brand-blue-bright"}
-      />
     </svg>
   );
 }
@@ -96,15 +98,7 @@ export function Logo({
 }) {
   const tone = variant === "reverse" ? "reverse" : variant === "mono" ? "mono" : "brand";
   const iconPx = ICON_PX[size];
-
-  const wordmarkColor =
-    tone === "reverse"
-      ? "text-white"
-      : tone === "mono"
-        ? "text-foreground"
-        : "text-foreground";
-  const subheadingColor =
-    tone === "reverse" ? "text-sidebar-foreground" : "text-muted-foreground";
+  const onDark = tone === "reverse";
 
   if (variant === "icon") {
     return <NwMark size={iconPx} tone={tone} className={className} />;
@@ -112,7 +106,13 @@ export function Logo({
 
   const wordmark = (
     <span className={cn("flex flex-col leading-none", variant === "stacked" && "items-center")}>
-      <span className={cn("font-semibold tracking-tight", WORDMARK_TEXT[size], wordmarkColor)}>
+      <span
+        className={cn(
+          "font-semibold tracking-tight",
+          WORDMARK_TEXT[size],
+          onDark ? "text-white" : "text-foreground",
+        )}
+      >
         NationWide
       </span>
       {variant !== "compact" && (
@@ -120,7 +120,7 @@ export function Logo({
           className={cn(
             "mt-0.5 font-semibold uppercase tracking-[0.22em]",
             SUBHEADING_TEXT[size],
-            subheadingColor,
+            onDark ? "text-sidebar-foreground" : "text-muted-foreground",
           )}
         >
           Logistics
@@ -130,7 +130,7 @@ export function Logo({
         <span
           className={cn(
             "mt-1.5 text-xs font-normal",
-            tone === "reverse" ? "text-sidebar-foreground" : "text-muted-foreground",
+            onDark ? "text-sidebar-foreground" : "text-muted-foreground",
           )}
         >
           Delivering trust worldwide

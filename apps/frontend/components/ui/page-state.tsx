@@ -14,7 +14,7 @@ export function EmptyState({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border py-16 text-center">
+    <div className="glass flex flex-col items-center justify-center gap-3 rounded-2xl border-dashed py-16 text-center">
       <div className="text-muted-foreground">
         {icon ?? <Inbox className="h-8 w-8" aria-hidden />}
       </div>
@@ -37,7 +37,7 @@ export function ErrorState({
   onRetry?: () => void;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-danger-border bg-danger-bg py-16 text-center">
+    <div className="glass-pill flex flex-col items-center justify-center gap-3 rounded-2xl border border-danger-border bg-[color-mix(in_srgb,var(--danger-bg)_84%,transparent)] py-16 text-center">
       <AlertTriangle className="h-8 w-8 text-danger" aria-hidden />
       <p className="max-w-sm text-sm text-danger">{message}</p>
       {onRetry && (

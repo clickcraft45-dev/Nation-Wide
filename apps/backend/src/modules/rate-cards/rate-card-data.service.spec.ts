@@ -1,9 +1,8 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
 import { RateCardDataService } from './rate-card-data.service';
 
 function decimal(value: number) {
-  return new Prisma.Decimal(value);
+  return value;
 }
 
 const PROVIDER = { id: 'provider-1', name: 'FedEx' };

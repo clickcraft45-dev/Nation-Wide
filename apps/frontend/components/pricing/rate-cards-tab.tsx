@@ -12,6 +12,7 @@ import { apiClient, ApiError } from "@/lib/api-client";
 import { useToast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
 import { Input, Label, FieldError } from "@/components/ui/input";
+import { DateField } from "@/components/ui/date-field";
 import { NativeSelect } from "@/components/ui/select";
 import { SearchInput } from "@/components/ui/search-input";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -277,11 +278,12 @@ export function RateCardsTab() {
 
         <div className="space-y-1.5">
           <Label htmlFor="rc-date">Effective From</Label>
-          <Input
+          <DateField
             id="rc-date"
-            type="date"
+            title="Effective from"
+            subtitle="Date this rate card takes over"
             value={effectiveDate}
-            onChange={(e) => setEffectiveDate(e.target.value)}
+            onChange={setEffectiveDate}
           />
         </div>
 

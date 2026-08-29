@@ -329,7 +329,7 @@ export class QuotesService {
       // no order until a Pickup Partner verifies and accepts (see PickupRequestsService).
       await this.transitionToPendingPickupRequest(id, 'RATED', customerId, {
         selectedOptionId: option.id,
-        quotedAmount: option.finalPrice.toNumber(),
+        quotedAmount: option.finalPrice,
         quotedCurrency: option.currency,
       });
     }

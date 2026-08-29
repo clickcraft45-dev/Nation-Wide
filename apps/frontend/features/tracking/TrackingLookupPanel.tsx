@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import confetti from "canvas-confetti";
 import { useTrackingLookup } from "./use-tracking-lookup";
 import { TrackingSearchForm } from "./TrackingSearchForm";
 import { TrackingTimeline } from "./TrackingTimeline";
@@ -24,6 +25,26 @@ export function TrackingLookupPanel({
 }: TrackingLookupPanelProps) {
   const { state, search } = useTrackingLookup();
   const hasAutoSearched = useRef(false);
+  const celebrated = useRef<string | null>(null);
+
+  // A delivered parcel is the one genuinely good outcome of this form — mark it. Keyed on the
+  // tracking number so re-renders don't re-fire, and skipped entirely under reduced motion.
+  useEffect(() => {
+    if (state.status !== "success" || state.result.currentStatus !== "DELIVERED") return;
+    const id = state.result.internalTrackingNumber;
+    if (celebrated.current === id) return;
+    celebrated.current = id;
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches) return;
+
+    void confetti({
+      particleCount: 70,
+      spread: 62,
+      startVelocity: 28,
+      scalar: 0.85,
+      origin: { y: 0.7 },
+      colors: ["#ffffff", "#d4d4d8", "#a1a1aa", "#52525b", "#18181b"],
+    });
+  }, [state]);
 
   useEffect(() => {
     if (initialTrackingId && !hasAutoSearched.current) {

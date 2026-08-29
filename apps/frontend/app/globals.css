@@ -1,22 +1,28 @@
 @import "tailwindcss";
 
 :root {
-  /* NationWide Logistics brand palette. Keep variable NAMES stable — every component consumes
-     these via @theme inline below, so retoning the brand only ever happens here. */
-  --background: #f7f9fc;
-  --foreground: #172033;
+  /* NationWide Logistics brand palette — monochrome.
+     White is the primary surface, near-black the ink and the action colour, and everything
+     between is a shade of the same neutral. Keep variable NAMES stable: every component consumes
+     these via @theme inline below, so retoning the brand only ever happens here.
+
+     STATUS COLOURS ARE DELIBERATELY NOT MONOCHROME. Delivered / failed / pending carry operational
+     meaning across the admin and tracking screens, and greying them out would leave colour-blind
+     and hurried readers with nothing but the label to go on. They stay green / red / amber. */
+  --background: #ffffff;
+  --foreground: #0b0b0c;
 
   --card: #ffffff;
-  --card-foreground: #172033;
+  --card-foreground: #0b0b0c;
 
-  --muted: #eef2f7;
-  --muted-foreground: #5b667a;
+  --muted: #f4f4f5;
+  --muted-foreground: #6b6b72;
 
-  --border: #e2e8f0;
-  --ring: #1e88e5;
+  --border: #e4e4e7;
+  --ring: #0b0b0c;
 
-  --primary: #1261a0;
-  --primary-hover: #0d4c80;
+  --primary: #18181b;
+  --primary-hover: #000000;
   --primary-foreground: #ffffff;
 
   --success: #15803d;
@@ -31,23 +37,24 @@
   --danger-bg: #fdecec;
   --danger-border: #f2bcbc;
 
-  --info: #1261a0;
-  --info-bg: #e9f2fa;
-  --info-border: #bcd8ec;
+  --info: #27272a;
+  --info-bg: #f4f4f5;
+  --info-border: #d4d4d8;
 
-  /* Deep Navy brand panels — the admin nav rail, the marketing landing page's hero band, and the
-     login screen's split panel all share this treatment, per the approved reference design. */
-  --sidebar-bg: #0b2a4a;
-  --sidebar-foreground: #a9c0d6;
+  /* Near-black brand panels — the admin nav rail, the marketing hero band, the FAQ and footer
+     bands, and the login screen's split panel all share this treatment. */
+  --sidebar-bg: #0b0b0c;
+  --sidebar-foreground: #a1a1aa;
   --sidebar-foreground-active: #ffffff;
-  --sidebar-accent: #163f66;
-  --sidebar-border: #163f66;
+  --sidebar-accent: #1c1c1f;
+  --sidebar-border: #27272a;
 
-  /* Raw brand colors for brand-only surfaces (logo, marketing accents) that shouldn't be
-     reassigned if a semantic token above is retoned later. */
-  --brand-navy: #0b2a4a;
-  --brand-blue: #1261a0;
-  --brand-blue-bright: #1e88e5;
+  /* Raw brand shades for brand-only surfaces (logo, marketing accents) that shouldn't be
+     reassigned if a semantic token above is retoned later. `brand-blue-bright` keeps its name for
+     compatibility but is now the light accent used ON the near-black panels. */
+  --brand-navy: #0b0b0c;
+  --brand-blue: #18181b;
+  --brand-blue-bright: #d4d4d8;
 }
 
 @theme inline {
@@ -94,6 +101,424 @@
    navy was fighting that design outright — every surface (page background, table rows, cards)
    would flip dark for any visitor on a dark-mode system, not just the sidebar. If a real
    dark-mode *feature* is ever wanted, it should be an explicit in-app toggle, not automatic. */
+
+/* ==========================================================================
+   LIQUID GLASS — the app's surface material.
+
+   The marketing site already used this material (.glass-panel, LiquidButton's refracting rim);
+   this brings the admin, customer and pickup-partner apps onto the same language instead of
+   leaving them on flat white cards.
+
+   Three rules govern every class below:
+
+   1. GLASS GOES ON SURFACES, NOT ON CONTENT. Chrome, cards, dialogs, menus, pills — yes. Table
+      rows — no. `backdrop-filter` makes the compositor re-sample everything behind the element
+      on every frame, so fifty blurred rows turn a scroll into a slideshow. Rows get a flat rgba
+      tint instead, which is visually identical over an already-blurred parent.
+
+   2. ALPHA IS AN ACCESSIBILITY BUDGET, NOT A TASTE KNOB. Body ink is #0b0b0c and has to stay at
+      or above 4.5:1 wherever it lands. Over the ambient backdrop's darkest well, 0.62 white is
+      the floor that holds — which is why the card tint is not the prettier, thinner 0.4.
+
+   3. EVERY EFFECT DEGRADES. prefers-reduced-transparency, browsers without backdrop-filter, and
+      prefers-reduced-motion each get a solid, still, fully legible surface — see the bottom of
+      this block. The design has to survive all three, not just look right in Chrome.
+   ========================================================================== */
+
+:root {
+  /* Blur depth by elevation. Past ~32px the backdrop stops reading as "behind glass" and starts
+     reading as a grey fill — all of the cost, none of the effect. */
+  --glass-blur-field: 8px;
+  --glass-blur-surface: 18px;
+  --glass-blur-raised: 28px;
+
+  /* Saturation lift is what separates real glass from a grey overlay: blurring alone desaturates
+     whatever is behind, so it gets pushed back up. Subtle here, because the palette is monochrome
+     and the only thing to recover is the backdrop's faint neutral tinting. */
+  --glass-saturate: 1.6;
+
+  --glass-surface: rgba(255, 255, 255, 0.62);
+  --glass-surface-strong: rgba(255, 255, 255, 0.78);
+  --glass-chrome: rgba(255, 255, 255, 0.7);
+  --glass-field: rgba(255, 255, 255, 0.55);
+  --glass-dark: rgba(11, 11, 12, 0.72);
+
+  --glass-hairline: rgba(255, 255, 255, 0.68);
+  --glass-hairline-dark: rgba(255, 255, 255, 0.1);
+  --glass-edge: rgba(9, 9, 11, 0.08);
+
+  /* The specular rim. A bright inset line along the top edge plus a dimmer one along the bottom
+     is what makes a flat rectangle read as a thick pane catching light from above. */
+  --glass-rim: inset 0 1px 0 0 rgba(255, 255, 255, 0.85),
+    inset 0 -1px 0 0 rgba(255, 255, 255, 0.35);
+  --glass-rim-dark: inset 0 1px 0 0 rgba(255, 255, 255, 0.14),
+    inset 0 -1px 0 0 rgba(255, 255, 255, 0.04);
+
+  --glass-lift: 0 1px 2px rgba(9, 9, 11, 0.04), 0 8px 24px -12px rgba(9, 9, 11, 0.18);
+  --glass-lift-raised: 0 2px 6px rgba(9, 9, 11, 0.06), 0 24px 56px -20px rgba(9, 9, 11, 0.3);
+}
+
+/* --------------------------------------------------------------------------
+   The ambient backdrop. Glass with nothing behind it is just a grey box, so the app shell paints
+   a field of neutral wells for the panes to refract. Deliberately monochrome and very low
+   contrast: this is lighting, not decoration, and it must never compete with the data on top.
+   Fixed, so it does not slide when a panel scrolls.
+   -------------------------------------------------------------------------- */
+.app-ambient::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(64% 50% at 12% 6%, rgba(100, 116, 139, 0.42), transparent 64%),
+    radial-gradient(54% 46% at 90% 2%, rgba(148, 163, 184, 0.46), transparent 62%),
+    radial-gradient(58% 52% at 82% 96%, rgba(113, 113, 122, 0.4), transparent 66%),
+    radial-gradient(46% 44% at 18% 92%, rgba(161, 161, 170, 0.44), transparent 64%),
+    radial-gradient(70% 60% at 50% 50%, rgba(255, 255, 255, 0.5), transparent 70%),
+    linear-gradient(160deg, #eceef2 0%, #dfe3ea 46%, #d5dae3 100%);
+  /* Slow drift, so the field under the panes is never quite the same twice. Three offset
+     durations on one keyframe means the loop point never lands on a recognisable frame. */
+  animation: ambient-drift 42s ease-in-out infinite;
+}
+
+@keyframes ambient-drift {
+  0%,
+  100% {
+    transform: scale(1.06) translate3d(0, 0, 0);
+  }
+  33% {
+    transform: scale(1.12) translate3d(-2%, 1.5%, 0);
+  }
+  66% {
+    transform: scale(1.08) translate3d(1.8%, -1.2%, 0);
+  }
+}
+
+/* A hairline grid over those wells, masked to fade at the edges. It gives the blur real detail to
+   bend — a pure gradient blurs into nothing and the glass stops reading as glass. */
+.app-ambient::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    linear-gradient(to right, rgba(9, 9, 11, 0.055) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(9, 9, 11, 0.055) 1px, transparent 1px);
+  background-size: 56px 56px;
+  -webkit-mask-image: radial-gradient(ellipse 90% 80% at 50% 40%, #000 20%, transparent 100%);
+  mask-image: radial-gradient(ellipse 90% 80% at 50% 40%, #000 20%, transparent 100%);
+}
+
+/* --------------------------------------------------------------------------
+   Surfaces
+   -------------------------------------------------------------------------- */
+
+/* Cards, panels, table shells — the workhorse. */
+.glass {
+  background-color: var(--glass-surface);
+  border: 1px solid var(--glass-hairline);
+  box-shadow: var(--glass-rim), var(--glass-lift);
+  -webkit-backdrop-filter: blur(var(--glass-blur-surface)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--glass-blur-surface)) saturate(var(--glass-saturate));
+}
+
+/* Anything floating above the page: dialogs, dropdown menus, popovers, toasts. Thicker and more
+   opaque than .glass, because what sits behind it is arbitrary page content rather than the app's
+   own quiet backdrop. */
+.glass-raised {
+  background-color: var(--glass-surface-strong);
+  border: 1px solid var(--glass-hairline);
+  box-shadow: var(--glass-rim), var(--glass-lift-raised);
+  -webkit-backdrop-filter: blur(var(--glass-blur-raised)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--glass-blur-raised)) saturate(var(--glass-saturate));
+}
+
+/* App chrome that content scrolls underneath — the topbar, sticky table headers. */
+.glass-chrome {
+  background-color: var(--glass-chrome);
+  box-shadow: var(--glass-rim);
+  -webkit-backdrop-filter: blur(var(--glass-blur-raised)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--glass-blur-raised)) saturate(var(--glass-saturate));
+}
+
+/* The near-black pane: the nav rail, and the accent surfaces on the marketing site. */
+.glass-dark {
+  background-color: var(--glass-dark);
+  border-color: var(--glass-hairline-dark);
+  box-shadow: var(--glass-rim-dark), var(--glass-lift-raised);
+  -webkit-backdrop-filter: blur(var(--glass-blur-raised)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--glass-blur-raised)) saturate(var(--glass-saturate));
+}
+
+/* Inputs and selects. Recessed rather than raised: the rim runs dark along the top edge, which is
+   the same trick inverted — light from above falls INTO a well instead of off a pane. */
+.glass-field {
+  background-color: var(--glass-field);
+  border: 1px solid var(--glass-edge);
+  box-shadow:
+    inset 0 1px 2px rgba(9, 9, 11, 0.06),
+    inset 0 -1px 0 0 rgba(255, 255, 255, 0.7);
+  -webkit-backdrop-filter: blur(var(--glass-blur-field)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--glass-blur-field)) saturate(var(--glass-saturate));
+  transition:
+    background-color 180ms ease,
+    box-shadow 180ms ease,
+    border-color 180ms ease;
+}
+
+.glass-field:focus-within,
+.glass-field:focus-visible {
+  background-color: rgba(255, 255, 255, 0.82);
+  border-color: rgba(9, 9, 11, 0.18);
+}
+
+/* Fields sitting ON a dark panel — the customer dashboard's tracking hero, and anywhere else a
+   form lands on .glass-dark or bg-primary. The light .glass-field tint over near-black composites
+   to a mid-grey slab, and grey placeholder text on it fails contrast outright. Flip the material
+   instead of patching the background: dark well, light rim, light ink. Scoped by a container
+   class so any field dropped onto a dark surface later inherits it automatically. */
+.on-dark .glass-field {
+  background-color: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.22);
+  box-shadow:
+    inset 0 1px 2px rgba(0, 0, 0, 0.28),
+    inset 0 -1px 0 0 rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+}
+
+.on-dark .glass-field::placeholder {
+  /* 0.72 white on the #18181b panel is 8.3:1 — placeholder text is still text. */
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.on-dark .glass-field:focus-within,
+.on-dark .glass-field:focus-visible {
+  background-color: rgba(255, 255, 255, 0.22);
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+/* The search icon and any other muted ink inside a dark panel. */
+.on-dark .text-muted-foreground {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .on-dark .glass-field {
+    background-color: #27272a;
+    border-color: rgba(255, 255, 255, 0.32);
+  }
+}
+
+/* Tinted pills (status badges). Deliberately the thinnest blur and the highest opacity of any
+   surface here: delivered / failed / pending carry operational meaning, and a status colour that
+   washes out into its backdrop has stopped doing its job. */
+.glass-pill {
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.6);
+  -webkit-backdrop-filter: blur(var(--glass-blur-field)) saturate(1.4);
+  backdrop-filter: blur(var(--glass-blur-field)) saturate(1.4);
+}
+
+/* Rim only — for elements that must not blur (they already sit on a blurred parent, and nesting
+   backdrop-filters compounds the compositor cost) but should still catch the same edge light. */
+.glass-rim {
+  box-shadow: var(--glass-rim);
+}
+
+/* --------------------------------------------------------------------------
+   Interaction. iOS glass answers a touch by brightening and swelling very slightly; that movement
+   is what sells the material as physical rather than painted on.
+   -------------------------------------------------------------------------- */
+.glass-interactive {
+  transition:
+    transform 220ms cubic-bezier(0.16, 1, 0.3, 1),
+    background-color 220ms ease,
+    box-shadow 220ms ease;
+}
+
+.glass-interactive:hover {
+  background-color: rgba(255, 255, 255, 0.76);
+  box-shadow:
+    var(--glass-rim),
+    0 2px 6px rgba(9, 9, 11, 0.05),
+    0 16px 36px -16px rgba(9, 9, 11, 0.24);
+  transform: translateY(-1px);
+}
+
+.glass-interactive:active {
+  transform: translateY(0) scale(0.995);
+}
+
+/* A slow highlight travelling across a pane on hover — the "wet" pass of light that separates
+   liquid glass from plain frosted glass. Pure CSS, and it costs one composited layer. */
+.glass-sheen {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.glass-sheen::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: linear-gradient(
+    105deg,
+    transparent 38%,
+    rgba(255, 255, 255, 0.55) 50%,
+    transparent 62%
+  );
+  transform: translateX(-120%);
+  transition: transform 900ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.glass-sheen:hover::after {
+  transform: translateX(120%);
+}
+
+/* --------------------------------------------------------------------------
+   Degradation. All three of these are correctness rather than polish: a viewer who asked the OS
+   to cut transparency, a browser with no backdrop-filter, and a viewer who asked for less motion
+   each have to end up with a surface that is solid, still and fully legible.
+   -------------------------------------------------------------------------- */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass,
+  .glass-chrome {
+    background-color: rgba(255, 255, 255, 0.94);
+  }
+  .glass-raised,
+  .glass-field {
+    background-color: #ffffff;
+  }
+  .glass-dark {
+    background-color: #0b0b0c;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .glass,
+  .glass-chrome,
+  .glass-raised,
+  .glass-field,
+  .glass-dark,
+  .glass-pill {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  .glass,
+  .glass-chrome,
+  .glass-raised,
+  .glass-field {
+    background-color: #ffffff;
+  }
+  .glass-dark {
+    background-color: #0b0b0c;
+  }
+  /* With no blur there is nothing separating a pane from the page behind it, so the hairline has
+     to become a real, visible border. */
+  .glass,
+  .glass-raised,
+  .glass-field {
+    border-color: var(--border);
+  }
+  .app-ambient::before {
+    background: var(--background);
+  }
+  .app-ambient::after {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-ambient::before {
+    animation: none;
+  }
+
+  .glass-interactive,
+  .glass-sheen::after {
+    transition: none;
+  }
+  .glass-interactive:hover,
+  .glass-interactive:active {
+    transform: none;
+  }
+  .glass-sheen:hover::after {
+    transform: translateX(-120%);
+  }
+}
+
+
+html {
+  /* In-page anchors (#services, #track, ...) must clear the sticky 4rem navbar. Smoothing itself
+     is Lenis's job on the marketing pages (see components/marketing/smooth-scroll.tsx); this is
+     the fallback for everywhere Lenis isn't mounted and for reduced-motion visitors. */
+  scroll-padding-top: 4.5rem;
+}
+
+/* Lenis's required host styles — it sets these classes on <html> while active. */
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+
+.lenis.lenis-smooth [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+
+.lenis.lenis-stopped {
+  overflow: clip;
+}
+
+/* An infinite logo rail: the track holds two copies of the list, so translating it exactly -50%
+   lands the second copy where the first began and the loop is seamless. */
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-marquee {
+  animation: marquee 32s linear infinite;
+}
+
+/* Slow sheen crossing a button, so the primary CTA catches the eye without moving. */
+@keyframes sheen {
+  0% {
+    transform: translateX(-120%) skewX(-18deg);
+  }
+  60%,
+  100% {
+    transform: translateX(320%) skewX(-18deg);
+  }
+}
+
+.animate-sheen {
+  animation: sheen 4.5s ease-in-out infinite;
+}
+
+@keyframes scroll-cue {
+  0%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.5;
+  }
+  50% {
+    transform: translateY(6px);
+    opacity: 1;
+  }
+}
+
+.animate-scroll-cue {
+  animation: scroll-cue 2s ease-in-out infinite;
+}
 
 body {
   background: var(--background);
@@ -152,10 +577,208 @@ body {
   animation: soft-float 4s ease-in-out infinite;
 }
 
+/* Hero "dynamic glass" backdrop: slow-drifting colour wells behind a heavy blur (the light the
+   frosted panels refract) plus a masked grid. Three offset durations so the field never visibly
+   loops. */
+@keyframes aurora {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  33% {
+    transform: translate3d(6%, -8%, 0) scale(1.12);
+  }
+  66% {
+    transform: translate3d(-7%, 6%, 0) scale(0.92);
+  }
+}
+
+.animate-aurora {
+  animation: aurora 20s ease-in-out infinite;
+}
+
+.animate-aurora-slow {
+  animation: aurora 28s ease-in-out infinite reverse;
+}
+
+.animate-aurora-slower {
+  animation: aurora 36s ease-in-out infinite;
+}
+
+/* Ink lines, not white ones: the hero and FAQ bands are white surfaces now, with the near-black
+   glass reserved for accents (the planet, the closing CTA, the footer). */
+.bg-hero-grid {
+  background-image:
+    linear-gradient(to right, rgba(9, 9, 11, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(9, 9, 11, 0.05) 1px, transparent 1px);
+  background-size: 64px 64px;
+  -webkit-mask-image: radial-gradient(ellipse 75% 60% at 50% 40%, #000 35%, transparent 100%);
+  mask-image: radial-gradient(ellipse 75% 60% at 50% 40%, #000 35%, transparent 100%);
+}
+
+/* The page's glass material. `.glass-panel` is the light one — frosted white over the aurora,
+   hairline rim, soft lift — and it appears on nearly every marketing surface, which is why it
+   lives here rather than as a ten-class string repeated in a dozen components.
+   `.glass-panel-dark` is the same material in the secondary near-black, for the few accent
+   surfaces (the closing CTA, the footer cards). */
+.glass-panel {
+  background-color: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  box-shadow:
+    0 24px 50px -32px rgba(9, 9, 11, 0.45),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+
+.glass-panel-dark {
+  background-color: rgba(9, 9, 11, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow:
+    0 24px 50px -30px rgba(9, 9, 11, 0.8),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+
+/* Entrance animations for above-the-fold content. Pure CSS with fill-mode `both`, so the start
+   state is never JS-applied — if the bundle is slow, broken or absent, the content still ends up
+   visible. Stagger with Tailwind's [animation-delay:*]. */
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 20px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes slide-in-left {
+  from {
+    opacity: 0;
+    transform: translate3d(-40px, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes slide-in-right {
+  from {
+    opacity: 0;
+    transform: translate3d(40px, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.animate-rise-in {
+  animation: rise-in 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.animate-slide-in-left {
+  animation: slide-in-left 0.9s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.animate-slide-in-right {
+  animation: slide-in-right 0.9s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* --------------------------------------------------------------------------
+   Typing reveal — see components/ui/type-reveal.tsx, ported from interiOne.
+
+   One class flip on the root starts several hundred character spans, each
+   offset by its own inline `animation-delay`. Keeping the whole thing in CSS
+   means the main thread does nothing at all while it runs.
+   -------------------------------------------------------------------------- */
+.type-reveal-word {
+  /* Atomic, so a character can never be left stranded on the next line. The
+     break opportunities are the real spaces rendered between these boxes. */
+  display: inline-block;
+  white-space: nowrap;
+}
+
+.type-reveal-char {
+  /* Hidden until its own delay elapses — this is the "not yet typed" state,
+     and it is also what the block looks like before it enters the viewport. */
+  opacity: 0;
+}
+
+.type-reveal[data-typing="on"] .type-reveal-char {
+  animation:
+    type-in var(--tr-duration, 460ms) cubic-bezier(0.16, 1, 0.3, 1) both,
+    /* Four characters wide. Any shorter and the head is a flicker; any longer
+       and it stops being a head and becomes an underline running through a
+       third of the paragraph. */ type-caret calc(var(--tr-speed, 16ms) * 4)
+      steps(1, end) both;
+}
+
+/* Quieter blocks opt out of the reveal head and just resolve. */
+.type-reveal[data-caret="off"][data-typing="on"] .type-reveal-char {
+  animation: type-in var(--tr-duration, 460ms) cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes type-in {
+  0% {
+    opacity: 0;
+    /* Relative to the character's own size, so the same curve reads correctly
+       at 1rem in a caption and at 2rem in a lead paragraph. */
+    filter: blur(0.3em);
+    transform: translateY(0.12em);
+  }
+  /* Opacity is spent early and the blur slowly. A key lands, then the letter
+     it struck resolves — the order a machine does it in. */
+  22% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+    filter: blur(0);
+    transform: none;
+  }
+}
+
+/* The reveal head: a box-shadow rather than a border, so the edge costs no
+   layout and the line does not reflow as it travels. */
+@keyframes type-caret {
+  from {
+    box-shadow: 0.05em 0 0 0 currentColor;
+  }
+  to {
+    box-shadow: 0.05em 0 0 0 transparent;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-route-draw,
   .animate-route-travel,
-  .animate-soft-float {
+  .animate-soft-float,
+  .animate-aurora,
+  .animate-aurora-slow,
+  .animate-aurora-slower,
+  .animate-rise-in,
+  .animate-slide-in-left,
+  .animate-slide-in-right,
+  .animate-marquee,
+  .animate-sheen,
+  .animate-scroll-cue {
+    /* fill-mode `both` is dropped with the animation, so these render in their natural,
+       fully-visible state. */
+    animation: none;
+  }
+
+  /* TypeReveal's characters start at opacity 0 and are revealed BY the animation, so killing the
+     animation alone would leave the paragraph blank. They get shown outright instead. */
+  .type-reveal-char,
+  .type-reveal[data-typing="on"] .type-reveal-char {
+    opacity: 1;
+    filter: none;
+    transform: none;
     animation: none;
   }
 }

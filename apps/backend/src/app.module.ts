@@ -19,6 +19,7 @@ import { ProviderIntegrationModule } from './modules/provider-integration/provid
 import { TrackingModule } from './modules/tracking/tracking.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { PickupRequestsModule } from './modules/pickup-requests/pickup-requests.module';
+import { PincodesModule } from './modules/pincodes/pincodes.module';
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { PickupRequestsModule } from './modules/pickup-requests/pickup-requests.
     TrackingModule,
     NotificationsModule,
     PickupRequestsModule,
+    PincodesModule,
   ],
   controllers: [AppController, HealthController],
   providers: [

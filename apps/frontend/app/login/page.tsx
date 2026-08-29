@@ -14,6 +14,8 @@ import { PasswordInput } from "@/components/ui/password-input";
 import { Logo } from "@/components/brand/logo";
 import { GoogleIcon } from "@/components/ui/google-icon";
 import { TextDivider } from "@/components/ui/divider";
+import { AssetImage } from "@/components/marketing/asset-image";
+import { WORLD_MAP_IMAGE } from "@/lib/constants/assets";
 
 interface FormErrors {
   email?: string;
@@ -117,6 +119,7 @@ function LoginPageInner() {
   // Google isn't configured yet, the backend's GoogleConfiguredGuard returns a clear error page
   // rather than a confusing "invalid_client" from Google itself.
   function handleGoogleLogin() {
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- API_BASE_URL is the external backend origin, not an internal Next.js route.
     window.location.href = `${API_BASE_URL}/auth/google`;
   }
 
@@ -135,6 +138,8 @@ function LoginPageInner() {
           source design mobile is derived from. Fully absent below lg, so it costs mobile visitors
           nothing. */}
       <div className="relative hidden w-1/2 overflow-hidden bg-sidebar-bg lg:flex lg:flex-col lg:justify-between lg:p-12">
+        {/* Dotted world map, reusing the marketing world-map asset. */}
+        <AssetImage src={WORLD_MAP_IMAGE.src} alt="" className="object-contain opacity-25" />
         <HeroBackground />
         <Link href="/" className="relative z-10">
           <Logo variant="reverse" size="md" />

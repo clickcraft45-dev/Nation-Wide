@@ -219,17 +219,15 @@ export class RateCardDataService {
 
   private buildWeightRows(
     slabs: {
-      weightFromKg: { toNumber(): number };
-      weightToKg: { toNumber(): number };
+      weightFromKg: number;
+      weightToKg: number;
     }[],
   ): RateCardWeightRow[] {
-    const sorted = [...slabs].sort(
-      (a, b) => a.weightFromKg.toNumber() - b.weightFromKg.toNumber(),
-    );
+    const sorted = [...slabs].sort((a, b) => a.weightFromKg - b.weightFromKg);
 
     return sorted.map((slab) => {
-      const fromKg = slab.weightFromKg.toNumber();
-      const toKg = slab.weightToKg.toNumber();
+      const fromKg = slab.weightFromKg;
+      const toKg = slab.weightToKg;
       const isPerKg = toKg === OPEN_ENDED_WEIGHT_SENTINEL_KG;
       // For an open-ended bracket, pricing "at 999.99kg" would be meaningless (and huge, since
       // PSS scales with weight) — query the pricing engine at the bracket's real lower bound

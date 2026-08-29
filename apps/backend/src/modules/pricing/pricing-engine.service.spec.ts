@@ -1,8 +1,7 @@
-import { Prisma } from '@prisma/client';
 import { PricingEngineService } from './pricing-engine.service';
 
 function decimal(value: number) {
-  return new Prisma.Decimal(value);
+  return value;
 }
 
 function makeSlab(overrides: Record<string, unknown> = {}) {

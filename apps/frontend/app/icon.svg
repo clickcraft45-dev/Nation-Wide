@@ -1,10 +1,11 @@
+<!-- Same geometry as <NwMark> in components/brand/logo.tsx. Next.js needs the browser-tab icon
+     as a file on disk, so the two are kept in sync by hand. brand-navy (#0b0b0c) is resolved to
+     hex here because a static file cannot read CSS variables. app/apple-icon.png and
+     app/favicon.ico are generated from these same two paths. -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" width="40" height="40">
-  <rect x="1" y="1" width="38" height="38" rx="10" fill="#1261A0" />
-  <path d="M7 27C13 16 27 13 34 18" fill="none" stroke="#FFFFFF" stroke-opacity="0.45" stroke-width="2.25" stroke-linecap="round" />
-  <g fill="#FFFFFF">
-    <rect x="9" y="10" width="4.6" height="20" rx="1" />
-    <rect x="26.4" y="10" width="4.6" height="20" rx="1" />
-    <polygon points="13.6,10 19.6,10 26.4,30 20.4,30" />
+  <rect x="1" y="1" width="38" height="38" rx="10" fill="#0b0b0c" />
+  <g fill="none" stroke="#ffffff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M10.5 30V14L25.5 30V10" />
+    <path d="M21.9 13.6L25.5 10L29.1 13.6" />
   </g>
-  <polygon points="28.5,9.5 36,2 36,9.5" fill="#1E88E5" />
 </svg>

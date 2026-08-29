@@ -19,19 +19,22 @@ import type {
   CustomerDto,
   AuditLogEntryDto,
   DashboardSummaryDto,
+  PickupRequestDto,
 } from "@nationwide/shared-types";
 import { apiClient, ApiError } from "@/lib/api-client";
 import { useAuth } from "@/state/auth-context";
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { QuickActions } from "@/components/dashboard/quick-actions";
 import { RecentActivity } from "@/components/dashboard/recent-activity";
-import { OrdersOverviewChart, type OrdersOverviewPoint } from "@/components/dashboard/orders-overview-chart";
+import { TrendAreaChart, type TrendPoint } from "@/components/ui/trend-area-chart";
 import { ShipmentStatusDonut, type ShipmentStatusSlice } from "@/components/dashboard/shipment-status-donut";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Calendar, formatIsoLong, todayIso, toIso } from "@/components/ui/calendar";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { OrderStatusBadge } from "@/components/ui/status-badge";
 import { EmptyState, ErrorState } from "@/components/ui/page-state";
 import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils/cn";
 
 function displayName(email: string): string {
   const localPart = email.split("@")[0] ?? email;
@@ -40,7 +43,27 @@ function displayName(email: string): string {
 }
 
 const IN_TRANSIT_STATUSES = new Set(["PICKED_UP", "IN_TRANSIT", "OUT_FOR_DELIVERY"]);
+// Pickups still on the board — cancelled/rejected/completed ones aren't workload any more.
+const NON_TERMINAL_PICKUP = new Set([
+  "PENDING_ASSIGNMENT",
+  "ASSIGNED",
+  "SCHEDULED",
+  "OUT_FOR_PICKUP",
+  "VERIFICATION_PENDING",
+]);
 const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+// The trend panel's own range control.
+const TREND_RANGES = [
+  { days: 90, label: "Last 3 months" },
+  { days: 30, label: "Last 30 days" },
+  { days: 7, label: "Last 7 days" },
+] as const;
+
+const TREND_SERIES = [
+  { key: "orders", label: "In progress" },
+  { key: "delivered", label: "Delivered" },
+];
 
 export default function AdminDashboardHomePage() {
   const { user } = useAuth();
@@ -48,6 +71,9 @@ export default function AdminDashboardHomePage() {
   const [customers, setCustomers] = useState<CustomerDto[] | null>(null);
   const [auditLogs, setAuditLogs] = useState<AuditLogEntryDto[]>([]);
   const [summary, setSummary] = useState<DashboardSummaryDto | null>(null);
+  const [pickupRequests, setPickupRequests] = useState<PickupRequestDto[]>([]);
+  const [scheduleDay, setScheduleDay] = useState(todayIso);
+  const [trendDays, setTrendDays] = useState<number>(90);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -63,13 +89,15 @@ export default function AdminDashboardHomePage() {
       apiClient.get<CustomerDto[]>("/customers"),
       apiClient.get<AuditLogEntryDto[]>("/admin/audit-logs"),
       apiClient.get<DashboardSummaryDto>("/admin/dashboard-summary"),
+      apiClient.get<PickupRequestDto[]>("/admin/pickup-requests"),
     ])
-      .then(([ordersRes, customersRes, auditRes, summaryRes]) => {
+      .then(([ordersRes, customersRes, auditRes, summaryRes, pickupsRes]) => {
         if (cancelled) return;
         setOrders(ordersRes);
         setCustomers(customersRes);
         setAuditLogs(auditRes);
         setSummary(summaryRes);
+        setPickupRequests(pickupsRes);
       })
       .catch((err) => {
         if (cancelled) return;
@@ -104,21 +132,69 @@ export default function AdminDashboardHomePage() {
       ?.filter((o) => o.paymentStatus === "PAID")
       .reduce((sum, o) => sum + (o.paidAmount ?? 0), 0) ?? 0;
 
-  const ordersOverview: OrdersOverviewPoint[] = useMemo(() => {
-    const days: OrdersOverviewPoint[] = [];
-    const counts = new Map<string, number>();
+  // Two stacked series per day: what is still moving, and what already landed. "Delivered" is
+  // counted against the day the order was PLACED, not the day it arrived — the API carries no
+  // delivery timestamp, and dating both series the same way is what lets them stack honestly.
+  const ordersTrend: TrendPoint[] = useMemo(() => {
+    const placed = new Map<string, number>();
+    const delivered = new Map<string, number>();
     for (const o of orders ?? []) {
       const key = o.createdAt.slice(0, 10);
-      counts.set(key, (counts.get(key) ?? 0) + 1);
+      placed.set(key, (placed.get(key) ?? 0) + 1);
+      if (o.shipments[0]?.currentStatus === "DELIVERED") {
+        delivered.set(key, (delivered.get(key) ?? 0) + 1);
+      }
     }
-    for (let i = 6; i >= 0; i--) {
+
+    const points: TrendPoint[] = [];
+    for (let i = trendDays - 1; i >= 0; i--) {
       const d = new Date();
       d.setDate(d.getDate() - i);
-      const key = d.toISOString().slice(0, 10);
-      days.push({ label: WEEKDAY_LABELS[d.getDay()], value: counts.get(key) ?? 0 });
+      const key = toIso(d);
+      const deliveredCount = delivered.get(key) ?? 0;
+      points.push({
+        label:
+          trendDays <= 7
+            ? WEEKDAY_LABELS[d.getDay()]
+            : d.toLocaleDateString("en-IN", { day: "numeric", month: "short" }),
+        orders: Math.max(0, (placed.get(key) ?? 0) - deliveredCount),
+        delivered: deliveredCount,
+      });
     }
-    return days;
-  }, [orders]);
+    return points;
+  }, [orders, trendDays]);
+
+  // The selected window against the one immediately before it — the KPI tiles' delta badges.
+  const trendDelta = useMemo(() => {
+    const start = new Date();
+    start.setDate(start.getDate() - trendDays);
+    const previousStart = new Date();
+    previousStart.setDate(previousStart.getDate() - trendDays * 2);
+    const startIso = toIso(start);
+    const previousStartIso = toIso(previousStart);
+
+    const inWindow = (from: string, to: string) =>
+      (orders ?? []).filter(
+        (o) => o.createdAt.slice(0, 10) >= from && o.createdAt.slice(0, 10) < to,
+      );
+
+    const current = inWindow(startIso, "9999-12-31");
+    const previous = inWindow(previousStartIso, startIso);
+    // No previous activity means no percentage exists — a bare "+100%" off zero is noise.
+    const percent = (now: number, before: number) =>
+      before === 0 ? null : Math.round(((now - before) / before) * 1000) / 10;
+    const revenueOf = (rows: OrderDto[]) =>
+      rows.filter((o) => o.paymentStatus === "PAID").reduce((sum, o) => sum + (o.paidAmount ?? 0), 0);
+
+    return {
+      orders: percent(current.length, previous.length),
+      revenue: percent(revenueOf(current), revenueOf(previous)),
+      shipments: percent(
+        current.reduce((sum, o) => sum + o.shipments.length, 0),
+        previous.reduce((sum, o) => sum + o.shipments.length, 0),
+      ),
+    };
+  }, [orders, trendDays]);
 
   const shipmentStatusSlices: ShipmentStatusSlice[] = useMemo(() => {
     let delivered = 0;
@@ -149,6 +225,25 @@ export default function AdminDashboardHomePage() {
     [orders],
   );
 
+  // Pickup load per calendar day — the dots under each date, so dispatch can see a pile-up
+  // before it happens rather than after.
+  const pickupsByDay = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const p of pickupRequests) {
+      if (p.pickupDate && NON_TERMINAL_PICKUP.has(p.status)) {
+        counts[p.pickupDate] = (counts[p.pickupDate] ?? 0) + 1;
+      }
+    }
+    return counts;
+  }, [pickupRequests]);
+
+  const dayPickups = useMemo(
+    () => pickupRequests.filter((p) => p.pickupDate === scheduleDay),
+    [pickupRequests, scheduleDay],
+  );
+  const dayUnassigned = dayPickups.filter((p) => p.status === "PENDING_ASSIGNMENT").length;
+  const dayValue = dayPickups.reduce((sum, p) => sum + p.estimatedPrice, 0);
+
   if (error) {
     return <ErrorState message={error} onRetry={() => window.location.reload()} />;
   }
@@ -163,14 +258,32 @@ export default function AdminDashboardHomePage() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-        <KpiCard title="Total Orders" value={orders?.length ?? 0} icon={Package} href="/admin/orders" isLoading={isLoading} />
-        <KpiCard title="Total Shipments" value={totalShipments} icon={Truck} href="/admin/shipments" isLoading={isLoading} />
+        <KpiCard
+          title="Total Orders"
+          value={orders?.length ?? 0}
+          icon={Package}
+          href="/admin/orders"
+          isLoading={isLoading}
+          deltaPercent={trendDelta.orders}
+          deltaLabel="versus the previous period"
+        />
+        <KpiCard
+          title="Total Shipments"
+          value={totalShipments}
+          icon={Truck}
+          href="/admin/shipments"
+          isLoading={isLoading}
+          deltaPercent={trendDelta.shipments}
+          deltaLabel="versus the previous period"
+        />
         <KpiCard
           title="Total Revenue"
           value={`₹${Math.round(totalRevenue).toLocaleString("en-IN")}`}
           icon={CreditCard}
           href="/admin/payments"
           isLoading={isLoading}
+          deltaPercent={trendDelta.revenue}
+          deltaLabel="versus the previous period"
         />
         <KpiCard
           title="Scheduled Pickups"
@@ -196,11 +309,45 @@ export default function AdminDashboardHomePage() {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
           <Card>
-            <CardHeader>
-              <CardTitle>Orders Overview — last 7 days</CardTitle>
+            <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
+              <div>
+                <CardTitle>Orders Overview</CardTitle>
+                <p className="text-2xl font-semibold text-foreground">
+                  {ordersTrend.reduce((sum, p) => sum + Number(p.orders) + Number(p.delivered), 0)}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Orders placed, {TREND_RANGES.find((r) => r.days === trendDays)?.label.toLowerCase()}
+                </p>
+              </div>
+              <div className="flex shrink-0 rounded-lg border border-border p-0.5">
+                {TREND_RANGES.map((range) => (
+                  <button
+                    key={range.days}
+                    type="button"
+                    onClick={() => setTrendDays(range.days)}
+                    aria-pressed={trendDays === range.days}
+                    className={cn(
+                      "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                      trendDays === range.days
+                        ? "bg-muted text-foreground"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {range.label}
+                  </button>
+                ))}
+              </div>
             </CardHeader>
             <CardContent>
-              {isLoading ? <Skeleton className="h-48 w-full" /> : <OrdersOverviewChart data={ordersOverview} />}
+              {isLoading ? (
+                <Skeleton className="h-64 w-full" />
+              ) : (
+                <TrendAreaChart
+                  data={ordersTrend}
+                  series={TREND_SERIES}
+                  caption="Orders in progress and delivered, per day"
+                />
+              )}
             </CardContent>
           </Card>
 
@@ -255,6 +402,42 @@ export default function AdminDashboardHomePage() {
         </div>
 
         <div className="space-y-6">
+          {isLoading ? (
+            <Skeleton className="h-104 w-full rounded-2xl" />
+          ) : (
+            <Calendar
+              title="Pickup Schedule"
+              subtitle="Dots show pickups booked that day"
+              markers={pickupsByDay}
+              markerLabel="pickups booked"
+              selected={scheduleDay}
+              onSelect={setScheduleDay}
+              className="max-w-none"
+              footer={
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-foreground">{formatIsoLong(scheduleDay)}</p>
+                  {dayPickups.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">No pickups booked for this day.</p>
+                  ) : (
+                    <>
+                      <p className="text-xs text-muted-foreground">
+                        {dayPickups.length} pickup{dayPickups.length === 1 ? "" : "s"} ·{" "}
+                        {dayUnassigned} awaiting a partner · ₹
+                        {Math.round(dayValue).toLocaleString("en-IN")} booked value
+                      </p>
+                      <Link
+                        href="/admin/pickup-requests"
+                        className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                      >
+                        Open pickup requests <ArrowRight className="h-3 w-3" aria-hidden />
+                      </Link>
+                    </>
+                  )}
+                </div>
+              }
+            />
+          )}
+
           <Card>
             <CardHeader>
               <CardTitle>Shipment Status</CardTitle>

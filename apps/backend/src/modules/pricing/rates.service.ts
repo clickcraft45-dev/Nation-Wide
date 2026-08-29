@@ -23,11 +23,11 @@ const withDetails = {
 export type RateWithDetails = Prisma.WeightSlabGetPayload<typeof withDetails>;
 
 type DecimalRateFields = {
-  weightFromKg: Prisma.Decimal;
-  weightToKg: Prisma.Decimal;
-  baseRate: Prisma.Decimal;
-  gstPercent: Prisma.Decimal;
-  nationwideCut: Prisma.Decimal;
+  weightFromKg: number;
+  weightToKg: number;
+  baseRate: number;
+  gstPercent: number;
+  nationwideCut: number;
 };
 
 const MAX_GST_PERCENT = 100;
@@ -110,8 +110,7 @@ export class RatesService {
     // friendly "update it instead?" prompt here, not a hard rejection.
     const exactDuplicate = activeSiblings.find(
       (s) =>
-        s.weightFromKg.toNumber() === dto.weightFromKg &&
-        s.weightToKg.toNumber() === dto.weightToKg,
+        s.weightFromKg === dto.weightFromKg && s.weightToKg === dto.weightToKg,
     );
     if (exactDuplicate) {
       const zone = await this.prisma.zone.findUniqueOrThrow({
@@ -241,8 +240,8 @@ export class RatesService {
   ): Promise<RateWithDetails> {
     const existing = await this.findOneOrThrow(id);
 
-    const nextFrom = dto.weightFromKg ?? existing.weightFromKg.toNumber();
-    const nextTo = dto.weightToKg ?? existing.weightToKg.toNumber();
+    const nextFrom = dto.weightFromKg ?? existing.weightFromKg;
+    const nextTo = dto.weightToKg ?? existing.weightToKg;
     if (nextTo < nextFrom) {
       throw new BadRequestException('weightToKg must be >= weightFromKg');
     }
@@ -309,8 +308,8 @@ export class RatesService {
         },
       });
       this.assertNoOverlapAmong(siblings, {
-        weightFromKg: existing.weightFromKg.toNumber(),
-        weightToKg: existing.weightToKg.toNumber(),
+        weightFromKg: existing.weightFromKg,
+        weightToKg: existing.weightToKg,
       });
     }
 
@@ -344,13 +343,13 @@ export class RatesService {
   }
 
   private assertNoOverlapAmong(
-    siblings: { weightFromKg: Prisma.Decimal; weightToKg: Prisma.Decimal }[],
+    siblings: { weightFromKg: number; weightToKg: number }[],
     candidate: { weightFromKg: number; weightToKg: number },
   ): void {
     const overlap = findOverlappingSlabs([
       ...siblings.map((s) => ({
-        weightFromKg: s.weightFromKg.toNumber(),
-        weightToKg: s.weightToKg.toNumber(),
+        weightFromKg: s.weightFromKg,
+        weightToKg: s.weightToKg,
       })),
       candidate,
     ]);
@@ -365,11 +364,11 @@ export class RatesService {
 
   private toAuditSnapshot(rate: DecimalRateFields) {
     return {
-      weightFromKg: rate.weightFromKg.toNumber(),
-      weightToKg: rate.weightToKg.toNumber(),
-      baseRate: rate.baseRate.toNumber(),
-      gstPercent: rate.gstPercent.toNumber(),
-      nationwideCut: rate.nationwideCut.toNumber(),
+      weightFromKg: rate.weightFromKg,
+      weightToKg: rate.weightToKg,
+      baseRate: rate.baseRate,
+      gstPercent: rate.gstPercent,
+      nationwideCut: rate.nationwideCut,
     };
   }
 

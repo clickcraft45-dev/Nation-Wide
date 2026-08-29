@@ -15,6 +15,7 @@ import type {
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/database/prisma.service';
 import { RedisService } from '../src/database/redis.service';
+import { nextSequenceNumber } from '../src/modules/shipments/sequence';
 
 const TEST_STAFF_EMAIL = 'e2e-admin-staff@nationwide.dev';
 const TEST_STAFF_PASSWORD = 'CorrectHorseBattery1';
@@ -206,6 +207,7 @@ describe('Admin (e2e)', () => {
         data: {
           orderId: order.id,
           providerId,
+          sequenceNumber: await nextSequenceNumber(prisma),
           internalTrackingNumber: 'NW-ADMIN-E2E-1',
         },
       });
@@ -309,6 +311,7 @@ describe('Admin (e2e)', () => {
       data: {
         orderId: order.id,
         providerId,
+        sequenceNumber: await nextSequenceNumber(prisma),
         internalTrackingNumber: 'NW-ADMIN-E2E-2',
       },
     });

@@ -1,4 +1,4 @@
-import { IsOptional, IsPositive, IsString, MinLength } from 'class-validator';
+import { IsOptional, IsPositive, IsString } from 'class-validator';
 
 export class ManualQuoteDto {
   @IsPositive()

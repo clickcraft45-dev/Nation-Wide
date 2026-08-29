@@ -16,7 +16,7 @@ export function Pagination({ page, pageSize, total, onPageChange }: PaginationPr
   const rangeEnd = Math.min(page * pageSize, total);
 
   return (
-    <div className="flex items-center justify-between gap-4 border-t border-border pt-3">
+    <div className="flex items-center justify-between gap-4 border-t border-[color:var(--glass-edge)] pt-3">
       <p className="text-xs text-muted-foreground">
         Showing {rangeStart}–{rangeEnd} of {total}
       </p>

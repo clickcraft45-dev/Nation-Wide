@@ -31,9 +31,17 @@ export function CustomerMobileShell({
     router.replace("/");
   }
 
+  /* fixed inset-0, not h-screen: the shell owns the viewport, so it must not be able to be
+     pushed around by anything else in the document. As a normal-flow h-screen box it could —
+     while a Recharts chart mounted on /admin/dashboard the subtree briefly measured taller than
+     the viewport, the document picked up ~2200px of scroll range, and it never gave it back (a
+     full viewport resize did not clear it). There is no scrollbar to warn you, but one wheel
+     gesture over the sidebar then drags the whole UI off screen and leaves a blank white page.
+     Out of flow, <body> has no in-flow content and the document is exactly the viewport, always.
+     It also sidesteps 100vh being wrong on mobile browsers with a retracting URL bar. */
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-background">
-      <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border bg-card px-4">
+    <div className="app-ambient fixed inset-0 flex flex-col overflow-hidden">
+      <header className="glass-chrome z-20 flex h-14 shrink-0 items-center gap-3 border-b border-white/40 px-4">
         <button
           onClick={() => setDrawerOpen(true)}
           aria-label="Open menu"
@@ -54,7 +62,7 @@ export function CustomerMobileShell({
 
       <nav
         aria-label="Primary"
-        className="fixed inset-x-0 bottom-0 flex border-t border-border bg-card pb-[env(safe-area-inset-bottom)]"
+        className="glass-chrome fixed inset-x-0 bottom-0 z-20 flex border-t border-white/40 pb-[env(safe-area-inset-bottom)]"
       >
         {CUSTOMER_TAB_ITEMS.map((item) => {
           const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
@@ -82,7 +90,7 @@ export function CustomerMobileShell({
             onClick={() => setDrawerOpen(false)}
             aria-hidden
           />
-          <aside className="relative flex h-full w-72 max-w-[80vw] flex-col bg-card shadow-xl">
+          <aside className="glass-raised relative flex h-full w-72 max-w-[80vw] flex-col">
             <div className="flex h-14 items-center gap-2 border-b border-border px-4">
               <Logo variant="horizontal" size="sm" />
               <button

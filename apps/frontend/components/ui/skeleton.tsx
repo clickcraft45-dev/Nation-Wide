@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils/cn";
 export function Skeleton({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={cn("animate-pulse rounded-md bg-muted", className)}
+      className={cn("animate-pulse rounded-lg bg-white/55", className)}
       {...props}
     />
   );
@@ -12,7 +12,7 @@ export function Skeleton({ className, ...props }: HTMLAttributes<HTMLDivElement>
 
 export function TableSkeleton({ rows = 5, columns = 5 }: { rows?: number; columns?: number }) {
   return (
-    <div className="w-full overflow-hidden rounded-lg border border-border">
+    <div className="glass w-full overflow-hidden rounded-2xl">
       <div className="divide-y divide-border">
         {Array.from({ length: rows }).map((_, r) => (
           <div key={r} className="flex gap-4 px-4 py-3">

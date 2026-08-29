@@ -31,7 +31,7 @@ describe('TrackingService', () => {
     apiRequestLog: { create: jest.Mock };
     $transaction: jest.Mock;
   };
-  let redis: { get: jest.Mock; set: jest.Mock };
+  let redis: { cacheGet: jest.Mock; cacheSet: jest.Mock };
   let providerRegistry: { resolve: jest.Mock };
   let configService: { get: jest.Mock };
   let notificationsService: { enqueue: jest.Mock };
@@ -60,7 +60,10 @@ describe('TrackingService', () => {
       apiRequestLog: { create: jest.fn().mockResolvedValue(undefined) },
       $transaction: jest.fn().mockResolvedValue(undefined),
     };
-    redis = { get: jest.fn().mockResolvedValue(null), set: jest.fn() };
+    redis = {
+      cacheGet: jest.fn().mockResolvedValue(null),
+      cacheSet: jest.fn(),
+    };
     providerRegistry = { resolve: jest.fn() };
     configService = { get: jest.fn().mockReturnValue(undefined) };
     notificationsService = { enqueue: jest.fn().mockResolvedValue(undefined) };
@@ -80,7 +83,7 @@ describe('TrackingService', () => {
     await expect(service.getStatus('NW-UNKNOWN')).rejects.toThrow(
       NotFoundException,
     );
-    expect(redis.get).not.toHaveBeenCalled();
+    expect(redis.cacheGet).not.toHaveBeenCalled();
   });
 
   it('returns the cached result on a cache hit without calling the provider', async () => {
@@ -101,7 +104,7 @@ describe('TrackingService', () => {
       lastUpdated: '2026-01-01T00:00:00.000Z',
       events: [],
     };
-    redis.get.mockResolvedValue(JSON.stringify(cachedDto));
+    redis.cacheGet.mockResolvedValue(JSON.stringify(cachedDto));
 
     const result = await service.getStatus('NW-1');
 
@@ -125,7 +128,7 @@ describe('TrackingService', () => {
       events: [],
     });
     expect(providerRegistry.resolve).not.toHaveBeenCalled();
-    expect(redis.set).not.toHaveBeenCalled();
+    expect(redis.cacheSet).not.toHaveBeenCalled();
   });
 
   it('fetches from the provider on a cache miss, persists new events, and caches the result', async () => {
@@ -222,10 +225,9 @@ describe('TrackingService', () => {
     expect(updateCallArgs?.data.currentStatus).toBe('PICKED_UP');
     expect(updateCallArgs?.data.lastSyncedAt).toBeInstanceOf(Date);
     expect(result.currentStatus).toBe('PICKED_UP');
-    expect(redis.set).toHaveBeenCalledWith(
+    expect(redis.cacheSet).toHaveBeenCalledWith(
       'tracking:NW-1',
       expect.any(String),
-      'EX',
       300, // default active TTL
     );
     expect(apiRequestLogArgs?.data).toMatchObject({
@@ -317,7 +319,7 @@ describe('TrackingService', () => {
     const result = await service.getStatus('NW-1');
 
     expect(result.currentStatus).toBe('IN_TRANSIT');
-    expect(redis.set).not.toHaveBeenCalled();
+    expect(redis.cacheSet).not.toHaveBeenCalled();
     expect(apiRequestLogArgs?.data.responseStatus).toBeNull();
   });
 

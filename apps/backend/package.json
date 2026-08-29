@@ -7,6 +7,7 @@
   "license": "UNLICENSED",
   "scripts": {
     "build": "nest build",
+    "dev": "nest start --watch",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
     "start:dev": "nest start --watch",
@@ -18,7 +19,10 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "NODE_OPTIONS=--experimental-vm-modules jest --config ./test/jest-e2e.json --runInBand --forceExit",
-    "db:seed": "ts-node --transpile-only prisma/seed.ts"
+    "db:seed": "ts-node --transpile-only prisma/seed.ts",
+    "db:seed:demo": "ts-node --transpile-only prisma/seed-demo.ts",
+    "db:fix-indexes": "node scripts/fix-nullable-unique-indexes.js",
+    "db:inspect-indexes": "node scripts/inspect-indexes.js"
   },
   "prisma": {
     "seed": "ts-node --transpile-only prisma/seed.ts"
@@ -75,8 +79,9 @@
     "eslint-plugin-prettier": "^5.2.2",
     "globals": "^17.0.0",
     "jest": "^30.0.0",
+    "mongodb": "^7.6.0",
     "prettier": "^3.4.2",
-    "prisma": "6.19.3",
+    "prisma": "^6.12.0",
     "source-map-support": "^0.5.21",
     "supertest": "^7.0.0",
     "ts-jest": "^29.2.5",

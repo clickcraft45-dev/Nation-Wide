@@ -166,7 +166,7 @@ export default function AdminOrdersPage() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <div className="sm:w-72">
           <SearchInput
-            placeholder="Search by order, customer, tracking #…"
+            placeholder="Order, customer or tracking #"
             value={search}
             onChange={(e) => {
               setSearch(e.target.value);
@@ -263,8 +263,12 @@ export default function AdminOrdersPage() {
                       {shipment?.internalTrackingNumber ?? order.id.slice(0, 8)}
                     </TableCell>
                     <TableCell>{customer?.name ?? "—"}</TableCell>
-                    <TableCell className="text-muted-foreground">—</TableCell>
-                    <TableCell className="text-muted-foreground">—</TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      {order.origin ?? <span className="text-muted-foreground">—</span>}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      {order.destination ?? <span className="text-muted-foreground">—</span>}
+                    </TableCell>
                     <TableCell>{provider?.name ?? "—"}</TableCell>
                     <TableCell>
                       {shipment ? (
@@ -290,10 +294,6 @@ export default function AdminOrdersPage() {
             </TableBody>
           </Table>
           <Pagination page={page} pageSize={PAGE_SIZE} total={total} onPageChange={setPage} />
-          <p className="text-xs text-muted-foreground">
-            Origin/Destination aren&apos;t tracked in the order model yet — no shipper/consignee
-            address data is captured today.
-          </p>
         </>
       )}
     </div>

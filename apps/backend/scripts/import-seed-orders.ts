@@ -25,6 +25,7 @@ dotenv.config({ path: path.join(__dirname, '..', '.env') });
 import { randomUUID } from 'node:crypto';
 import { PrismaClient, Prisma } from '@prisma/client';
 import { ICLShippingProviderAdapter } from '../src/modules/provider-integration/adapters/icl/icl-shipping-provider.adapter';
+import { nextSequenceNumber } from '../src/modules/shipments/sequence';
 
 const prisma = new PrismaClient();
 
@@ -138,6 +139,7 @@ async function main() {
       data: {
         orderId: order.id,
         providerId: shippingProvider.id,
+        sequenceNumber: await nextSequenceNumber(prisma),
         internalTrackingNumber: `PENDING-${randomUUID()}`,
         createdAt: orderDate,
         updatedAt: orderDate,

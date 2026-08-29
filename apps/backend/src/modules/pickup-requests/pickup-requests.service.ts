@@ -96,8 +96,8 @@ export class PickupRequestsService {
     const rateProviderId = quote.selectedOption?.rateProviderId ?? null;
     const rateProviderName = quote.selectedOption?.rateProvider.name ?? null;
     const estimatedPrice = quote.selectedOption
-      ? quote.selectedOption.finalPrice.toNumber()
-      : (quote.quotedAmount?.toNumber() ?? 0);
+      ? quote.selectedOption.finalPrice
+      : (quote.quotedAmount ?? 0);
     const currency = quote.selectedOption
       ? quote.selectedOption.currency
       : (quote.quotedCurrency ?? 'INR');
@@ -321,7 +321,7 @@ export class PickupRequestsService {
       dto.weightKg,
       dto.shipmentType,
     );
-    const estimatedPrice = pickupRequest.estimatedPrice.toNumber();
+    const estimatedPrice = pickupRequest.estimatedPrice;
     return {
       estimatedPrice,
       recalculatedPrice,
@@ -409,7 +409,7 @@ export class PickupRequestsService {
       // Manual-quote path — there's no RateProvider to re-price against (a human already set
       // this price with their own judgment); the weight/type correction is recorded for the
       // record, but the price only changes if staff manually re-quote it elsewhere.
-      verifiedPrice = pickupRequest.estimatedPrice.toNumber();
+      verifiedPrice = pickupRequest.estimatedPrice;
     }
 
     await this.prisma.pickupRequest.update({
@@ -431,8 +431,8 @@ export class PickupRequestsService {
         entity: 'PickupRequest',
         entityId: id,
         before: {
-          estimatedWeightKg: pickupRequest.estimatedWeightKg.toNumber(),
-          estimatedPrice: pickupRequest.estimatedPrice.toNumber(),
+          estimatedWeightKg: pickupRequest.estimatedWeightKg,
+          estimatedPrice: pickupRequest.estimatedPrice,
         },
         after: { verifiedWeightKg: dto.verifiedWeightKg, verifiedPrice },
       },
@@ -466,8 +466,7 @@ export class PickupRequestsService {
     }
 
     const expectedPrice =
-      pickupRequest.verifiedPrice?.toNumber() ??
-      pickupRequest.estimatedPrice.toNumber();
+      pickupRequest.verifiedPrice ?? pickupRequest.estimatedPrice;
     const tolerance = Math.max(
       expectedPrice * COLLECTED_AMOUNT_TOLERANCE_RATIO,
       COLLECTED_AMOUNT_TOLERANCE_FLOOR,
@@ -575,8 +574,7 @@ export class PickupRequestsService {
       );
 
     const finalPrice =
-      pickupRequest.verifiedPrice?.toNumber() ??
-      pickupRequest.estimatedPrice.toNumber();
+      pickupRequest.verifiedPrice ?? pickupRequest.estimatedPrice;
 
     await this.prisma.$transaction([
       this.prisma.order.update({
@@ -719,10 +717,10 @@ export class PickupRequestsService {
 
     const cashCollectedToday = paymentsToday
       .filter((p) => p.paymentMethod === 'CASH')
-      .reduce((sum, p) => sum + (p.collectedAmount?.toNumber() ?? 0), 0);
+      .reduce((sum, p) => sum + (p.collectedAmount ?? 0), 0);
     const upiCollectedToday = paymentsToday
       .filter((p) => p.paymentMethod === 'UPI')
-      .reduce((sum, p) => sum + (p.collectedAmount?.toNumber() ?? 0), 0);
+      .reduce((sum, p) => sum + (p.collectedAmount ?? 0), 0);
 
     return {
       todayPickups,

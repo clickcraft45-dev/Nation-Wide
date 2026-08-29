@@ -7,6 +7,7 @@ import { readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
 import { formatInternalTrackingNumber } from '../src/modules/shipments/tracking-number';
+import { nextSequenceNumber } from '../src/modules/shipments/sequence';
 
 const prisma = new PrismaClient();
 
@@ -82,6 +83,7 @@ async function main() {
         data: {
           orderId: order.id,
           providerId: provider.id,
+          sequenceNumber: await nextSequenceNumber(tx),
           internalTrackingNumber: `PENDING-${randomUUID()}`,
           createdAt,
           updatedAt: createdAt,

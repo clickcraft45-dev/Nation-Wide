@@ -52,7 +52,7 @@ export class TrackingService {
     }
 
     const cacheKey = this.cacheKeyFor(internalTrackingNumber);
-    const cached = await this.redis.get(cacheKey);
+    const cached = await this.redis.cacheGet(cacheKey);
     if (cached) {
       return JSON.parse(cached) as TrackingResultDto;
     }
@@ -183,9 +183,7 @@ export class TrackingService {
             eventTime: event.eventTime,
             location: event.location,
             rawPayload:
-              event.rawPayload === undefined
-                ? Prisma.JsonNull
-                : (event.rawPayload as Prisma.InputJsonValue),
+              event.rawPayload === undefined ? null : event.rawPayload,
           };
         }),
       }),
@@ -263,7 +261,7 @@ export class TrackingService {
       : (this.configService.get<number>('TRACKING_CACHE_TTL_ACTIVE_SECONDS') ??
         DEFAULT_ACTIVE_TTL_SECONDS);
 
-    await this.redis.set(cacheKey, JSON.stringify(dto), 'EX', ttlSeconds);
+    await this.redis.cacheSet(cacheKey, JSON.stringify(dto), ttlSeconds);
   }
 
   private cacheKeyFor(internalTrackingNumber: string): string {

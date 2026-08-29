@@ -14,8 +14,8 @@ export function toPickupRequestDto(
     rateProviderId: pickupRequest.rateProviderId,
     rateProviderName: pickupRequest.rateProviderName,
     shipmentType: pickupRequest.shipmentType,
-    estimatedWeightKg: pickupRequest.estimatedWeightKg.toNumber(),
-    estimatedPrice: pickupRequest.estimatedPrice.toNumber(),
+    estimatedWeightKg: pickupRequest.estimatedWeightKg,
+    estimatedPrice: pickupRequest.estimatedPrice,
     currency: pickupRequest.currency,
 
     dropAtWarehouse: pickupRequest.dropAtWarehouse,
@@ -53,11 +53,11 @@ export function toPickupRequestDto(
       : null,
 
     verifiedWeightKg: pickupRequest.verifiedWeightKg
-      ? pickupRequest.verifiedWeightKg.toNumber()
+      ? pickupRequest.verifiedWeightKg
       : null,
     verifiedShipmentType: pickupRequest.verifiedShipmentType,
     verifiedPrice: pickupRequest.verifiedPrice
-      ? pickupRequest.verifiedPrice.toNumber()
+      ? pickupRequest.verifiedPrice
       : null,
     verificationNotes: pickupRequest.verificationNotes,
     verifiedAt: pickupRequest.verifiedAt
@@ -66,7 +66,7 @@ export function toPickupRequestDto(
 
     paymentMethod: pickupRequest.paymentMethod,
     collectedAmount: pickupRequest.collectedAmount
-      ? pickupRequest.collectedAmount.toNumber()
+      ? pickupRequest.collectedAmount
       : null,
     paymentReference: pickupRequest.paymentReference,
     paymentNotes: pickupRequest.paymentNotes,

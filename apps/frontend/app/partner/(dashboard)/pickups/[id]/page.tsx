@@ -123,6 +123,8 @@ export default function PartnerPickupDetailPage() {
     if (!pickup || pickup.arrivedAt === null || pickup.verifiedAt) return;
     const weightKg = Number(debouncedWeight);
     if (!weightKg || weightKg <= 0) {
+      // Dropping a now-stale preview when the inputs stop being valid — one render, not a loop.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setPreview(null);
       return;
     }

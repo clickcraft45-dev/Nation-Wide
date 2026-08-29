@@ -4,7 +4,7 @@
 
 | Variable | Required | Default (dev) | Notes |
 |---|---|---|---|
-| `DATABASE_URL` | Yes | — | Postgres connection string, e.g. `postgresql://user:pass@host:5432/db?schema=public` |
+| `DATABASE_URL` | Yes | — | MongoDB Atlas connection string, e.g. `mongodb+srv://user:pass@cluster.xxxxx.mongodb.net/nationwide?retryWrites=true&w=majority`. Must be a replica set (every Atlas cluster is) — Prisma's mongodb connector needs one for transactions. Use a least-privilege user with `readWrite` on this database only |
 | `REDIS_URL` | Yes | — | Redis connection string, used for both caching and the BullMQ notifications queue |
 | `JWT_ACCESS_SECRET` | Yes | — | Signs short-lived access tokens. Must be a real, unguessable secret in any non-dev environment |
 | `JWT_REFRESH_SECRET` | Yes | — | Signs refresh tokens (httpOnly cookie). Must differ from `JWT_ACCESS_SECRET` |
@@ -38,9 +38,11 @@ current `.env.example` and rotate those credentials with ICL if you'd used the l
 | Variable | Required | Default (dev) | Notes |
 |---|---|---|---|
 | `NEXT_PUBLIC_API_BASE_URL` | No | `http://localhost:4000/api/v1` | Backend API origin the frontend calls. `NEXT_PUBLIC_*` vars are inlined at build time — rebuild the image after changing this, setting it at container runtime has no effect |
+| `NEXT_PUBLIC_SITE_URL` | Yes (prod) | `http://localhost:3004` | The public origin this deployment serves from. Baked into `sitemap.xml`, `robots.txt` and the OpenGraph/canonical tags at build time — leave it unset in production and search engines and social cards will point at localhost. Include the scheme, no trailing slash (e.g. `https://nationwidelogistics.in`) |
 | `PORT` | No | `3000` | Port `next start` / the standalone `server.js` listens on |
 
 ## CI (`.github/workflows/ci.yml`)
 
-CI sets its own throwaway values for all required backend vars (`ci-only-*` secrets, a Postgres/
-Redis service container) — nothing there needs to match any real environment's values.
+CI sets its own throwaway values for all required backend vars (`ci-only-*` secrets, a Redis
+service container, and a local single-node MongoDB replica set) — nothing there needs to match any
+real environment's values, and CI never connects to Atlas.

@@ -20,7 +20,7 @@ export class QueryAuditLogsDto {
   // Comma-separated in the query string, e.g. ?entities=WeightSlab,RateProvider — the pricing
   // Rate History view scopes to these two without excluding either via a single `entity` filter.
   @IsOptional()
-  @Transform(({ value }) =>
+  @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' ? value.split(',') : value,
   )
   @IsArray()

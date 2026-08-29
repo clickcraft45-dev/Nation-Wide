@@ -9,6 +9,7 @@ import type { App } from 'supertest/types';
 import type { PickupDto } from '@nationwide/shared-types';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/database/prisma.service';
+import { nextSequenceNumber } from '../src/modules/shipments/sequence';
 
 const TEST_STAFF_EMAIL = 'e2e-pickups-staff@nationwide.dev';
 const TEST_STAFF_PASSWORD = 'CorrectHorseBattery1';
@@ -22,7 +23,6 @@ describe('Pickups (e2e)', () => {
   let configService: ConfigService;
   let staffAccessToken: string;
   let customerId: string;
-  let pickupQuoteId: string;
   let pickupId: string;
   let dropOffPickupId: string;
 
@@ -125,6 +125,7 @@ describe('Pickups (e2e)', () => {
         data: {
           orderId: order.id,
           providerId: provider.id,
+          sequenceNumber: await nextSequenceNumber(prisma),
           internalTrackingNumber: `PENDING-${order.id}`,
         },
       });
@@ -151,7 +152,6 @@ describe('Pickups (e2e)', () => {
     }
 
     const pickupSetup = await createPickupFor('PICKUP');
-    pickupQuoteId = pickupSetup.quoteId;
     pickupId = pickupSetup.pickupId;
 
     const dropOffSetup = await createPickupFor('WAREHOUSE_DROP_OFF');

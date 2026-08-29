@@ -9,6 +9,7 @@ import { SearchInput } from "@/components/ui/search-input";
 import { EmptyState, ErrorState } from "@/components/ui/page-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PickupCard } from "@/components/partner/pickup-card";
+import { Calendar, todayIso } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils/cn";
 
 type FilterTab = "today" | "tomorrow" | "upcoming" | "all";
@@ -112,6 +113,18 @@ function PartnerPickupsPageInner() {
 
   const totalCount = grouped.reduce((sum, [, rows]) => sum + rows.length, 0);
 
+  // Dots on the calendar = pickups still to run that day, so a partner can see their week
+  // at a glance instead of paging through the Today/Tomorrow/Upcoming chips.
+  const pickupsByDay = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const p of pickups) {
+      if (p.pickupDate && NON_TERMINAL.has(p.status)) {
+        counts[p.pickupDate] = (counts[p.pickupDate] ?? 0) + 1;
+      }
+    }
+    return counts;
+  }, [pickups]);
+
   return (
     <div className="space-y-4">
       <div>
@@ -154,6 +167,22 @@ function PartnerPickupsPageInner() {
           ))}
         </div>
       )}
+
+      <Calendar
+        title="Your Run Sheet"
+        subtitle="Dots show pickups still to run"
+        markers={pickupsByDay}
+        markerLabel="pickups"
+        selected={dateParam ?? null}
+        onSelect={(iso) => router.push(`/partner/pickups?date=${iso}`)}
+        className="max-w-none"
+        footer={
+          <p className="text-xs text-muted-foreground">
+            {pickupsByDay[dateParam ?? todayIso()] ?? 0} pickup(s) on the selected day. Tap a date to
+            see only that day.
+          </p>
+        }
+      />
 
       <SearchInput
         placeholder="Search name, address, or ID…"

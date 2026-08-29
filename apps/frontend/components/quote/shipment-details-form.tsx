@@ -5,6 +5,8 @@ import type { CountryDto, CustomerDto, ShipmentTypeCode } from "@nationwide/shar
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input, Label, FieldError } from "@/components/ui/input";
+import { DateField } from "@/components/ui/date-field";
+import { PincodeInput } from "@/components/ui/pincode-input";
 import { NativeSelect } from "@/components/ui/select";
 
 // Configurable — fill in the real warehouse address/hours when available (same placeholder
@@ -291,11 +293,20 @@ export function ShipmentDetailsForm({
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="origin-postal">Postal code</Label>
-              <Input
+              <Label htmlFor="origin-postal">PIN code</Label>
+              {/* Pickup is always domestic, so this is always an Indian PIN — verified against
+                  India Post, and a hit fills City/State so they can't contradict the PIN. */}
+              <PincodeInput
                 id="origin-postal"
                 value={origin.postalCode}
-                onChange={(e) => setOrigin({ ...origin, postalCode: e.target.value })}
+                onChange={(postalCode) => setOrigin((prev) => ({ ...prev, postalCode }))}
+                onResolved={({ city, state }) =>
+                  setOrigin((prev) => ({
+                    ...prev,
+                    city: prev.city.trim() === "" ? city : prev.city,
+                    state: prev.state.trim() === "" ? state : prev.state,
+                  }))
+                }
                 error={Boolean(errors["origin.postalCode"])}
               />
             </div>
@@ -374,13 +385,33 @@ export function ShipmentDetailsForm({
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="dest-postal">Postal code</Label>
-              <Input
-                id="dest-postal"
-                value={destination.postalCode}
-                onChange={(e) => setDestination({ ...destination, postalCode: e.target.value })}
-                error={Boolean(errors["destination.postalCode"])}
-              />
+              <Label htmlFor="dest-postal">
+                {destinationCountry.code === "IN" ? "PIN code" : "Postal code"}
+              </Label>
+              {/* Only India's PIN codes can be verified — every other destination keeps a plain
+                  field rather than a check that would always come back "couldn't verify". */}
+              {destinationCountry.code === "IN" ? (
+                <PincodeInput
+                  id="dest-postal"
+                  value={destination.postalCode}
+                  onChange={(postalCode) => setDestination((prev) => ({ ...prev, postalCode }))}
+                  onResolved={({ city, state }) =>
+                    setDestination((prev) => ({
+                      ...prev,
+                      city: prev.city.trim() === "" ? city : prev.city,
+                      state: prev.state.trim() === "" ? state : prev.state,
+                    }))
+                  }
+                  error={Boolean(errors["destination.postalCode"])}
+                />
+              ) : (
+                <Input
+                  id="dest-postal"
+                  value={destination.postalCode}
+                  onChange={(e) => setDestination({ ...destination, postalCode: e.target.value })}
+                  error={Boolean(errors["destination.postalCode"])}
+                />
+              )}
             </div>
           </div>
         </CardContent>
@@ -433,13 +464,14 @@ export function ShipmentDetailsForm({
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="pickup-date">Pickup date</Label>
-                <Input
+                <DateField
                   id="pickup-date"
-                  type="date"
+                  title="Pickup date"
+                  subtitle="When should we collect it?"
                   min={todayIso()}
                   max={maxPickupDateIso()}
                   value={pickupDate}
-                  onChange={(e) => setPickupDate(e.target.value)}
+                  onChange={setPickupDate}
                   error={Boolean(errors.pickupDate)}
                 />
                 {errors.pickupDate && <FieldError>{errors.pickupDate}</FieldError>}

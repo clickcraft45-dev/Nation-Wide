@@ -15,7 +15,7 @@ const API_ORIGIN = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:40
 );
 
 const textareaClass =
-  "w-full rounded-md border border-border bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  "glass-field w-full rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 interface FormState {
   companyName: string;
@@ -198,7 +198,7 @@ export function CompanySettingsDialog({
                       type="color"
                       value={/^#[0-9a-f]{6}$/i.test(form.primaryColor) ? form.primaryColor : "#1261A0"}
                       onChange={(e) => setForm((f) => f && { ...f, primaryColor: e.target.value })}
-                      className={cn("h-9 w-9 shrink-0 rounded border border-border bg-card")}
+                      className={cn("glass-field h-9 w-9 shrink-0 rounded-lg")}
                     />
                     <Input
                       id="cs-color"

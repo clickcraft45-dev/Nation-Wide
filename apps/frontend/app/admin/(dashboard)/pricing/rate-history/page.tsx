@@ -15,7 +15,8 @@ import {
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/page-state";
 import { SearchInput } from "@/components/ui/search-input";
-import { Input, Label } from "@/components/ui/input";
+import { Label } from "@/components/ui/input";
+import { DateField } from "@/components/ui/date-field";
 import { useDebouncedValue } from "@/lib/utils/use-debounced-value";
 
 const WEIGHT_SLAB_FIELD_LABELS: Record<string, string> = {
@@ -82,19 +83,34 @@ export default function RateHistoryPage() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
         <div className="sm:w-64">
           <SearchInput
-            placeholder="Search by admin email or action…"
+            placeholder="Admin email or action"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             aria-label="Search rate history"
           />
         </div>
-        <div className="space-y-1.5">
+        <div className="space-y-1.5 sm:w-52">
           <Label htmlFor="history-from">From</Label>
-          <Input id="history-from" type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+          <DateField
+            id="history-from"
+            title="From"
+            subtitle="Earliest change to show"
+            max={dateTo || undefined}
+            value={dateFrom}
+            onChange={setDateFrom}
+          />
         </div>
-        <div className="space-y-1.5">
+        <div className="space-y-1.5 sm:w-52">
           <Label htmlFor="history-to">To</Label>
-          <Input id="history-to" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+          <DateField
+            id="history-to"
+            title="To"
+            subtitle="Latest change to show"
+            min={dateFrom || undefined}
+            value={dateTo}
+            onChange={setDateTo}
+            align="end"
+          />
         </div>
       </div>
 
