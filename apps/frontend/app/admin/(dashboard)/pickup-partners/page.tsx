@@ -64,7 +64,8 @@ export default function AdminPickupPartnersPage() {
         <div>
           <h1 className="text-xl font-semibold text-foreground">Pickup Partners</h1>
           <p className="text-sm text-muted-foreground">
-            Field executives who collect and verify parcels from customers.
+            Field executives who collect and verify parcels from customers. Double-click a row to
+            see their pickups, orders and collections.
           </p>
         </div>
         <PickupPartnerDialog
@@ -91,12 +92,12 @@ export default function AdminPickupPartnersPage() {
               <TableHead>Email</TableHead>
               <TableHead>Phone</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead>Actions</TableHead>
+              <TableHead>Access</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {partners.map((p) => (
-              <TableRow key={p.id}>
+              <TableRow key={p.id} href={`/admin/pickup-partners/${p.id}`}>
                 <TableCell className="font-medium text-foreground">{p.name ?? "—"}</TableCell>
                 <TableCell className="text-muted-foreground">{p.email}</TableCell>
                 <TableCell className="text-muted-foreground">{p.phone ?? "—"}</TableCell>

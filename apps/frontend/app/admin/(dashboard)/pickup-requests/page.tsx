@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { ClipboardList } from "lucide-react";
 import type { PickupRequestDto, PickupRequestStatusCode } from "@nationwide/shared-types";
 import { apiClient, ApiError } from "@/lib/api-client";
@@ -123,14 +122,9 @@ export default function AdminPickupRequestsPage() {
           </TableHeader>
           <TableBody>
             {pickupRequests.map((p) => (
-              <TableRow key={p.id}>
+              <TableRow key={p.id} href={`/admin/pickup-requests/${p.id}`}>
                 <TableCell>
-                  <Link
-                    href={`/admin/pickup-requests/${p.id}`}
-                    className="font-medium text-primary hover:underline"
-                  >
-                    {p.customerName}
-                  </Link>
+                  <span className="font-medium text-foreground">{p.customerName}</span>
                   <p className="text-xs text-muted-foreground">{p.customerPhone}</p>
                 </TableCell>
                 <TableCell className="max-w-[200px] truncate text-muted-foreground">

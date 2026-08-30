@@ -33,11 +33,19 @@ There are three separate interfaces the identity has to survive in:
 3. A pickup partner's phone app, used one-handed, outdoors, in Indian daylight.
 
 THE DESIGN LANGUAGE ALREADY IN PLACE (do not fight it — extend it)
-- Deliberately MONOCHROME. White surfaces, near-black ink, zinc neutrals between. No brand hue.
-  The existing tokens:
+- BLACK / WHITE / RED. White surfaces, near-black ink, zinc neutrals between, and one deep red
+  as the single chromatic brand voice — the trust-and-authority register, not a decorative
+  palette. The existing tokens:
     background #ffffff   foreground #0b0b0c   primary #18181b   primary-hover #000000
     muted #f4f4f5        muted-foreground #6b6b72   border #e4e4e7
     dark panel / brand black #0b0b0c   panel accent #1c1c1f   panel border #27272a
+    brand-red #7f1020 (dark base)   brand-red-deep #5a0a17   brand-red-bright #c8384a
+    brand-red-tint #fbeef0
+  The red is a deliberate OXBLOOD, not a bright alarm red, because the app already owns a bright
+  red for failure (danger #b91c1c below) and the two must never be confused. Brand red carries
+  identity only — the mark's arrowhead, brand accents, brand surfaces. It never means "something
+  went wrong", and it must not appear in the same component as a danger state. Everything else
+  stays monochrome; red is an accent, not a fourth surface colour.
 - Status colour is RESERVED and is the one non-monochrome exception, because delivered / failed /
   pending carry operational meaning that must survive a colour-blind or hurried reader:
     success #15803d   warning #b45309   danger #b91c1c   info #27272a
@@ -66,11 +74,14 @@ WHAT I NEED BACK
 2. THREE DISTINCT DIRECTIONS for that mark before you commit — one sentence each on the idea,
    then pick one and justify it in two sentences. I want to see the alternatives you rejected.
 
-3. COLOUR. Confirm or revise the monochrome tokens above as a named scale (give every step a
-   hex and a role). If you propose ANY chromatic accent, argue for it against the existing
-   monochrome decision and show where it would appear — and keep it clear of the four reserved
-   status colours. Include contrast ratios against both #ffffff and #0b0b0c, and flag anything
-   under 4.5:1 for text or 3:1 for UI.
+3. COLOUR. Confirm or revise the tokens above as a named scale (give every step a hex and a
+   role). The black/white/red decision is settled — what I want from you is the red scale done
+   properly: how many steps it needs, which step is the base, and exactly which surfaces each
+   step is allowed on. It must stay unmistakable against danger #b91c1c at a glance and for a
+   red-green colour-blind reader, and it must survive on both white and #0b0b0c glass. Include
+   contrast ratios against both #ffffff and #0b0b0c, and flag anything under 4.5:1 for text or
+   3:1 for UI. If you think the red is a mistake, say so once, with the argument — then give me
+   the best version of it anyway.
 
 4. TYPOGRAPHY. A display/UI face and a monospace face for codes. Poppins and Geist Mono are in
    use — either defend keeping them or name a better pair, with the trade-off stated. Both must
@@ -105,7 +116,8 @@ survives; then feed the winner back into Prompt A as the mark to redraw as SVG.
 
 ```
 A minimal vector logo mark for a cross-border logistics company called NationWide.
-Flat monochrome: pure black on pure white, no gradient, no shadow, no 3D, no photorealism.
+Flat and two-tone: pure black on pure white, with at most ONE element picked out in a deep
+oxblood red (#7f1020). No gradient, no shadow, no 3D, no photorealism.
 Geometric monogram built from the letter N, with a single implied line of forward motion —
 a meridian, a flight arc, or a folded route line. Balanced in a square, works at 16 pixels,
 one continuous idea rather than several stacked symbols.
@@ -145,5 +157,9 @@ when the mono face is used instead of the UI face. Be decisive.
 - The mark drops into `apps/frontend/components/brand/logo.tsx` — every screen already goes
   through that one component, so replacing the internals of `NwMark` swaps the logo everywhere.
 - Palette tokens live in `:root` in `apps/frontend/app/globals.css`; keep the variable NAMES and
-  change only the values, or every component that consumes them has to be touched.
+  change only the values, or every component that consumes them has to be touched. The red scale
+  is `--brand-red*` there, next to `--brand-navy` — and note the rule in the comment above it:
+  brand red is identity, `--danger` is failure, and they are not interchangeable.
+- `app/icon.svg` carries the same geometry AND the same red as the mark, with the hex inlined
+  (a static file cannot read CSS variables) — change one and change the other.
 - Fonts are loaded in `apps/frontend/app/layout.tsx` via `next/font/google`.

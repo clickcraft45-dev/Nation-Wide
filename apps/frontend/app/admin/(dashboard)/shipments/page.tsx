@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { RefreshCw } from "lucide-react";
+import { History, RefreshCw, X } from "lucide-react";
 import type {
   ShipmentAdminDetailDto,
   ShippingProviderDto,
@@ -16,6 +16,11 @@ import { ShipmentLookupForm } from "@/features/admin/ShipmentLookupForm";
 import { ShipmentDetailPanel } from "@/features/admin/ShipmentDetailPanel";
 import { MapTrackingNumberForm } from "@/features/admin/MapTrackingNumberForm";
 import { OverrideStatusForm, type OverrideInput } from "@/features/admin/OverrideStatusForm";
+import {
+  clearTrackingHistory,
+  readTrackingHistory,
+  rememberTrackingNumber,
+} from "@/lib/tracking-history";
 
 function AdminShipmentsPageInner() {
   const searchParams = useSearchParams();
@@ -29,6 +34,14 @@ function AdminShipmentsPageInner() {
   const [isMutating, setIsMutating] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Filled after mount — localStorage does not exist during the server render, so seeding it in
+  // useState would hydrate a different tree than the server sent.
+  const [history, setHistory] = useState<string[]>([]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setHistory(readTrackingHistory());
+  }, []);
 
   useEffect(() => {
     apiClient
@@ -44,6 +57,8 @@ function AdminShipmentsPageInner() {
       const data = await apiClient.get<ShipmentAdminDetailDto>(`/admin/shipments/${num}`);
       setShipment(data);
       setTrackingNumber(num);
+      // Only lookups that resolved are remembered — a history of typos helps nobody.
+      setHistory(rememberTrackingNumber(data.internalTrackingNumber));
     } catch (e) {
       setShipment(null);
       setTrackingNumber(null);
@@ -132,6 +147,36 @@ function AdminShipmentsPageInner() {
         isLoading={isLoading}
         initialValue={initialTracking}
       />
+
+      {history.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+            <History className="h-3.5 w-3.5" aria-hidden />
+            Recently looked up
+          </span>
+          {history.map((num) => (
+            <button
+              key={num}
+              type="button"
+              onClick={() => void loadShipment(num)}
+              className="glass-pill rounded-full border px-2.5 py-1 font-mono text-xs text-foreground transition-colors hover:bg-white/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              {num}
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => {
+              clearTrackingHistory();
+              setHistory([]);
+            }}
+            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <X className="h-3 w-3" aria-hidden />
+            Clear
+          </button>
+        </div>
+      )}
 
       {error && <ErrorState message={error} />}
 

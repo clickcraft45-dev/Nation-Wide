@@ -166,19 +166,14 @@ export default function AdminQuotesPage() {
                 <TableHead>Review Reason</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Quoted</TableHead>
-                <TableHead>Actions</TableHead>
+                <TableHead>Review</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {quotes.map((q) => (
-                <TableRow key={q.id}>
+                <TableRow key={q.id} href={`/admin/quotes/${q.id}`}>
                   <TableCell>
-                    <Link
-                      href={`/admin/quotes/${q.id}`}
-                      className="font-medium text-primary hover:underline"
-                    >
-                      {q.customerName}
-                    </Link>
+                    <span className="font-medium text-foreground">{q.customerName}</span>
                   </TableCell>
                   <TableCell className="text-muted-foreground">
                     {q.origin ? `${q.origin.city} → ` : "To "}
@@ -215,12 +210,7 @@ export default function AdminQuotesPage() {
                         }
                       />
                     ) : (
-                      <Link
-                        href={`/admin/quotes/${q.id}`}
-                        className="text-xs text-primary hover:underline"
-                      >
-                        View
-                      </Link>
+                      <span className="text-xs text-muted-foreground">—</span>
                     )}
                   </TableCell>
                 </TableRow>

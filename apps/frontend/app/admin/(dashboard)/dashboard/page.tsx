@@ -17,7 +17,6 @@ import {
 import type {
   OrderDto,
   CustomerDto,
-  AuditLogEntryDto,
   DashboardSummaryDto,
   PickupRequestDto,
 } from "@nationwide/shared-types";
@@ -25,11 +24,10 @@ import { apiClient, ApiError } from "@/lib/api-client";
 import { useAuth } from "@/state/auth-context";
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { QuickActions } from "@/components/dashboard/quick-actions";
-import { RecentActivity } from "@/components/dashboard/recent-activity";
 import { TrendAreaChart, type TrendPoint } from "@/components/ui/trend-area-chart";
 import { ShipmentStatusDonut, type ShipmentStatusSlice } from "@/components/dashboard/shipment-status-donut";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Calendar, formatIsoLong, todayIso, toIso } from "@/components/ui/calendar";
+import { Calendar, addDaysIso, formatIsoLong, fromIso, todayIso } from "@/components/ui/calendar";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { OrderStatusBadge } from "@/components/ui/status-badge";
 import { EmptyState, ErrorState } from "@/components/ui/page-state";
@@ -53,12 +51,19 @@ const NON_TERMINAL_PICKUP = new Set([
 ]);
 const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-// The trend panel's own range control.
-const TREND_RANGES = [
-  { days: 90, label: "Last 3 months" },
-  { days: 30, label: "Last 30 days" },
-  { days: 7, label: "Last 7 days" },
+// Shortcuts that just write into the from/to pair below — the two dates are the single source
+// of truth for the whole page, not a second filtering mode running alongside the presets.
+const RANGE_PRESETS = [
+  { days: 90, label: "3 months" },
+  { days: 30, label: "30 days" },
+  { days: 7, label: "7 days" },
 ] as const;
+
+/** Whole days covered by an inclusive from..to pair, floored at 1. */
+function daysBetween(from: string, to: string): number {
+  const ms = fromIso(to).getTime() - fromIso(from).getTime();
+  return Math.max(1, Math.round(ms / 86_400_000) + 1);
+}
 
 const TREND_SERIES = [
   { key: "orders", label: "In progress" },
@@ -69,11 +74,13 @@ export default function AdminDashboardHomePage() {
   const { user } = useAuth();
   const [orders, setOrders] = useState<OrderDto[] | null>(null);
   const [customers, setCustomers] = useState<CustomerDto[] | null>(null);
-  const [auditLogs, setAuditLogs] = useState<AuditLogEntryDto[]>([]);
   const [summary, setSummary] = useState<DashboardSummaryDto | null>(null);
   const [pickupRequests, setPickupRequests] = useState<PickupRequestDto[]>([]);
   const [scheduleDay, setScheduleDay] = useState(todayIso);
-  const [trendDays, setTrendDays] = useState<number>(90);
+  // The page-wide reporting window. Everything derived from orders below — KPIs, their deltas,
+  // the trend chart and the recent-orders table — reads these two dates and nothing else.
+  const [to, setTo] = useState(todayIso);
+  const [from, setFrom] = useState(() => addDaysIso(todayIso(), -89));
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -87,15 +94,13 @@ export default function AdminDashboardHomePage() {
     Promise.all([
       apiClient.get<OrderDto[]>("/orders"),
       apiClient.get<CustomerDto[]>("/customers"),
-      apiClient.get<AuditLogEntryDto[]>("/admin/audit-logs"),
       apiClient.get<DashboardSummaryDto>("/admin/dashboard-summary"),
       apiClient.get<PickupRequestDto[]>("/admin/pickup-requests"),
     ])
-      .then(([ordersRes, customersRes, auditRes, summaryRes, pickupsRes]) => {
+      .then(([ordersRes, customersRes, summaryRes, pickupsRes]) => {
         if (cancelled) return;
         setOrders(ordersRes);
         setCustomers(customersRes);
-        setAuditLogs(auditRes);
         setSummary(summaryRes);
         setPickupRequests(pickupsRes);
       })
@@ -122,15 +127,25 @@ export default function AdminDashboardHomePage() {
     return map;
   }, [customers]);
 
+  const rangeDays = daysBetween(from, to);
+
+  // Every KPI, delta and table below counts only what was placed inside the selected window.
+  // Filtering here rather than at each call site is what keeps the tiles and the chart agreeing
+  // with each other — they were previously all-time while the chart was windowed.
+  const rangeOrders = useMemo(
+    () => (orders ?? []).filter((o) => o.createdAt.slice(0, 10) >= from && o.createdAt.slice(0, 10) <= to),
+    [orders, from, to],
+  );
+
   const primaryStatus = (order: OrderDto) => order.shipments[0]?.currentStatus ?? null;
-  const ordersInTransit =
-    orders?.filter((o) => IN_TRANSIT_STATUSES.has(primaryStatus(o) ?? "")).length ?? 0;
-  const ordersDelivered = orders?.filter((o) => primaryStatus(o) === "DELIVERED").length ?? 0;
-  const totalShipments = orders?.reduce((sum, o) => sum + o.shipments.length, 0) ?? 0;
-  const totalRevenue =
-    orders
-      ?.filter((o) => o.paymentStatus === "PAID")
-      .reduce((sum, o) => sum + (o.paidAmount ?? 0), 0) ?? 0;
+  const ordersInTransit = rangeOrders.filter((o) =>
+    IN_TRANSIT_STATUSES.has(primaryStatus(o) ?? ""),
+  ).length;
+  const ordersDelivered = rangeOrders.filter((o) => primaryStatus(o) === "DELIVERED").length;
+  const totalShipments = rangeOrders.reduce((sum, o) => sum + o.shipments.length, 0);
+  const totalRevenue = rangeOrders
+    .filter((o) => o.paymentStatus === "PAID")
+    .reduce((sum, o) => sum + (o.paidAmount ?? 0), 0);
 
   // Two stacked series per day: what is still moving, and what already landed. "Delivered" is
   // counted against the day the order was PLACED, not the day it arrived — the API carries no
@@ -138,7 +153,7 @@ export default function AdminDashboardHomePage() {
   const ordersTrend: TrendPoint[] = useMemo(() => {
     const placed = new Map<string, number>();
     const delivered = new Map<string, number>();
-    for (const o of orders ?? []) {
+    for (const o of rangeOrders) {
       const key = o.createdAt.slice(0, 10);
       placed.set(key, (placed.get(key) ?? 0) + 1);
       if (o.shipments[0]?.currentStatus === "DELIVERED") {
@@ -147,14 +162,13 @@ export default function AdminDashboardHomePage() {
     }
 
     const points: TrendPoint[] = [];
-    for (let i = trendDays - 1; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      const key = toIso(d);
+    for (let i = 0; i < rangeDays; i++) {
+      const key = addDaysIso(from, i);
+      const d = fromIso(key);
       const deliveredCount = delivered.get(key) ?? 0;
       points.push({
         label:
-          trendDays <= 7
+          rangeDays <= 7
             ? WEEKDAY_LABELS[d.getDay()]
             : d.toLocaleDateString("en-IN", { day: "numeric", month: "short" }),
         orders: Math.max(0, (placed.get(key) ?? 0) - deliveredCount),
@@ -162,24 +176,21 @@ export default function AdminDashboardHomePage() {
       });
     }
     return points;
-  }, [orders, trendDays]);
+  }, [rangeOrders, from, rangeDays]);
 
   // The selected window against the one immediately before it — the KPI tiles' delta badges.
   const trendDelta = useMemo(() => {
-    const start = new Date();
-    start.setDate(start.getDate() - trendDays);
-    const previousStart = new Date();
-    previousStart.setDate(previousStart.getDate() - trendDays * 2);
-    const startIso = toIso(start);
-    const previousStartIso = toIso(previousStart);
+    // The window of equal length ending the day before `from`.
+    const previousTo = addDaysIso(from, -1);
+    const previousFrom = addDaysIso(from, -rangeDays);
 
-    const inWindow = (from: string, to: string) =>
+    const inWindow = (start: string, end: string) =>
       (orders ?? []).filter(
-        (o) => o.createdAt.slice(0, 10) >= from && o.createdAt.slice(0, 10) < to,
+        (o) => o.createdAt.slice(0, 10) >= start && o.createdAt.slice(0, 10) <= end,
       );
 
-    const current = inWindow(startIso, "9999-12-31");
-    const previous = inWindow(previousStartIso, startIso);
+    const current = rangeOrders;
+    const previous = inWindow(previousFrom, previousTo);
     // No previous activity means no percentage exists — a bare "+100%" off zero is noise.
     const percent = (now: number, before: number) =>
       before === 0 ? null : Math.round(((now - before) / before) * 1000) / 10;
@@ -194,14 +205,14 @@ export default function AdminDashboardHomePage() {
         previous.reduce((sum, o) => sum + o.shipments.length, 0),
       ),
     };
-  }, [orders, trendDays]);
+  }, [orders, rangeOrders, from, rangeDays]);
 
   const shipmentStatusSlices: ShipmentStatusSlice[] = useMemo(() => {
     let delivered = 0;
     let inTransit = 0;
     let exception = 0;
     let pending = 0;
-    for (const o of orders ?? []) {
+    for (const o of rangeOrders) {
       for (const s of o.shipments) {
         if (s.currentStatus === "DELIVERED") delivered++;
         else if (IN_TRANSIT_STATUSES.has(s.currentStatus ?? "")) inTransit++;
@@ -218,11 +229,11 @@ export default function AdminDashboardHomePage() {
       { key: "in-transit", label: "In Transit", value: inTransit, colorVar: "--color-info", icon: Truck },
       { key: "exception", label: "Exception", value: exception, colorVar: "--color-danger", icon: AlertTriangle },
     ];
-  }, [orders]);
+  }, [rangeOrders]);
 
   const recentOrders = useMemo(
-    () => [...(orders ?? [])].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 6),
-    [orders],
+    () => [...rangeOrders].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 6),
+    [rangeOrders],
   );
 
   // Pickup load per calendar day — the dots under each date, so dispatch can see a pile-up
@@ -250,17 +261,69 @@ export default function AdminDashboardHomePage() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-semibold text-foreground">
-          Welcome back, {user ? displayName(user.email) : "there"}.
-        </h1>
-        <p className="text-sm text-muted-foreground">Here&apos;s what&apos;s happening today.</p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold text-foreground">
+            Welcome back, {user ? displayName(user.email) : "there"}.
+          </h1>
+          <p className="text-sm text-muted-foreground">Here&apos;s what&apos;s happening today.</p>
+        </div>
+
+        {/* Native <input type="date"> rather than a picker component: it is already localised,
+            keyboard-accessible and touch-friendly on every target browser, and the app has no
+            other date-range control to stay consistent with. */}
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
+            From
+            <input
+              type="date"
+              value={from}
+              max={to}
+              onChange={(e) => e.target.value && setFrom(e.target.value)}
+              className="rounded-lg border border-border bg-card px-2.5 py-1.5 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
+            To
+            <input
+              type="date"
+              value={to}
+              min={from}
+              max={todayIso()}
+              onChange={(e) => e.target.value && setTo(e.target.value)}
+              className="rounded-lg border border-border bg-card px-2.5 py-1.5 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            />
+          </label>
+          <div className="flex rounded-lg border border-border p-0.5">
+            {RANGE_PRESETS.map((preset) => {
+              const presetFrom = addDaysIso(todayIso(), -(preset.days - 1));
+              const isActive = from === presetFrom && to === todayIso();
+              return (
+                <button
+                  key={preset.days}
+                  type="button"
+                  onClick={() => {
+                    setFrom(presetFrom);
+                    setTo(todayIso());
+                  }}
+                  aria-pressed={isActive}
+                  className={cn(
+                    "rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors",
+                    isActive ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {preset.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <KpiCard
           title="Total Orders"
-          value={orders?.length ?? 0}
+          value={rangeOrders.length}
           icon={Package}
           href="/admin/orders"
           isLoading={isLoading}
@@ -309,33 +372,15 @@ export default function AdminDashboardHomePage() {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
           <Card>
-            <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
+            <CardHeader>
               <div>
                 <CardTitle>Orders Overview</CardTitle>
                 <p className="text-2xl font-semibold text-foreground">
                   {ordersTrend.reduce((sum, p) => sum + Number(p.orders) + Number(p.delivered), 0)}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  Orders placed, {TREND_RANGES.find((r) => r.days === trendDays)?.label.toLowerCase()}
+                  Orders placed, {formatIsoLong(from)} – {formatIsoLong(to)}
                 </p>
-              </div>
-              <div className="flex shrink-0 rounded-lg border border-border p-0.5">
-                {TREND_RANGES.map((range) => (
-                  <button
-                    key={range.days}
-                    type="button"
-                    onClick={() => setTrendDays(range.days)}
-                    aria-pressed={trendDays === range.days}
-                    className={cn(
-                      "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
-                      trendDays === range.days
-                        ? "bg-muted text-foreground"
-                        : "text-muted-foreground hover:text-foreground",
-                    )}
-                  >
-                    {range.label}
-                  </button>
-                ))}
               </div>
             </CardHeader>
             <CardContent>
@@ -369,12 +414,11 @@ export default function AdminDashboardHomePage() {
                       <TableHead>Status</TableHead>
                       <TableHead>Created</TableHead>
                       <TableHead>Amount</TableHead>
-                      <TableHead />
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {recentOrders.map((order) => (
-                      <TableRow key={order.id}>
+                      <TableRow key={order.id} href={`/admin/orders/${order.id}`}>
                         <TableCell className="font-mono text-xs">{order.id.slice(0, 8)}</TableCell>
                         <TableCell>{customerNameById.get(order.customerId) ?? "—"}</TableCell>
                         <TableCell>
@@ -383,14 +427,6 @@ export default function AdminDashboardHomePage() {
                         <TableCell>{new Date(order.createdAt).toLocaleDateString("en-IN")}</TableCell>
                         <TableCell>
                           {order.paidAmount !== null ? `₹${Math.round(order.paidAmount).toLocaleString("en-IN")}` : "—"}
-                        </TableCell>
-                        <TableCell>
-                          <Link
-                            href={`/admin/orders/${order.id}`}
-                            className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
-                          >
-                            View <ArrowRight className="h-3 w-3" aria-hidden />
-                          </Link>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -467,8 +503,6 @@ export default function AdminDashboardHomePage() {
               isLoading={isLoading}
             />
           </div>
-
-          <RecentActivity entries={auditLogs} isLoading={isLoading} />
         </div>
       </div>
     </div>

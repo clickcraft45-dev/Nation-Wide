@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { ArrowUpDown, Package, Plus } from "lucide-react";
 import type { OrderDto, CustomerDto, ShippingProviderDto } from "@nationwide/shared-types";
@@ -249,7 +248,6 @@ export default function AdminOrdersPage() {
                   activeDir={sortDir}
                   onSort={toggleSort}
                 />
-                <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -258,7 +256,7 @@ export default function AdminOrdersPage() {
                 const shipment = order.shipments[0];
                 const provider = shipment ? providerById.get(shipment.providerId) : undefined;
                 return (
-                  <TableRow key={order.id}>
+                  <TableRow key={order.id} href={`/admin/orders/${order.id}`}>
                     <TableCell className="font-mono text-xs">
                       {shipment?.internalTrackingNumber ?? order.id.slice(0, 8)}
                     </TableCell>
@@ -279,14 +277,6 @@ export default function AdminOrdersPage() {
                     </TableCell>
                     <TableCell className="whitespace-nowrap text-muted-foreground">
                       {new Date(order.createdAt).toLocaleDateString()}
-                    </TableCell>
-                    <TableCell>
-                      <Link
-                        href={`/admin/orders/${order.id}`}
-                        className="text-sm font-medium text-primary hover:underline"
-                      >
-                        View
-                      </Link>
                     </TableCell>
                   </TableRow>
                 );

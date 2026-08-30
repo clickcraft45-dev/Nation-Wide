@@ -5,6 +5,7 @@ import {
   Users,
   Truck,
   CreditCard,
+  ReceiptIndianRupee,
   MapPin,
   FileQuestion,
   BarChart3,
@@ -52,7 +53,17 @@ export const ADMIN_NAV_GROUPS: NavGroup[] = [
   },
   {
     label: "Finance",
-    items: [{ label: "Payments", href: "/admin/payments", icon: CreditCard }],
+    items: [
+      { label: "Payments", href: "/admin/payments", icon: CreditCard },
+      // ADMIN-only, matching the controller: issuing a tax invoice is a financial act with a
+      // permanent numbered record, not an operational one.
+      {
+        label: "GST Invoices",
+        href: "/admin/invoices",
+        icon: ReceiptIndianRupee,
+        roles: ["ADMIN"],
+      },
+    ],
   },
   {
     label: "Logistics",

@@ -20,7 +20,7 @@ function withTimeout<T>(work: Promise<T>): Promise<T | 'timeout'> {
 }
 
 interface HealthCheckResult {
-  status: 'ok' | 'error';
+  status: 'ok' | 'degraded' | 'error';
   checks: {
     database: 'ok' | 'error';
     redis: 'ok' | 'error';
@@ -48,13 +48,21 @@ export class HealthController {
       this.checkRedis(),
     ]);
 
+    // Only the database decides the HTTP status. Redis here is purely a cache — RedisService
+    // fails every call open, so an outage costs latency, not correctness (see its class doc).
+    // Answering 503 for it made every probe wired to this endpoint (railway.json's
+    // healthcheckPath, the Dockerfile HEALTHCHECK, an LB) kill and restart a container that was
+    // still serving every request correctly, turning a degraded cache into a crash loop. The
+    // breakdown below still reports redis:error, and `degraded` surfaces it to anything alerting
+    // on `status` alone.
     const result: HealthCheckResult = {
-      status: database === 'ok' && redis === 'ok' ? 'ok' : 'error',
+      status:
+        database === 'error' ? 'error' : redis === 'ok' ? 'ok' : 'degraded',
       checks: { database, redis },
       timestamp: new Date().toISOString(),
     };
 
-    res.status(result.status === 'ok' ? 200 : 503).json(result);
+    res.status(database === 'ok' ? 200 : 503).json(result);
   }
 
   private async checkDatabase(): Promise<'ok' | 'error'> {

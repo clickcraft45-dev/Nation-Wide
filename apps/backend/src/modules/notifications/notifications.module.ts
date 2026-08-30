@@ -8,6 +8,7 @@ import {
 import { NotificationsProcessor } from './notifications.processor';
 import { MessagingAdapterRegistry } from './messaging-adapter.registry';
 import { StubWhatsAppAdapter } from './whatsapp/stub-whatsapp.adapter';
+import { GupshupWhatsAppAdapter } from './whatsapp/gupshup-whatsapp.adapter';
 import { WhatsAppWebhookController } from './whatsapp/whatsapp-webhook.controller';
 
 @Module({
@@ -38,6 +39,7 @@ import { WhatsAppWebhookController } from './whatsapp/whatsapp-webhook.controlle
     NotificationsProcessor,
     MessagingAdapterRegistry,
     StubWhatsAppAdapter,
+    GupshupWhatsAppAdapter,
   ],
   exports: [NotificationsService],
 })

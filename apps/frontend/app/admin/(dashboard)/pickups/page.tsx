@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { Truck } from "lucide-react";
 import type { PickupDto, PickupStatusCode } from "@nationwide/shared-types";
 import { apiClient, ApiError } from "@/lib/api-client";
@@ -147,19 +146,14 @@ export default function AdminPickupsPage() {
               {tab === "pickups" && <TableHead>Time Slot</TableHead>}
               <TableHead>Status</TableHead>
               <TableHead>Confirmed By</TableHead>
-              <TableHead>Actions</TableHead>
+              <TableHead>Manage</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {pickups.map((p) => (
-              <TableRow key={p.id}>
+              <TableRow key={p.id} href={`/admin/pickups/${p.id}`}>
                 <TableCell>
-                  <Link
-                    href={`/admin/pickups/${p.id}`}
-                    className="font-medium text-primary hover:underline"
-                  >
-                    {p.customerName}
-                  </Link>
+                  <span className="font-medium text-foreground">{p.customerName}</span>
                   <p className="text-xs text-muted-foreground">{p.customerPhone}</p>
                 </TableCell>
                 {tab === "pickups" && (

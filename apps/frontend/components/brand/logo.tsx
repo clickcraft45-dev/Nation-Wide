@@ -5,9 +5,15 @@ import { cn } from "@/lib/utils/cn";
  *
  * THE MARK — "Rise N". One continuous stroke draws the N (stem, diagonal, stem), and an
  * arrowhead crowns the right stem so that stem-plus-head reads as an upward arrow and as the
- * letter at the same time. Two shapes, one stroke weight, one ink: the previous placeholder
- * stacked three separate ideas (monogram + globe swoosh + a detached arrow breaking the badge
- * edge), which turned to mud at favicon size and needed a second colour to stay legible.
+ * letter at the same time. Two shapes, one stroke weight: the previous placeholder stacked three
+ * separate ideas (monogram + globe swoosh + a detached arrow breaking the badge edge), which
+ * turned to mud at favicon size.
+ *
+ * COLOUR. On the badge the arrowhead is brand red (--brand-red) — the black / white / red system.
+ * The red is carried by the ONE shape that is still a complete arrow without it, so nothing is
+ * lost when the mark has to be single-ink: the `mono` and `reverse` variants stay one flat ink by
+ * contract (print, invoices, the black glass panels), and the favicon keeps the red because at
+ * 16px the arrowhead is the only part with enough area to register as colour at all.
  *
  * Constraints it is built to (docs/BRAND_BRIEF_PROMPT.md): legible at 16px, recognisable in a
  * single flat ink, no gradient and no baked-in shadow, and readable embossed on black glass.
@@ -70,15 +76,12 @@ function NwMark({
       aria-label="NationWide Logistics"
     >
       {badge && <rect x="1" y="1" width="38" height="38" rx="10" className="fill-brand-navy" />}
-      <g
-        fill="none"
-        strokeWidth="3.4"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        className={badge ? "stroke-white" : "stroke-current"}
-      >
-        <path d={N_PATH} />
-        <path d={ARROW_PATH} />
+      <g fill="none" strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round">
+        <path d={N_PATH} className={badge ? "stroke-white" : "stroke-current"} />
+        <path
+          d={ARROW_PATH}
+          className={badge ? "stroke-brand-red-bright" : "stroke-current"}
+        />
       </g>
     </svg>
   );

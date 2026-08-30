@@ -19,6 +19,11 @@ export function toCompanySettingsDto(
     insuranceDisclaimer: settings.insuranceDisclaimer,
     legalDisclaimer: settings.legalDisclaimer,
     restrictedItemsNotice: settings.restrictedItemsNotice,
+    gstin: settings.gstin,
+    legalName: settings.legalName,
+    stateName: settings.stateName,
+    stateCode: settings.stateCode,
+    sacCode: settings.sacCode,
     updatedAt: settings.updatedAt.toISOString(),
   };
 }

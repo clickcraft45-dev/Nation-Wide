@@ -25,6 +25,11 @@ interface FormState {
   supportEmail: string;
   supportPhone: string;
   address: string;
+  gstin: string;
+  legalName: string;
+  stateName: string;
+  stateCode: string;
+  sacCode: string;
   termsAndConditions: string;
   footerNotes: string;
   insuranceDisclaimer: string;
@@ -41,6 +46,13 @@ function formFromSettings(settings: CompanySettingsDto): FormState {
     supportEmail: settings.supportEmail ?? "",
     supportPhone: settings.supportPhone ?? "",
     address: settings.address ?? "",
+    gstin: settings.gstin ?? "",
+    legalName: settings.legalName ?? "",
+    stateName: settings.stateName ?? "",
+    stateCode: settings.stateCode ?? "",
+    // 996812 (courier services) is the common case, but it is the business's call — offered as a
+    // starting value, never silently assumed on their behalf.
+    sacCode: settings.sacCode ?? "",
     termsAndConditions: settings.termsAndConditions ?? "",
     footerNotes: settings.footerNotes ?? "",
     insuranceDisclaimer: settings.insuranceDisclaimer ?? "",
@@ -96,6 +108,11 @@ export function CompanySettingsDialog({
         supportEmail: form.supportEmail.trim() || undefined,
         supportPhone: form.supportPhone.trim() || undefined,
         address: form.address.trim() || undefined,
+        gstin: form.gstin.trim().toUpperCase() || undefined,
+        legalName: form.legalName.trim() || undefined,
+        stateName: form.stateName.trim() || undefined,
+        stateCode: form.stateCode.trim() || undefined,
+        sacCode: form.sacCode.trim() || undefined,
         termsAndConditions: form.termsAndConditions.trim() || undefined,
         footerNotes: form.footerNotes.trim() || undefined,
         insuranceDisclaimer: form.insuranceDisclaimer.trim() || undefined,
@@ -240,6 +257,79 @@ export function CompanySettingsDialog({
                     onChange={(e) => setForm((f) => f && { ...f, address: e.target.value })}
                   />
                 </div>
+              </div>
+
+              {/* GST identity. Grouped and labelled as a block because these five are not
+                  cosmetic branding like the fields above — every one is printed verbatim on a
+                  statutory document, and GST invoices cannot be issued at all until all are set
+                  (InvoicesService refuses rather than emitting blanks). */}
+              <div className="space-y-3 rounded-lg border border-border p-3">
+                <div>
+                  <p className="text-sm font-medium text-foreground">GST details</p>
+                  <p className="text-xs text-muted-foreground">
+                    Required before any tax invoice can be issued. These are copied onto each
+                    invoice at the moment it is issued and cannot be changed afterwards.
+                  </p>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="cs-gstin">GSTIN</Label>
+                    <Input
+                      id="cs-gstin"
+                      value={form.gstin}
+                      placeholder="36AABCU9603R1ZM"
+                      // Uppercased as you type: a GSTIN is uppercase by definition and the
+                      // server's format check rejects lowercase outright.
+                      onChange={(e) =>
+                        setForm((f) => f && { ...f, gstin: e.target.value.toUpperCase() })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="cs-legal-name">Registered legal name</Label>
+                    <Input
+                      id="cs-legal-name"
+                      value={form.legalName}
+                      placeholder="NationWide Logistics Pvt Ltd"
+                      onChange={(e) => setForm((f) => f && { ...f, legalName: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="cs-state-name">Registered state</Label>
+                    <Input
+                      id="cs-state-name"
+                      value={form.stateName}
+                      placeholder="Telangana"
+                      onChange={(e) => setForm((f) => f && { ...f, stateName: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="cs-state-code">State code</Label>
+                    <Input
+                      id="cs-state-code"
+                      value={form.stateCode}
+                      placeholder="36"
+                      inputMode="numeric"
+                      maxLength={2}
+                      onChange={(e) => setForm((f) => f && { ...f, stateCode: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="cs-sac">SAC code</Label>
+                    <Input
+                      id="cs-sac"
+                      value={form.sacCode}
+                      placeholder="996812"
+                      inputMode="numeric"
+                      maxLength={6}
+                      onChange={(e) => setForm((f) => f && { ...f, sacCode: e.target.value })}
+                    />
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  The state code decides whether an invoice charges CGST + SGST or IGST, so it
+                  must match the first two digits of the GSTIN.
+                </p>
               </div>
 
               <div className="space-y-1.5">

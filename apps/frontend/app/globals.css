@@ -55,6 +55,20 @@
   --brand-navy: #0b0b0c;
   --brand-blue: #18181b;
   --brand-blue-bright: #d4d4d8;
+
+  /* SIGNAL RED — the identity's one chromatic voice, and the third colour in the black / white /
+     red glass system. Deliberately a deep oxblood, not a bright alarm red: the app already owns
+     a bright red for failure (--danger #b91c1c) and the two must never be mistaken for one
+     another. `brand-red` is the base; `deep` is what survives on the near-black glass panels,
+     `bright` is the accent that reads ON them, and `tint` is the wash for light surfaces.
+
+     RULE: brand red is for identity — the mark, brand accents, brand surfaces. It never carries
+     operational meaning. If red on screen is telling the reader something failed, it must be
+     --danger, and the two must not appear in the same component. */
+  --brand-red: #7f1020;
+  --brand-red-deep: #5a0a17;
+  --brand-red-bright: #c8384a;
+  --brand-red-tint: #fbeef0;
 }
 
 @theme inline {
@@ -89,6 +103,10 @@
   --color-brand-navy: var(--brand-navy);
   --color-brand-blue: var(--brand-blue);
   --color-brand-blue-bright: var(--brand-blue-bright);
+  --color-brand-red: var(--brand-red);
+  --color-brand-red-deep: var(--brand-red-deep);
+  --color-brand-red-bright: var(--brand-red-bright);
+  --color-brand-red-tint: var(--brand-red-tint);
   --font-sans: var(--font-poppins);
   /* Kept as a monospace utility for tracking/order/AWB numbers — not part of the brand type
      scale, just a legibility choice for codes, used throughout admin + tracking screens. */
