@@ -6,6 +6,7 @@ import { useCurrentYear } from "@/lib/utils/use-current-year";
 import { useAuthGate } from "@/lib/auth/use-auth-gate";
 import { Logo } from "@/components/brand/logo";
 import { WorldMap } from "@/components/ui/world-map";
+import { REGISTERED_COMPANY } from "@nationwide/shared-types";
 import { CONTACT_EMAIL, CONTACT_PHONE } from "@/lib/constants/contact";
 import { SHIPPING_ROUTES } from "@/lib/constants/routes";
 
@@ -146,8 +147,21 @@ export function MarketingFooter() {
       </div>
 
       <div className="mx-auto max-w-6xl px-6 pb-8">
-        <div className="flex flex-col gap-4 border-t border-white/10 pt-6 text-xs text-white/45 sm:flex-row sm:items-center sm:justify-between">
-          <p>© {currentYear ?? ""} NationWide Logistics. All rights reserved.</p>
+        <div className="flex flex-col gap-4 border-t border-white/10 pt-6 text-xs text-white/45 sm:flex-row sm:items-start sm:justify-between">
+          {/* The registered business behind the site. A GST-registered Indian business is
+              expected to state its registration where it trades, and for a proprietorship the
+              trade name alone does not say who is liable — so the legal name and GSTIN are named
+              here too, straight from REGISTERED_COMPANY (the same constant the invoices use, so
+              the site can never advertise a GSTIN the invoices contradict). */}
+          <div className="space-y-1">
+            <p>
+              © {currentYear ?? ""} {REGISTERED_COMPANY.companyName}. All rights reserved.
+            </p>
+            <p className="text-white/35">
+              {REGISTERED_COMPANY.legalName} · GSTIN {REGISTERED_COMPANY.gstin}
+            </p>
+            <p className="text-white/35">{REGISTERED_COMPANY.address}</p>
+          </div>
           <div className="flex items-center gap-6">
             <Link href="/privacy" className={LINK}>
               Privacy Policy

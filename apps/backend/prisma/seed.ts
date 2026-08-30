@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { nextSequenceNumber } from '../src/modules/shipments/sequence';
+import { REGISTERED_COMPANY } from '@nationwide/shared-types';
 
 const prisma = new PrismaClient();
 
@@ -199,6 +200,59 @@ async function main() {
     },
     { role: 'CUSTOMER', email: SEED_CUSTOMER_EMAIL, password: SEED_CUSTOMER_PASSWORD },
   ]);
+
+  await seedCompanySettings();
+}
+
+/**
+ * The supplier's GST identity, from REGISTERED_COMPANY (transcribed from the registration
+ * certificate). CompanySettingsService already creates a NEW row from the same constant, so this
+ * exists for the database that already has a row — one created blank before the registration was
+ * recorded, which is exactly the state that makes the first invoice fail its statutory-fields
+ * check.
+ *
+ * BLANKS ONLY. It fills fields that are null or empty and never overwrites a value, because a
+ * value that is already there was put there by an admin in the Rate Card Settings dialog, and a
+ * seed re-run must not quietly revert their correction.
+ */
+async function seedCompanySettings() {
+  const existing = await prisma.companySettings.findFirst();
+  if (!existing) {
+    const created = await prisma.companySettings.create({
+      data: { ...REGISTERED_COMPANY },
+    });
+    console.log(
+      `Seeded company settings: ${created.companyName} (${created.gstin})`,
+    );
+    return;
+  }
+
+  // `companyName` is the one field with a schema default ("NationWide"), so it is never null and
+  // "blanks only" would skip it forever. An untouched default is a stub, not a decision — the
+  // registered trade name replaces it, and anything else an admin typed is left alone.
+  const isUnset = (field: string, value: unknown) =>
+    !value || (field === 'companyName' && value === 'NationWide');
+
+  const fills = Object.fromEntries(
+    Object.entries(REGISTERED_COMPANY).filter(([field]) =>
+      isUnset(field, existing[field as keyof typeof existing]),
+    ),
+  );
+
+  if (Object.keys(fills).length === 0) {
+    console.log(
+      `Company settings already set (${existing.companyName} / ${existing.gstin ?? 'no GSTIN'}) — left untouched.`,
+    );
+    return;
+  }
+
+  await prisma.companySettings.update({
+    where: { id: existing.id },
+    data: fills,
+  });
+  console.log(
+    `Filled blank company settings from the GST registration: ${Object.keys(fills).join(', ')}`,
+  );
 }
 
 main()

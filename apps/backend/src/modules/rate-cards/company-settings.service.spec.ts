@@ -1,3 +1,4 @@
+import { REGISTERED_COMPANY } from '@nationwide/shared-types';
 import { CompanySettingsService } from './company-settings.service';
 
 const EXISTING_SETTINGS = {
@@ -52,13 +53,22 @@ describe('CompanySettingsService', () => {
       expect(prisma.companySettings.create).not.toHaveBeenCalled();
     });
 
-    it('creates a default row when none exists yet (singleton getOrCreate)', async () => {
+    it('creates the row from the GST registration when none exists yet', async () => {
       prisma.companySettings.findFirst.mockResolvedValue(null);
       prisma.companySettings.create.mockResolvedValue(EXISTING_SETTINGS);
 
       const result = await service.get();
 
-      expect(prisma.companySettings.create).toHaveBeenCalledWith({ data: {} });
+      // A blank row here would make the first invoice on a fresh deployment fail its
+      // statutory-fields check — see CompanySettingsService.get.
+      expect(prisma.companySettings.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          gstin: REGISTERED_COMPANY.gstin,
+          legalName: REGISTERED_COMPANY.legalName,
+          stateCode: REGISTERED_COMPANY.stateCode,
+          sacCode: REGISTERED_COMPANY.sacCode,
+        }),
+      });
       expect(result).toBe(EXISTING_SETTINGS);
     });
   });

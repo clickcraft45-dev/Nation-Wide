@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { CompanySettings, Prisma } from '@prisma/client';
+import { REGISTERED_COMPANY } from '@nationwide/shared-types';
 import { PrismaService } from '../../database/prisma.service';
 import { UpdateCompanySettingsDto } from './dto/update-company-settings.dto';
 
@@ -17,7 +18,13 @@ export class CompanySettingsService {
   async get(): Promise<CompanySettings> {
     const existing = await this.prisma.companySettings.findFirst();
     if (existing) return existing;
-    return this.prisma.companySettings.create({ data: {} });
+    // Seeded from the actual GST registration rather than blank: every field below is one that
+    // InvoicesService refuses to issue an invoice without, so an empty row means the first
+    // invoice on a fresh deployment fails. Only ever applied at CREATE — an existing row, and
+    // therefore anything an admin has since edited, is returned untouched above.
+    return this.prisma.companySettings.create({
+      data: { ...REGISTERED_COMPANY },
+    });
   }
 
   async update(
