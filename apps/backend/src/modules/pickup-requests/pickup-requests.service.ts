@@ -11,7 +11,10 @@ import type {
 } from '@nationwide/shared-types';
 import { PrismaService } from '../../database/prisma.service';
 import { OrdersService } from '../orders/orders.service';
-import { PricingEngineService } from '../pricing/pricing-engine.service';
+import {
+  PricingEngineService,
+  type ComputedRateOption,
+} from '../pricing/pricing-engine.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NOTIFICATION_TEMPLATES } from '../notifications/templates';
 import { CreatePickupRequestDto } from './dto/create-pickup-request.dto';
@@ -316,11 +319,12 @@ export class PickupRequestsService {
     partnerId: string,
   ): Promise<RecalculatePreviewDto> {
     const pickupRequest = await this.findOneForPartner(id, partnerId);
-    const recalculatedPrice = await this.repriceAgainstOriginalProvider(
+    const recalculated = await this.repriceAgainstOriginalProvider(
       pickupRequest,
       dto.weightKg,
       dto.shipmentType,
     );
+    const recalculatedPrice = recalculated?.finalPrice ?? null;
     const estimatedPrice = pickupRequest.estimatedPrice;
     return {
       estimatedPrice,
@@ -393,6 +397,9 @@ export class PickupRequestsService {
     }
 
     let verifiedPrice: number;
+    // Null on the manual-quote path below, which genuinely has no breakdown to record — the
+    // invoice layer treats that case separately rather than being handed zeroes.
+    let breakdown: ComputedRateOption | null = null;
     if (pickupRequest.rateProviderId) {
       const recalculated = await this.repriceAgainstOriginalProvider(
         pickupRequest,
@@ -404,7 +411,8 @@ export class PickupRequestsService {
           'No rate is available for the corrected weight/shipment type — this needs manual review',
         );
       }
-      verifiedPrice = recalculated;
+      verifiedPrice = recalculated.finalPrice;
+      breakdown = recalculated;
     } else {
       // Manual-quote path — there's no RateProvider to re-price against (a human already set
       // this price with their own judgment); the weight/type correction is recorded for the
@@ -418,6 +426,11 @@ export class PickupRequestsService {
         verifiedWeightKg: dto.verifiedWeightKg,
         verifiedShipmentType: dto.verifiedShipmentType,
         verifiedPrice,
+        // Frozen here because this is the one moment the charged price becomes authoritative.
+        verifiedTaxableSubtotal: breakdown?.taxableSubtotal ?? null,
+        verifiedGstPercent: breakdown?.gstPercent ?? null,
+        verifiedGstAmount: breakdown?.gstAmount ?? null,
+        verifiedNationwideCut: breakdown?.nationwideCut ?? null,
         verificationNotes: dto.verificationNotes ?? null,
         verifiedAt: new Date(),
         status: 'VERIFICATION_PENDING',
@@ -737,20 +750,25 @@ export class PickupRequestsService {
   // Shared by recalculate() (preview) and verify() (persist) — filters the pricing engine's
   // fresh options for the specific carrier the customer originally selected, since a Pickup
   // Partner correcting weight should never silently switch carriers.
+  // Returns the engine's WHOLE option, not just finalPrice. It used to return the total alone
+  // and discard the 7-step breakdown that produced it — which meant that once a parcel was
+  // verified, nothing anywhere recorded how much of the charged price was tax. Invoicing needs
+  // exactly that, and re-deriving it later would re-price against whatever the rate cards say
+  // then, not what the customer actually paid. Callers that only want the total read .finalPrice.
   private async repriceAgainstOriginalProvider(
     pickupRequest: PickupRequestWithDetails,
     weightKg: number,
     shipmentType: RecalculateWeightDto['shipmentType'],
-  ): Promise<number | null> {
+  ): Promise<ComputedRateOption | null> {
     if (!pickupRequest.rateProviderId) return null;
     const options = await this.pricingEngineService.computeQuotesForRequest({
       destinationCountryName: pickupRequest.quote.destCountry,
       weightKg,
       shipmentType,
     });
-    const match = options.find(
-      (o) => o.rateProviderId === pickupRequest.rateProviderId,
+    return (
+      options.find((o) => o.rateProviderId === pickupRequest.rateProviderId) ??
+      null
     );
-    return match ? match.finalPrice : null;
   }
 }

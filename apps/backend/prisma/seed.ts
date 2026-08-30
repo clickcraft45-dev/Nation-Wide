@@ -1,7 +1,7 @@
-import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
-import { formatInternalTrackingNumber } from '../src/modules/shipments/tracking-number';
 import { nextSequenceNumber } from '../src/modules/shipments/sequence';
 
 const prisma = new PrismaClient();
@@ -168,29 +168,25 @@ async function main() {
   }
   console.log(`Seeded ${RATE_PROVIDERS.length} rate providers.`);
 
-  const COUNTRIES: Array<{ code: string; name: string }> = [
-    { code: 'IN', name: 'India' },
-    { code: 'US', name: 'USA' },
-    { code: 'GB', name: 'UK' },
-    { code: 'AE', name: 'UAE' },
-  ];
+  // The real ISO country list, not a sample — destination pickers and every provider's zone
+  // mapping read from this table, so a database holding only a handful of countries is a broken
+  // app, not a lightly-seeded one. Lived in the (now deleted) demo seed until 2026-08-30.
+  const COUNTRIES = JSON.parse(
+    readFileSync(join(__dirname, 'data', 'countries.json'), 'utf8'),
+  ) as Array<{ code: string; name: string }>;
 
-  for (const country of COUNTRIES) {
-    await prisma.country.upsert({
-      where: { code: country.code },
-      update: { name: country.name },
-      create: country,
-    });
+  const existingCountryCodes = new Set(
+    (await prisma.country.findMany({ select: { code: true } })).map((c) => c.code),
+  );
+  const missingCountries = COUNTRIES.filter(
+    (c) => !existingCountryCodes.has(c.code),
+  );
+  if (missingCountries.length > 0) {
+    await prisma.country.createMany({ data: missingCountries });
   }
-  console.log(`Seeded ${COUNTRIES.length} countries.`);
-
-  // Opt-in only — CI's seed step and a fresh local `npm run db:seed` both need to stay fast and
-  // must never silently balloon a real environment's row counts. Set SEED_BULK_DEMO_DATA=true
-  // locally when you actually need volume to manually check pagination/perf on list pages
-  // (Customers/Orders/Quotes), which is unverifiable against the handful of rows above.
-  if (process.env.SEED_BULK_DEMO_DATA === 'true') {
-    await seedBulkDemoData(admin.id, iclProvider.id);
-  }
+  console.log(
+    `Countries: ${COUNTRIES.length} known, ${missingCountries.length} added.`,
+  );
 
   console.log();
   console.log('Dev login credentials (override with the SEED_* env vars):');
@@ -203,112 +199,6 @@ async function main() {
     },
     { role: 'CUSTOMER', email: SEED_CUSTOMER_EMAIL, password: SEED_CUSTOMER_PASSWORD },
   ]);
-}
-
-const FIRST_NAMES = [
-  'Aarav', 'Vivaan', 'Aditya', 'Vihaan', 'Arjun', 'Sai', 'Reyansh', 'Krishna',
-  'Ishaan', 'Rohan', 'Ananya', 'Diya', 'Saanvi', 'Aadhya', 'Kiara', 'Myra',
-  'Priya', 'Neha', 'Pooja', 'Riya',
-];
-const LAST_NAMES = [
-  'Sharma', 'Verma', 'Gupta', 'Reddy', 'Rao', 'Iyer', 'Nair', 'Menon', 'Patel',
-  'Shah', 'Khan', 'Singh', 'Kumar', 'Joshi', 'Desai',
-];
-const ORDER_STATUSES = ['PENDING', 'CONFIRMED', 'COMPLETED', 'CANCELLED'] as const;
-const TRACKING_CODES = [
-  'PICKED_UP', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED', 'EXCEPTION',
-];
-
-function pick<T>(items: readonly T[]): T {
-  return items[Math.floor(Math.random() * items.length)];
-}
-
-function daysAgo(n: number): Date {
-  const d = new Date();
-  d.setDate(d.getDate() - n);
-  return d;
-}
-
-const BULK_CUSTOMER_COUNT = 60;
-const BULK_ORDER_COUNT = 400;
-
-async function seedBulkDemoData(adminId: string, providerId: string): Promise<void> {
-  console.log(
-    `SEED_BULK_DEMO_DATA=true — generating ~${BULK_CUSTOMER_COUNT} customers and ~${BULK_ORDER_COUNT} orders for pagination/perf testing. ` +
-      'Orders are appended (not upserted) — re-running with this flag set adds another batch each time, it does not top up to a fixed total.',
-  );
-
-  const customerIds: string[] = [];
-  for (let i = 0; i < BULK_CUSTOMER_COUNT; i++) {
-    const name = `${pick(FIRST_NAMES)} ${pick(LAST_NAMES)}`;
-    const phone = `+9198765${String(10000 + i).padStart(5, '0')}`;
-    const customer = await prisma.customer.upsert({
-      where: { phone },
-      update: {},
-      create: {
-        name,
-        phone,
-        consentSource: 'staff_entry',
-        consentGivenAt: daysAgo(Math.floor(Math.random() * 180)),
-      },
-    });
-    customerIds.push(customer.id);
-  }
-  console.log(`Seeded ${customerIds.length} bulk demo customers.`);
-
-  let ordersCreated = 0;
-  for (let i = 0; i < BULK_ORDER_COUNT; i++) {
-    const customerId = pick(customerIds);
-    const status = pick(ORDER_STATUSES);
-    const createdAt = daysAgo(Math.floor(Math.random() * 120));
-
-    const order = await prisma.order.create({
-      data: { customerId, status, createdAt, updatedAt: createdAt },
-    });
-
-    // Mirrors ShipmentsService.createForOrder's placeholder-then-format pattern so the
-    // resulting internalTrackingNumber looks exactly like a real one (NW-<yy>-<seq>), not an
-    // obviously-fake bulk-seed value.
-    const shipment = await prisma.shipment.create({
-      data: {
-        orderId: order.id,
-        providerId,
-        sequenceNumber: await nextSequenceNumber(prisma),
-        internalTrackingNumber: `PENDING-${randomUUID()}`,
-        currentStatus: status === 'CANCELLED' ? null : pick(TRACKING_CODES),
-        createdAt,
-        updatedAt: createdAt,
-      },
-    });
-    await prisma.shipment.update({
-      where: { id: shipment.id },
-      data: {
-        internalTrackingNumber: formatInternalTrackingNumber(
-          shipment.sequenceNumber,
-          shipment.createdAt,
-        ),
-      },
-    });
-
-    if (status !== 'PENDING') {
-      const paid = Math.random() > 0.15;
-      await prisma.order.update({
-        where: { id: order.id },
-        data: paid
-          ? {
-              paymentStatus: 'PAID',
-              paymentMethod: pick(['CASH', 'UPI', 'BANK_TRANSFER'] as const),
-              paidAmount: Math.round((500 + Math.random() * 9500) * 100) / 100,
-              paidAt: createdAt,
-              paymentMarkedByAdminId: adminId,
-            }
-          : { paymentStatus: 'PENDING' },
-      });
-    }
-
-    ordersCreated += 1;
-  }
-  console.log(`Seeded ${ordersCreated} bulk demo orders with shipments.`);
 }
 
 main()

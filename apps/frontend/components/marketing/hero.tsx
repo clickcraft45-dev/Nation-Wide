@@ -51,13 +51,14 @@ export function MarketingHero() {
   const contentY = useTransform(scrollYProgress, [0, 1], [0, 40]);
 
   // The planet swells and rises as the hero scrolls away — springs so it eases rather than
-  // tracking the wheel one-to-one, which is what makes the move read as smooth.
-  const planetScale = useSpring(useTransform(scrollYProgress, [0, 1], [1, 1.45]), {
+  // tracking the wheel one-to-one, which is what makes the move read as smooth. Kept modest:
+  // a bigger rise pushed the black glass up over the headline and the tracking panel.
+  const planetScale = useSpring(useTransform(scrollYProgress, [0, 1], [1, 1.18]), {
     stiffness: 70,
     damping: 22,
     mass: 0.5,
   });
-  const planetY = useSpring(useTransform(scrollYProgress, [0, 1], [0, -170]), {
+  const planetY = useSpring(useTransform(scrollYProgress, [0, 1], [0, -80]), {
     stiffness: 70,
     damping: 22,
     mass: 0.5,
@@ -90,13 +91,20 @@ export function MarketingHero() {
 
       {/* The planet — the page's one big piece of black glass, sunk below the fold so only its
           northern cap rises into the hero. It sits behind the copy (z-0) and grows as the
-          section scrolls away. Sinking it less than half a radius is what keeps real continents
-          in the visible band rather than just the limb. */}
+          section scrolls away.
+
+          GEOMETRY. HeroGlobe draws the sphere at radius = 0.4 × the box's short side, so a square
+          box of width W holds a sphere of diameter 0.8W centred in it. Translating that box down
+          by `t` of its own height leaves a cap of (0.9 − t)·W standing above the section floor —
+          at w=110vw/max-1200 and t=76% that is ~0.14W, i.e. ≈170px on a laptop. The copy's
+          bottom padding below has to stay larger than that number, and the two were previously
+          sized so far apart (a 456px cap under 480px of padding) that the hero ran well past one
+          screen and the dome could only be reached by scrolling. */}
       <motion.div
         style={reduceMotion ? undefined : { scale: planetScale, y: planetY }}
         className="absolute inset-x-0 bottom-0 z-0 flex origin-bottom justify-center"
       >
-        <div className="aspect-square w-[150vw] max-w-[1900px] translate-y-[66%]">
+        <div className="aspect-square w-[110vw] max-w-[1200px] translate-y-[76%]">
           <HeroGlobe className="h-full w-full" />
         </div>
       </motion.div>
@@ -104,15 +112,18 @@ export function MarketingHero() {
       {/* pt clears the overlaying navbar (see MarketingNavbar's -mb-16 on the homepage). */}
       <motion.div
         style={{ y: contentY }}
-        /* Bottom padding is the planet's headroom: its cap rises ~30% of the sphere's width above
-           the section floor, and no copy may sit on the black glass. */
-        className="relative z-10 mx-auto max-w-3xl px-6 pb-44 pt-24 sm:pb-[19rem] sm:pt-28 lg:pb-[30rem] lg:pt-36"
+        /* Bottom padding is the planet's headroom — see the geometry note above. It must clear
+           the cap (no copy may sit on the black glass) and nothing more, because every pixel
+           beyond that is hero the visitor has to scroll past. */
+        className="relative z-10 mx-auto max-w-3xl px-6 pb-40 pt-20 sm:pb-48 sm:pt-24 lg:pb-52 lg:pt-28"
       >
         <div className="flex flex-col items-center space-y-6 text-center">
           <p className="glass-panel inline-flex animate-slide-in-left items-center gap-2 rounded-full px-3.5 py-1.5 text-xs font-medium text-foreground/80">
+            {/* Brand red, not --danger: this is the identity accent on the tagline, not a
+                failure signal. See the SIGNAL RED note in globals.css. */}
             <span className="relative flex h-1.5 w-1.5">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75" />
-              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-primary" />
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand-red opacity-75" />
+              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-brand-red" />
             </span>
             Delivering trust worldwide
           </p>

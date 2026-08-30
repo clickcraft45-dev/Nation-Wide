@@ -4,87 +4,91 @@ import type { ShipmentAdminDetailDto } from "@nationwide/shared-types";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { TrackingStatusBadge } from "@/components/ui/status-badge";
 import { EmptyState } from "@/components/ui/page-state";
+import { Timeline } from "@/components/ui/timeline";
+import { TrackingSummaryCard, type TrackingDetail } from "@/features/tracking/TrackingSummaryCard";
+
+function formatDateTime(iso: string): string {
+  return new Date(iso).toLocaleString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
 
 export function ShipmentDetailPanel({ shipment }: { shipment: ShipmentAdminDetailDto }) {
-  const latestEvent = shipment.events[shipment.events.length - 1];
+  // Events arrive oldest-first from the API.
+  const newest = shipment.events[shipment.events.length - 1];
+  const oldest = shipment.events[0];
+
+  const details: TrackingDetail[] = [
+    {
+      label: "Carrier",
+      value: (
+        <span className="flex items-center gap-1.5">
+          {shipment.providerCode}
+          <Link
+            href="/admin/integrations"
+            aria-label="View provider details"
+            className="text-muted-foreground hover:text-primary"
+          >
+            <ExternalLink className="h-3 w-3" aria-hidden />
+          </Link>
+        </span>
+      ),
+    },
+    {
+      label: "Order",
+      value: (
+        <Link
+          href={`/admin/orders/${shipment.orderId}`}
+          className="font-medium text-primary hover:underline"
+        >
+          {shipment.orderId.slice(0, 8)}
+        </Link>
+      ),
+    },
+    { label: "Current location", value: newest?.location ?? "—" },
+    { label: "Checkpoints", value: `${shipment.events.length} recorded` },
+    {
+      label: "First scanned",
+      value: oldest ? formatDateTime(oldest.eventTime) : "—",
+    },
+    {
+      label: "Latest event",
+      value: newest ? formatDateTime(newest.eventTime) : "—",
+    },
+    {
+      label: "Last synced with carrier",
+      value: shipment.lastSyncedAt ? formatDateTime(shipment.lastSyncedAt) : "Never",
+      wide: true,
+    },
+    {
+      label: "Carrier tracking numbers",
+      wide: true,
+      value:
+        shipment.externalTrackingNumbers.length === 0 ? (
+          <span className="text-muted-foreground">No carrier tracking number mapped yet.</span>
+        ) : (
+          <ul className="space-y-0.5">
+            {shipment.externalTrackingNumbers.map((etn) => (
+              <li key={etn.id} className="font-mono text-sm">
+                {etn.externalTrackingNumber}
+              </li>
+            ))}
+          </ul>
+        ),
+    },
+  ];
 
   return (
     <div className="space-y-4">
-      <Card>
-        <CardContent className="space-y-3 pt-5">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-xs text-muted-foreground">Tracking number</p>
-              <p className="font-mono text-lg text-foreground">
-                {shipment.internalTrackingNumber}
-              </p>
-            </div>
-            <TrackingStatusBadge status={shipment.currentStatus} />
-          </div>
-
-          <dl className="grid grid-cols-2 gap-3 text-sm">
-            <div>
-              <dt className="text-xs text-muted-foreground">Order</dt>
-              <dd>
-                <Link
-                  href={`/admin/orders/${shipment.orderId}`}
-                  className="font-medium text-primary hover:underline"
-                >
-                  View order
-                </Link>
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs text-muted-foreground">Provider</dt>
-              <dd className="flex items-center gap-1.5 text-foreground">
-                {shipment.providerCode}
-                <Link
-                  href="/admin/integrations"
-                  aria-label="View provider details"
-                  className="text-muted-foreground hover:text-primary"
-                >
-                  <ExternalLink className="h-3 w-3" aria-hidden />
-                </Link>
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs text-muted-foreground">Current location</dt>
-              <dd className="text-foreground">{latestEvent?.location ?? "—"}</dd>
-            </div>
-            <div>
-              <dt className="text-xs text-muted-foreground">Estimated delivery</dt>
-              <dd className="text-muted-foreground">Not tracked yet</dd>
-            </div>
-            <div className="col-span-2">
-              <dt className="text-xs text-muted-foreground">Last synced</dt>
-              <dd className="text-foreground">
-                {shipment.lastSyncedAt
-                  ? new Date(shipment.lastSyncedAt).toLocaleString()
-                  : "Never"}
-              </dd>
-            </div>
-          </dl>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>External tracking numbers</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {shipment.externalTrackingNumbers.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No carrier tracking number mapped yet.</p>
-          ) : (
-            <ul className="space-y-1 text-sm">
-              {shipment.externalTrackingNumbers.map((etn) => (
-                <li key={etn.id} className="font-mono text-foreground">
-                  {etn.externalTrackingNumber}
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
+      <TrackingSummaryCard
+        trackingNumber={shipment.internalTrackingNumber}
+        status={<TrackingStatusBadge status={shipment.currentStatus} />}
+        details={details}
+      />
 
       <Card>
         <CardHeader>
@@ -94,29 +98,18 @@ export function ShipmentDetailPanel({ shipment }: { shipment: ShipmentAdminDetai
           {shipment.events.length === 0 ? (
             <EmptyState title="No tracking events yet" />
           ) : (
-            <ol className="space-y-4">
-              {[...shipment.events].reverse().map((event, i) => (
-                <li key={event.id} className="relative pl-5">
-                  {i !== shipment.events.length - 1 && (
-                    <span className="absolute left-[3px] top-3 h-full w-px bg-border" aria-hidden />
-                  )}
-                  <span
-                    className="absolute left-0 top-1 h-2 w-2 rounded-full bg-primary"
-                    aria-hidden
-                  />
-                  <p className="text-sm font-medium text-foreground">
-                    {event.canonicalStatusLabel}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {new Date(event.eventTime).toLocaleString()}
-                    {event.location ? ` · ${event.location}` : ""}
-                  </p>
-                  <p className="text-xs text-muted-foreground font-mono">
-                    raw: {event.rawStatus}
-                  </p>
-                </li>
-              ))}
-            </ol>
+            /* The shared Timeline, not a second hand-rolled <ol> — it carries the staggered
+               entrance and the reduced-motion fallback, and `detail` is what the raw carrier
+               status hangs off. Keyed so a new lookup replays the animation. */
+            <Timeline
+              key={shipment.internalTrackingNumber}
+              events={[...shipment.events].reverse().map((event) => ({
+                label: event.canonicalStatusLabel,
+                timestamp: formatDateTime(event.eventTime),
+                location: event.location,
+                detail: `raw: ${event.rawStatus}`,
+              }))}
+            />
           )}
         </CardContent>
       </Card>

@@ -120,6 +120,14 @@ enum PaymentStatus {
   REFUNDED
 }
 
+// An invoice is a statutory document: once ISSUED its numbers are frozen and it may never be
+// edited or deleted, only CANCELLED (which keeps the number consumed, as GST requires — a gap in
+// the series is what an auditor asks about).
+enum InvoiceStatus {
+  ISSUED
+  CANCELLED
+}
+
 enum PaymentMethod {
   CASH
   UPI
@@ -137,6 +145,9 @@ model Customer {
   phone              String   @unique // E.164 normalized
   email              String?  @unique // required + unique only for self-registered (login-capable) customers
   address            String?
+  // Set only for GST-registered (B2B) customers. Null means unregistered/B2C, which changes the
+  // place-of-supply rule and whether the recipient GSTIN line prints on the invoice.
+  gstin              String?
   passwordHash       String?  @map("password_hash") // null until the customer registers/sets a password
   hashedRefreshToken String?  @map("hashed_refresh_token")
   isActive           Boolean  @default(true) @map("is_active")
@@ -149,6 +160,7 @@ model Customer {
   quotes         Quote[]
   notifications  Notification[]
   pickupRequests PickupRequest[]
+  invoices       Invoice[]
 
   @@map("customers")
 }
@@ -176,6 +188,7 @@ model Order {
   quote           Quote? // inverse of Quote.orderId, which owns the FK
   pickup          Pickup?
   pickupRequest   PickupRequest? // inverse of PickupRequest.orderId, which owns the FK
+  invoice         Invoice? // inverse of Invoice.orderId — at most one issued invoice per order
   paymentMarkedBy AdminUser?     @relation("OrderPaymentMarkedBy", fields: [paymentMarkedByAdminId], references: [id])
 
   @@index([customerId])
@@ -354,6 +367,16 @@ model PickupRequest {
   verifiedWeightKg     Float?          @map("verified_weight_kg")
   verifiedShipmentType ShipmentTypeCode? @map("verified_shipment_type")
   verifiedPrice        Float?          @map("verified_price")
+  // The pricing engine computes the whole 7-step breakdown to arrive at verifiedPrice, and until
+  // invoicing existed only the total was kept. A tax invoice has to state the taxable value and
+  // the tax actually charged, and re-deriving those at invoice time would re-price against
+  // whatever the rate cards say *then* — so the split is frozen here, at the one moment the
+  // price becomes authoritative. Null on rows verified before this shipped, and on the
+  // manual-quote path, which never produces a breakdown at all.
+  verifiedTaxableSubtotal Float? @map("verified_taxable_subtotal")
+  verifiedGstPercent      Float? @map("verified_gst_percent")
+  verifiedGstAmount       Float? @map("verified_gst_amount")
+  verifiedNationwideCut   Float? @map("verified_nationwide_cut")
   verificationNotes    String?           @map("verification_notes")
   verifiedAt           DateTime?         @map("verified_at")
 
@@ -702,6 +725,7 @@ model AdminUser {
   generatedRateCardDocuments RateCardDocument[] @relation("RateCardDocumentGeneratedBy")
   updatedCompanySettings     CompanySettings[]  @relation("CompanySettingsUpdatedBy")
   assignedPickupRequests     PickupRequest[]    @relation("PickupRequestAssignedPartner")
+  issuedInvoices             Invoice[]          @relation("InvoiceIssuedBy")
 
   @@map("admin_users")
 }
@@ -776,6 +800,18 @@ model CompanySettings {
   insuranceDisclaimer   String?  @map("insurance_disclaimer")
   legalDisclaimer       String?  @map("legal_disclaimer")
   restrictedItemsNotice String?  @map("restricted_items_notice")
+
+  // GST identity of the supplier. All nullable because an existing database has none of it, and
+  // InvoicesService refuses to issue an invoice until gstin/legalName/address/stateCode are set
+  // rather than emitting a document with blanks where the statutory fields belong.
+  gstin       String? // 15 chars, e.g. 36AABCU9603R1ZM
+  legalName   String? @map("legal_name") // registered name, which may differ from companyName
+  stateName   String? @map("state_name") // supplier's registered state — one half of the CGST/SGST vs IGST test
+  stateCode   String? @map("state_code") // GST state code, e.g. "36" for Telangana
+  // SAC for courier services. Configurable rather than hardcoded: 996812 is courier, 996819 is
+  // "other delivery services", and which one applies is the business's call, not this code's.
+  sacCode     String? @map("sac_code")
+
   updatedByAdminId      String?  @map("updated_by_admin_id")
   createdAt             DateTime @default(now()) @map("created_at")
   updatedAt             DateTime @updatedAt @map("updated_at")
@@ -825,4 +861,96 @@ model Counter {
   value Int    @default(0)
 
   @@map("counters")
+}
+
+// ---------------------------------------------------------------------------
+// Invoicing
+// ---------------------------------------------------------------------------
+
+/// A GST tax invoice for exactly one Order.
+///
+/// EVERYTHING STATUTORY IS SNAPSHOTTED, not joined. A tax invoice is a legal record of what was
+/// stated at the moment it was issued: if the company later changes its registered address, or a
+/// customer updates their GSTIN, or a rate card is re-priced, every invoice already issued must
+/// still render exactly as it did. Reading those values through relations at render time would
+/// silently rewrite history, so the supplier/recipient/tax columns below are deliberate copies.
+/// The relations that remain are for navigation and filtering only.
+model Invoice {
+  id            String @id @default(uuid()) @map("_id")
+  /// Human-facing series, unique across all time, e.g. "NW/2026-27/00042".
+  invoiceNumber String @unique @map("invoice_number")
+  /// The numeric suffix on its own — the sequence is per financial year, so this is only unique
+  /// together with financialYear (see the compound index below).
+  sequenceNumber Int    @map("sequence_number")
+  /// Indian FY the invoice falls in, "2026-27". GST requires the series to restart each year.
+  financialYear  String @map("financial_year")
+
+  orderId    String @unique @map("order_id")
+  customerId String @map("customer_id")
+
+  status      InvoiceStatus @default(ISSUED)
+  invoiceDate DateTime      @map("invoice_date")
+
+  // --- Supplier snapshot (from CompanySettings at issue time) ---
+  supplierName      String  @map("supplier_name")
+  supplierGstin     String  @map("supplier_gstin")
+  supplierAddress   String  @map("supplier_address")
+  supplierStateName String  @map("supplier_state_name")
+  supplierStateCode String  @map("supplier_state_code")
+  supplierEmail     String? @map("supplier_email")
+  supplierPhone     String? @map("supplier_phone")
+
+  // --- Recipient snapshot (from Customer at issue time) ---
+  recipientName    String  @map("recipient_name")
+  recipientPhone   String  @map("recipient_phone")
+  recipientGstin   String? @map("recipient_gstin") // null = unregistered (B2C)
+  recipientAddress String? @map("recipient_address")
+
+  /// Where the supply is treated as made. Decides CGST+SGST (intra-state) vs IGST (inter-state),
+  /// so it is recorded rather than recomputed.
+  placeOfSupplyState String @map("place_of_supply_state")
+  placeOfSupplyCode  String @map("place_of_supply_code")
+  sacCode            String @map("sac_code")
+
+  // --- Amounts. Exactly one of (cgst+sgst) or igst is ever non-zero. ---
+  currency     String @default("INR")
+  taxableValue Float  @map("taxable_value")
+  cgstRate     Float  @default(0) @map("cgst_rate")
+  cgstAmount   Float  @default(0) @map("cgst_amount")
+  sgstRate     Float  @default(0) @map("sgst_rate")
+  sgstAmount   Float  @default(0) @map("sgst_amount")
+  igstRate     Float  @default(0) @map("igst_rate")
+  igstAmount   Float  @default(0) @map("igst_amount")
+  totalTax     Float  @map("total_tax")
+  /// NationWide Cut and anything else added AFTER tax — the pricing engine never taxes it
+  /// (pricing-engine.service.ts step 7), so it must sit outside taxableValue or the invoice
+  /// would overstate the tax base.
+  nonTaxableCharges Float @default(0) @map("non_taxable_charges")
+  totalAmount       Float @map("total_amount")
+
+  /// Which record the breakdown came from — RATE_OPTION, PICKUP_VERIFICATION, or
+  /// MANUAL_QUOTE_INCLUSIVE (back-derived from a staff-typed gross amount). Kept because the
+  /// three are not equally precise and an auditor's first question is where a number came from.
+  breakdownSource String @map("breakdown_source")
+
+  /// Relative path under storage/, e.g. "invoices/<id>.pdf". Rendered once at issue time and
+  /// served from disk thereafter — re-rendering on each download risks a different document.
+  pdfPath String? @map("pdf_path")
+
+  sentAt             DateTime? @map("sent_at")
+  cancelledAt        DateTime? @map("cancelled_at")
+  cancellationReason String?   @map("cancellation_reason")
+  issuedByAdminId    String?   @map("issued_by_admin_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  order    Order      @relation(fields: [orderId], references: [id])
+  customer Customer   @relation(fields: [customerId], references: [id])
+  issuedBy AdminUser? @relation("InvoiceIssuedBy", fields: [issuedByAdminId], references: [id])
+
+  @@unique([financialYear, sequenceNumber])
+  @@index([customerId, invoiceDate])
+  @@index([invoiceDate])
+  @@map("invoices")
 }

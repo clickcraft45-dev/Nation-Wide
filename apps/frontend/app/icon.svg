@@ -1,11 +1,11 @@
 <!-- Same geometry as <NwMark> in components/brand/logo.tsx. Next.js needs the browser-tab icon
-     as a file on disk, so the two are kept in sync by hand. brand-navy (#0b0b0c) is resolved to
-     hex here because a static file cannot read CSS variables. app/apple-icon.png and
-     app/favicon.ico are generated from these same two paths. -->
+     as a file on disk, so the two are kept in sync by hand. brand-navy (#0b0b0c) and
+     brand-red-bright (#c8384a) are resolved to hex here because a static file cannot read CSS
+     variables. app/apple-icon.png and app/favicon.ico are generated from these same two paths. -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" width="40" height="40">
   <rect x="1" y="1" width="38" height="38" rx="10" fill="#0b0b0c" />
-  <g fill="none" stroke="#ffffff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M10.5 30V14L25.5 30V10" />
-    <path d="M21.9 13.6L25.5 10L29.1 13.6" />
+  <g fill="none" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M10.5 30V14L25.5 30V10" stroke="#ffffff" />
+    <path d="M21.9 13.6L25.5 10L29.1 13.6" stroke="#c8384a" />
   </g>
 </svg>

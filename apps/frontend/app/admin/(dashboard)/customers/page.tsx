@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { Plus, Users } from "lucide-react";
 import type { CustomerDto } from "@nationwide/shared-types";
 import { apiClient } from "@/lib/api-client";
@@ -91,7 +90,7 @@ export default function AdminCustomersPage() {
       </div>
 
       {error && <ErrorState message={error} onRetry={load} />}
-      {!error && isLoading && <TableSkeleton columns={5} />}
+      {!error && isLoading && <TableSkeleton columns={4} />}
 
       {!error && !isLoading && customers.length === 0 && (
         <EmptyState
@@ -110,12 +109,11 @@ export default function AdminCustomersPage() {
                 <TableHead>Phone</TableHead>
                 <TableHead>Email</TableHead>
                 <TableHead>Customer Since</TableHead>
-                <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {customers.map((customer) => (
-                <TableRow key={customer.id}>
+                <TableRow key={customer.id} href={`/admin/customers/${customer.id}`}>
                   <TableCell className="font-medium">{customer.name}</TableCell>
                   <TableCell>{customer.phone}</TableCell>
                   <TableCell className="text-muted-foreground">
@@ -123,14 +121,6 @@ export default function AdminCustomersPage() {
                   </TableCell>
                   <TableCell className="whitespace-nowrap text-muted-foreground">
                     {new Date(customer.createdAt).toLocaleDateString()}
-                  </TableCell>
-                  <TableCell>
-                    <Link
-                      href={`/admin/customers/${customer.id}`}
-                      className="text-sm font-medium text-primary hover:underline"
-                    >
-                      View
-                    </Link>
                   </TableCell>
                 </TableRow>
               ))}

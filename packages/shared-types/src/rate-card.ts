@@ -17,10 +17,22 @@ export interface CompanySettingsDto {
   insuranceDisclaimer: string | null;
   legalDisclaimer: string | null;
   restrictedItemsNotice: string | null;
+  // GST identity of the supplier. Every one of these must be set before a tax invoice can be
+  // issued — InvoicesService refuses rather than printing a document with statutory blanks.
+  gstin: string | null;
+  legalName: string | null;
+  stateName: string | null;
+  stateCode: string | null; // GST state code, e.g. "36" for Telangana
+  sacCode: string | null; // service accounting code, e.g. "996812" for courier
   updatedAt: string; // ISO 8601
 }
 
 export interface UpdateCompanySettingsDto {
+  gstin?: string;
+  legalName?: string;
+  stateName?: string;
+  stateCode?: string;
+  sacCode?: string;
   companyName?: string;
   tagline?: string;
   primaryColor?: string;

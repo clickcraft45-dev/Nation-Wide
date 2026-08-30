@@ -55,20 +55,28 @@ describe('HealthController', () => {
     expect(Date.now() - startedAt).toBeLessThan(5000);
     expect(status).toHaveBeenCalledWith(503);
     expect(json).toHaveBeenCalledWith(
-      expect.objectContaining({ checks: { database: 'error', redis: 'ok' } }),
+      expect.objectContaining({
+        status: 'error',
+        checks: { database: 'error', redis: 'ok' },
+      }),
     );
   });
 
-  it('reports a rejecting dependency as error, not as a thrown request', async () => {
+  // Redis is a cache that fails open, so a probe must not kill a container over it — a 503 here
+  // put the Railway/Docker healthchecks into a restart loop against an app serving fine.
+  it('stays 200 and degraded when only Redis is down', async () => {
     const { controller, res, status, json } = harness(
       () => Promise.resolve({ ok: 1 }),
       () => Promise.reject(new Error('ECONNREFUSED')),
     );
     await expect(controller.check(res)).resolves.toBeUndefined();
 
-    expect(status).toHaveBeenCalledWith(503);
+    expect(status).toHaveBeenCalledWith(200);
     expect(json).toHaveBeenCalledWith(
-      expect.objectContaining({ checks: { database: 'ok', redis: 'error' } }),
+      expect.objectContaining({
+        status: 'degraded',
+        checks: { database: 'ok', redis: 'error' },
+      }),
     );
   });
 });

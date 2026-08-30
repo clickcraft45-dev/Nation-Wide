@@ -10,3 +10,4 @@ export * from "./pickup-request";
 export * from "./pincode";
 export * from "./pricing";
 export * from "./rate-card";
+export * from "./invoice";

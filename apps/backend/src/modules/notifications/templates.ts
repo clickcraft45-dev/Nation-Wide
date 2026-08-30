@@ -26,6 +26,9 @@ export const NOTIFICATION_TEMPLATES = {
   PAYMENT_COLLECTED: 'payment_collected',
   ORDER_CREATED_FROM_PICKUP: 'order_created_from_pickup',
   PICKUP_REJECTED: 'pickup_rejected',
+  // Carries the invoice PDF as a document attachment, so the Meta template must be submitted
+  // with a DOCUMENT header — a text-header template will be rejected at send time.
+  INVOICE_READY: 'invoice_ready',
 } as const;
 
 const STATUS_TEMPLATE_MAP: Record<TrackingStatusCode, string> = {

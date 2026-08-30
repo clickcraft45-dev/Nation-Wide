@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { Package } from "lucide-react";
 import type { OrderDto } from "@nationwide/shared-types";
 import { apiClient } from "@/lib/api-client";
@@ -48,7 +47,7 @@ export default function CustomerOrdersPage() {
       </div>
 
       {error && <ErrorState message={error} onRetry={load} />}
-      {!error && isLoading && <TableSkeleton columns={4} />}
+      {!error && isLoading && <TableSkeleton columns={3} />}
 
       {!error && !isLoading && orders.length === 0 && (
         <EmptyState
@@ -65,14 +64,20 @@ export default function CustomerOrdersPage() {
               <TableHead>Tracking Number</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Created</TableHead>
-              <TableHead>Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {orders.map((order) => {
               const shipment = order.shipments[0];
               return (
-                <TableRow key={order.id}>
+                <TableRow
+                  key={order.id}
+                  href={
+                    shipment
+                      ? `/tracking?tracking=${shipment.internalTrackingNumber}`
+                      : undefined
+                  }
+                >
                   <TableCell className="font-mono text-xs">
                     {shipment?.internalTrackingNumber ?? order.id.slice(0, 8)}
                   </TableCell>
@@ -81,18 +86,6 @@ export default function CustomerOrdersPage() {
                   </TableCell>
                   <TableCell className="whitespace-nowrap text-muted-foreground">
                     {new Date(order.createdAt).toLocaleDateString()}
-                  </TableCell>
-                  <TableCell>
-                    {shipment ? (
-                      <Link
-                        href={`/tracking?tracking=${shipment.internalTrackingNumber}`}
-                        className="text-sm font-medium text-primary hover:underline"
-                      >
-                        Track
-                      </Link>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">—</span>
-                    )}
                   </TableCell>
                 </TableRow>
               );

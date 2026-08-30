@@ -39,6 +39,32 @@ class EnvironmentVariables {
   @IsString()
   FRONTEND_URL?: string;
 
+  // The backend's own public origin, e.g. https://api.nationwidelogistics.co. Required only by
+  // invoice delivery: Meta's servers fetch the attachment from a link we build, so this has to
+  // be the externally-reachable origin, never localhost or an internal AWS DNS name.
+  @IsOptional()
+  @IsString()
+  PUBLIC_BASE_URL?: string;
+
+  // Gupshup (the WhatsApp BSP). Optional as a group: MessagingAdapterRegistry falls back to the
+  // stub unless ALL are present, so a partially-configured deployment logs loudly at boot rather
+  // than throwing on the first customer notification.
+  @IsOptional()
+  @IsString()
+  GUPSHUP_API_KEY?: string;
+
+  @IsOptional()
+  @IsString()
+  GUPSHUP_SOURCE_PHONE?: string;
+
+  @IsOptional()
+  @IsString()
+  GUPSHUP_APP_NAME?: string;
+
+  @IsOptional()
+  @IsString()
+  GUPSHUP_TEMPLATES?: string;
+
   @IsOptional()
   @IsInt()
   @Min(1)

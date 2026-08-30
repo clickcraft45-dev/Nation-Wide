@@ -139,14 +139,14 @@ export default function AdminPaymentsPage() {
               <TableHead>Amount</TableHead>
               <TableHead>Method</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead>Actions</TableHead>
+              <TableHead>Settlement</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filtered.map((o) => {
               const customer = customerById.get(o.customerId);
               return (
-                <TableRow key={o.id}>
+                <TableRow key={o.id} href={`/admin/orders/${o.id}`}>
                   <TableCell className="font-mono text-xs">{o.id.slice(0, 8)}</TableCell>
                   <TableCell>{customer?.name ?? "Unknown"}</TableCell>
                   <TableCell>

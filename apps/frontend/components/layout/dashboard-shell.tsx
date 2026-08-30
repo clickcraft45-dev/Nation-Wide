@@ -1,10 +1,36 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import { usePathname } from "next/navigation";
 import type { AuthUserDto } from "@nationwide/shared-types";
-import type { NavItem, NavGroup } from "@/lib/nav-config";
+import { findNavItemForPath, type NavItem, type NavGroup } from "@/lib/nav-config";
 import { Sidebar } from "./sidebar";
 import { Topbar } from "./topbar";
+
+/**
+ * The oversized ghosted numeral in the bottom-right corner — the section's index in the nav,
+ * zero-padded. Purely a wayfinding cue, so it is aria-hidden and never intercepts a click; the
+ * page's real identity is its <h1> and the topbar breadcrumb.
+ *
+ * Outlined with -webkit-text-stroke rather than a stack of SVG glyphs: it is supported
+ * everywhere the rest of this app's glass already is, and a browser without it simply renders
+ * the transparent fill, which degrades to invisible rather than to wrong.
+ */
+function PageNumeral({ items }: { items: NavItem[] }) {
+  const pathname = usePathname();
+  const current = findNavItemForPath(pathname, items);
+  if (!current) return null;
+  const index = items.indexOf(current) + 1;
+
+  return (
+    <span
+      aria-hidden
+      className="pointer-events-none fixed bottom-2 right-6 z-0 select-none font-semibold leading-none text-transparent text-[6rem] [-webkit-text-stroke:1.5px_var(--border)] lg:text-[8rem] lg:[-webkit-text-stroke:2px_var(--border)]"
+    >
+      {String(index).padStart(2, "0")}
+    </span>
+  );
+}
 
 export function DashboardShell({
   user,
@@ -47,7 +73,13 @@ export function DashboardShell({
           profileHref={profileHref}
           onOpenMobileNav={() => setMobileNavOpen(true)}
         />
-        <main className="flex-1 overflow-y-auto p-6">{children}</main>
+        {/* The numeral is fixed, not absolute: `position: absolute` inside a scroll container
+            resolves against the full scrollable box, so it would sit at the bottom of a long
+            table rather than staying in the corner. */}
+        <main className="flex-1 overflow-y-auto p-6">
+          {children}
+          <PageNumeral items={items} />
+        </main>
       </div>
     </div>
   );

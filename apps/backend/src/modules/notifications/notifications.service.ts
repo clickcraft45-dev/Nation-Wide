@@ -7,12 +7,15 @@ import type {
   Prisma,
 } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
+import type { OutboundDocument } from './interfaces/messaging-provider.interface';
 
 export const NOTIFICATIONS_QUEUE = 'notifications';
 
 export interface NotificationJobData {
   notificationId: string;
   variables: Record<string, string>;
+  /** Present only for document-carrying messages (invoices today). See MessagingProvider. */
+  document?: OutboundDocument;
 }
 
 const DELIVERY_STATUS_MAP: Record<string, NotificationStatus> = {
@@ -48,16 +51,21 @@ export class NotificationsService {
     channel: NotificationChannel,
     template: string,
     variables: Record<string, string> = {},
-  ): Promise<void> {
+    document?: OutboundDocument,
+  ): Promise<string> {
     const notification = await this.prisma.notification.create({
       data: { customerId, channel, template, status: 'QUEUED' },
     });
 
     await this.queue.add(
       'send',
-      { notificationId: notification.id, variables },
+      { notificationId: notification.id, variables, document },
       { attempts: 3, backoff: { type: 'exponential', delay: 2000 } },
     );
+
+    // Returns the id so a caller that has to record what it sent (InvoicesService, linking an
+    // invoice to its delivery attempt) doesn't have to re-query for the row it just created.
+    return notification.id;
   }
 
   /**

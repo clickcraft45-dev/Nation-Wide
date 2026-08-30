@@ -34,11 +34,20 @@ export class NotificationsProcessor extends WorkerHost {
     }
 
     const adapter = this.adapterRegistry.resolve(notification.channel);
-    const result = await adapter.sendTemplateMessage(
-      notification.customer.phone,
-      notification.template,
-      job.data.variables,
-    );
+    // Two distinct message types at the provider, not one call with an optional field — see the
+    // doc comment on MessagingProvider.sendDocumentMessage.
+    const result = job.data.document
+      ? await adapter.sendDocumentMessage(
+          notification.customer.phone,
+          notification.template,
+          job.data.variables,
+          job.data.document,
+        )
+      : await adapter.sendTemplateMessage(
+          notification.customer.phone,
+          notification.template,
+          job.data.variables,
+        );
 
     await this.prisma.notification.update({
       where: { id: notification.id },

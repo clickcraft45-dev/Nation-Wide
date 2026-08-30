@@ -147,10 +147,74 @@ existing STAFF/ADMIN/PICKUP_PARTNER account is rejected by design (see
 ## Health checks
 
 `GET /api/v1/health` (unauthenticated) checks MongoDB (`{ ping: 1 }`) and Redis (`PING`) in
-parallel, returning `200` with `{status: "ok", checks: {database, redis}}` when both are
-reachable, `503` otherwise. Both Dockerfiles declare a `HEALTHCHECK` against this endpoint
+parallel. **Only the database decides the status code.** Redis is a cache that fails open (see
+`redis.service.ts`), so a Redis outage returns `200` with `{status: "degraded", checks: {database:
+"ok", redis: "error"}}` — the app is still serving every request correctly. A `503` means the
+database is unreachable. This matters: returning `503` for a dead cache made every probe wired to
+this endpoint kill and restart a healthy container, turning a cache blip into a crash loop. Alert
+on `status: "degraded"`, but never restart on it. Both Dockerfiles declare a `HEALTHCHECK` against this endpoint
 (backend) and `/` (frontend) — point your orchestrator's readiness/liveness probe at the same
 endpoint rather than reimplementing the check.
+
+## GST invoicing
+
+Invoices are a statutory record, so the deployment has three hard requirements beyond the usual:
+
+1. **`PUBLIC_BASE_URL` must be the backend's real public origin** (e.g.
+   `https://api.nationwidelogistics.co`), never an internal AWS hostname or an ALB DNS name.
+   WhatsApp attachments work by handing Meta a URL that *Meta's own servers* fetch, so an origin
+   only reachable inside your VPC produces messages with an attachment nobody can open.
+2. **`storage/invoices/` must survive a redeploy.** Invoice PDFs are rendered once at issue time
+   and served from disk forever after — re-rendering could produce a different document from the
+   one the customer already filed. On ECS/Fargate or any container with an ephemeral filesystem
+   this means an EFS mount (or moving the store to S3); a plain container restart otherwise
+   silently loses every invoice PDF ever issued while leaving the database rows behind. Back it
+   up alongside `storage/logos/`.
+3. **Cloudflare must not cache the public invoice route.** `/api/v1/public/invoices/:id/:token` is
+   deliberately unauthenticated — protected by an unguessable HMAC in the path — and the backend
+   sends `Cache-Control: private`. Confirm no Cache Rule or "Cache Everything" Page Rule overrides
+   that for `/api/*`, or Cloudflare's shared edge cache could serve one customer's invoice to
+   another.
+
+Before the first generate, set the company GST identity (GSTIN, legal name, registered state +
+state code, SAC) in Admin → Settings. `InvoicesService` refuses to issue until all are present
+rather than emitting a document with statutory blanks.
+
+### WhatsApp delivery (Gupshup)
+
+The WABA is onboarded through **Gupshup**, a BSP — not Meta's Cloud API directly. Outbound sending
+needs `GUPSHUP_API_KEY`, `GUPSHUP_SOURCE_PHONE` and `GUPSHUP_APP_NAME`; with any one missing the
+app falls back to the stub adapter, which logs at WARN and delivers nothing. **The boot log states
+which adapter is live** — check it after any change.
+
+**Messages are sent free-form, not as approved templates.** The wording lives in
+`notifications/message-bodies.ts` and ships like any other code, with no Meta approval step.
+
+> **The constraint this buys.** WhatsApp only permits free-form ("session") messages inside the
+> **24-hour customer service window** — the 24 hours after the *customer's* own last message to
+> this number. Outside that window the platform accepts only approved templates and rejects the
+> send, which surfaces as a Gupshup error, gets retried by the queue, and lands as a `FAILED`
+> notification. So free-form works for customers mid-conversation and does **not** work for a
+> customer who has never messaged you or last did so days ago — which describes most invoice
+> recipients. Expect invoice sends to fail for cold contacts until a template is approved.
+>
+> This is easy to miss in testing, because the person testing has just messaged the number and is
+> inside their own 24-hour window.
+
+`GUPSHUP_TEMPLATES` is optional and currently unset. Adding an entry makes that one notification
+use an approved template instead — no code change — and templates work at any time, in or out of
+the window. The `params` order is not optional: Gupshup takes a positional array while the app
+passes named variables, so a wrong order silently puts the amount where the customer's name
+belongs. An invoice template must be approved with a **DOCUMENT header**.
+
+**Known gap — delivery receipts.** `WhatsAppWebhookController` implements Meta's Cloud API callback
+contract: the `hub.challenge` handshake, an `X-Hub-Signature-256` HMAC keyed with the Meta App
+Secret, and the `entry[].changes[].value.statuses[]` payload shape. Gupshup posts its own callback
+format to a URL configured in the Gupshup dashboard and does not sign with that header, so nothing
+currently reaches `recordDeliveryStatus`. Notifications sit at `SENT` and never progress to
+`DELIVERED`/`READ`/`FAILED`. Sending is unaffected. A Gupshup-shaped callback endpoint is still to
+be written; `WHATSAPP_WEBHOOK_VERIFY_TOKEN`/`WHATSAPP_APP_SECRET` only serve the existing
+Meta-shaped route.
 
 ## Backup / restore
 
