@@ -9,6 +9,7 @@ import type {
   ShipmentTypeCode,
 } from "@nationwide/shared-types";
 import { apiClient, ApiError } from "@/lib/api-client";
+import { downloadBlob } from "@/lib/utils/download-blob";
 import { useToast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
 import { Input, Label, FieldError } from "@/components/ui/input";
@@ -110,12 +111,7 @@ export function RateCardsTab() {
       // A plain <a href> to this endpoint would 401 — it needs the Bearer token apiClient
       // attaches, which a raw browser navigation never sends.
       const { blob } = await apiClient.getBlob(`/admin/rate-cards/${doc.id}/download`);
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `RateCard-v${doc.version}.pdf`;
-      link.click();
-      URL.revokeObjectURL(url);
+      downloadBlob(blob, `RateCard-v${doc.version}.pdf`);
     } catch {
       showToast({ variant: "error", title: "Couldn't download the rate card." });
     }

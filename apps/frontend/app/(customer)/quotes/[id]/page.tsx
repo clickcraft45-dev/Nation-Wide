@@ -220,9 +220,14 @@ export default function CustomerQuoteDetailPage() {
 
           {quote.status === "PENDING_PICKUP_REQUEST" && (
             <Card>
-              <CardContent className="flex items-center justify-between pt-5">
+              <CardContent className="flex flex-wrap items-center justify-between gap-3 pt-5">
+                {/* Two ways to reach this state now, and they need different sentences: the
+                    customer picked a carrier, or no rate card covered the route so there was
+                    nothing to pick and the parcel gets priced at the door instead. */}
                 <p className="text-sm text-muted-foreground">
-                  You&apos;ve chosen a provider — now tell us where to collect your parcel.
+                  {quote.selectedOption
+                    ? "You’ve chosen a provider — now tell us where to collect your parcel."
+                    : "This route isn’t on our instant rate card, so we’ll price it at pickup. Tell us where to collect, and our partner will weigh it at your door."}
                 </p>
                 <Button size="sm" onClick={() => router.push(`/pickup-request/${quote.id}`)}>
                   Schedule Pickup

@@ -7,9 +7,13 @@ export const FULFILLMENT_METHODS = ["PICKUP", "WAREHOUSE_DROP_OFF"] as const;
 export type FulfillmentMethodCode = (typeof FULFILLMENT_METHODS)[number];
 
 // The pricing engine auto-computes RATED options for most requests at creation time — see
-// PricingEngineService. NEEDS_MANUAL_REVIEW is the fallback for shipment types it can't touch
-// (OTHER/oversized) or destinations with no active rate card (NO_RATE_AVAILABLE); those still
-// get a staff-entered price via the manual-quote flow. SUBMITTED only appears on pre-existing
+// PricingEngineService. NEEDS_MANUAL_REVIEW is now reserved for the two cases a human genuinely
+// has to look at before anyone is dispatched: an "Other" shipment type and anything over the
+// oversized weight threshold. A destination with no active rate card (NO_RATE_AVAILABLE) does
+// NOT wait for review any more — it goes straight to PENDING_PICKUP_REQUEST, a partner is
+// auto-assigned, and the partner prices it from the verified weight at the door; reviewReason
+// stays set as the only record of why that quote carries no amount. SUBMITTED only appears on
+// pre-existing
 // rows created before the engine shipped. PENDING_PICKUP_REQUEST / PICKUP_REQUESTED are the new
 // customer self-service pre-order states — see pickup-request.ts — reached instead of ACCEPTED
 // when the quote has no fulfillmentMethod set (the legacy admin manual-quote path, which always
@@ -63,7 +67,13 @@ export interface QuotePreviewOptionDto {
 }
 
 export interface QuotePreviewResultDto {
-  status: "RATED" | "NEEDS_MANUAL_REVIEW";
+  /**
+   * PENDING_PICKUP_REQUEST means "we have no rate card for this, so it will be priced at pickup"
+   * — the request proceeds with a partner assigned, it does not wait on staff.
+   * NEEDS_MANUAL_REVIEW is reserved for the two cases a human genuinely has to look at first:
+   * an "Other" shipment type and anything over the oversized weight threshold.
+   */
+  status: "RATED" | "NEEDS_MANUAL_REVIEW" | "PENDING_PICKUP_REQUEST";
   reviewReason: QuoteReviewReasonCode | null;
   options: QuotePreviewOptionDto[];
 }

@@ -1,18 +1,17 @@
 "use client";
 
 import { type ReactNode } from "react";
-import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { LogOut } from "lucide-react";
 import type { AuthUserDto } from "@nationwide/shared-types";
 import { useAuth } from "@/state/auth-context";
 import { PARTNER_NAV_ITEMS, findNavItemForPath } from "@/lib/nav-config";
 import { Avatar } from "@/components/ui/avatar";
-import { cn } from "@/lib/utils/cn";
+import { MobileTabBar } from "@/components/layout/mobile-tab-bar";
 
 // A dedicated mobile-first shell for the field partner portal — not a responsive collapse of
-// the admin DashboardShell/Sidebar. Single scrollable column, a slim top bar, and a fixed
-// bottom tab bar sized for a thumb, so the whole app stays operable one-handed outdoors.
+// the admin DashboardShell/Sidebar. Single scrollable column, a slim top bar, and the shared
+// floating glass dock sized for a thumb, so the whole app stays operable one-handed outdoors.
 export function PartnerMobileShell({
   user,
   children,
@@ -56,30 +55,9 @@ export function PartnerMobileShell({
         </button>
       </header>
 
-      <main className="flex-1 overflow-y-auto px-4 py-4 pb-24">{children}</main>
+      <main className="flex-1 overflow-y-auto px-4 py-4 pb-32">{children}</main>
 
-      <nav
-        aria-label="Primary"
-        className="glass-chrome fixed inset-x-0 bottom-0 z-20 flex border-t border-white/40 pb-[env(safe-area-inset-bottom)]"
-      >
-        {PARTNER_NAV_ITEMS.map((item) => {
-          const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
-          const Icon = item.icon;
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "flex flex-1 flex-col items-center justify-center gap-1 py-2.5 text-xs font-medium",
-                isActive ? "text-primary" : "text-muted-foreground",
-              )}
-            >
-              <Icon className="h-6 w-6" aria-hidden />
-              {item.label}
-            </Link>
-          );
-        })}
-      </nav>
+      <MobileTabBar items={PARTNER_NAV_ITEMS} />
     </div>
   );
 }

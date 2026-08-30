@@ -36,20 +36,17 @@ export class TrackingService {
     private readonly notificationsService: NotificationsService,
   ) {}
 
-  async getStatus(internalTrackingNumber: string): Promise<TrackingResultDto> {
-    const shipment = await this.prisma.shipment.findUnique({
-      where: { internalTrackingNumber },
-      include: {
-        provider: true,
-        externalTrackingNumbers: true,
-        order: { select: { customerId: true } },
-      },
-    });
+  async getStatus(reference: string): Promise<TrackingResultDto> {
+    const shipment = await this.findShipmentByReference(reference);
     if (!shipment) {
-      throw new NotFoundException(
-        `Tracking number ${internalTrackingNumber} not found`,
-      );
+      throw new NotFoundException(`Tracking number ${reference} not found`);
     }
+
+    // Canonical from here down. Everything below — the cache key above all — must key off the
+    // shipment's OWN number rather than whatever the customer typed: ShipmentsService busts the
+    // cache with trackingCacheKey(internalTrackingNumber) after a manual override, so caching a
+    // result under an AWB or an order id would leave that entry stale and unreachable.
+    const internalTrackingNumber = shipment.internalTrackingNumber;
 
     const cacheKey = this.cacheKeyFor(internalTrackingNumber);
     const cached = await this.redis.cacheGet(cacheKey);
@@ -120,6 +117,64 @@ export class TrackingService {
     const dto = await this.buildDtoFromDb(internalTrackingNumber, shipment.id);
     await this.cacheResult(cacheKey, dto);
     return dto;
+  }
+
+  /**
+   * Resolve whatever the customer pasted into a shipment.
+   *
+   * The lookup used to be `findUnique({ internalTrackingNumber })` and nothing else, while every
+   * entry point invites more than that: the search box says "Order ID / Tracking ID" and the
+   * homepage hero says "Use the Order ID from your confirmation, or the carrier tracking ID".
+   * Two of those three simply returned "not found", and a number typed in lower case or pasted
+   * with a trailing space failed as well — the reference is minted upper case (NW-26-000123).
+   *
+   * Order of preference is deliberate: our own number first (the one notifications hand out and
+   * the only one guaranteed unique), then the carrier AWB, then the order id. A shipment is
+   * looked up by at most three cheap indexed queries, and only when the earlier ones miss.
+   */
+  private findShipmentByReference(reference: string) {
+    const trimmed = reference.trim();
+    if (!trimmed) return Promise.resolve(null);
+
+    const include = {
+      provider: true,
+      externalTrackingNumbers: true,
+      order: { select: { customerId: true } },
+    } as const;
+
+    return this.prisma.shipment
+      .findUnique({
+        where: { internalTrackingNumber: trimmed.toUpperCase() },
+        include,
+      })
+      .then(
+        (byInternal) =>
+          byInternal ??
+          this.prisma.shipment.findFirst({
+            where: {
+              externalTrackingNumbers: {
+                some: {
+                  externalTrackingNumber: {
+                    equals: trimmed,
+                    mode: 'insensitive',
+                  },
+                },
+              },
+            },
+            include,
+          }),
+      )
+      .then(
+        (found) =>
+          found ??
+          // Order ids are uuids, so this only ever matches a full one — the truncated 8-character
+          // form the tables display is not a lookup key and must not be treated as one.
+          this.prisma.shipment.findFirst({
+            where: { orderId: trimmed },
+            include,
+            orderBy: { createdAt: 'asc' },
+          }),
+      );
   }
 
   private async buildFallbackDto(

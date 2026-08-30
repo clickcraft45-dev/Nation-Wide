@@ -91,7 +91,17 @@ export class QuotesService {
       if (computedOptions.length > 0) {
         status = 'RATED';
       } else {
-        status = 'NEEDS_MANUAL_REVIEW';
+        // No rate card covers this destination/weight, so there is no price to show — but that
+        // is a gap in OUR pricing data, not a problem with the customer's parcel, and parking it
+        // in NEEDS_MANUAL_REVIEW made every such request wait on a human who has no more
+        // information than the engine did. It goes straight to the pickup step instead: a
+        // partner is auto-assigned, and the price is set at the door from the verified weight
+        // (see PickupRequestsService.verify's no-rate branch).
+        //
+        // reviewReason is still recorded. It is the only trace of WHY this shipment has no
+        // quoted amount, and the admin quote list surfaces it — losing it would make an
+        // unpriced pickup indistinguishable from a normal one.
+        status = 'PENDING_PICKUP_REQUEST';
         reviewReason = 'NO_RATE_AVAILABLE';
       }
     }
@@ -214,8 +224,10 @@ export class QuotesService {
       });
 
     if (computedOptions.length === 0) {
+      // Mirrors create() exactly — see the note there. The wizard reads this to tell the
+      // customer their parcel will be priced at pickup rather than promising a callback.
       return {
-        status: 'NEEDS_MANUAL_REVIEW',
+        status: 'PENDING_PICKUP_REQUEST',
         reviewReason: 'NO_RATE_AVAILABLE',
         options: [],
       };

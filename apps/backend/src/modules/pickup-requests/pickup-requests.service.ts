@@ -401,6 +401,13 @@ export class PickupRequestsService {
     // invoice layer treats that case separately rather than being handed zeroes.
     let breakdown: ComputedRateOption | null = null;
     if (pickupRequest.rateProviderId) {
+      // Rejected, not ignored: silently dropping a price the partner typed would show them a
+      // number on the phone and record a different one, which is the worst of both.
+      if (dto.verifiedPrice !== undefined) {
+        throw new BadRequestException(
+          'This pickup is priced from its rate card — verifiedPrice cannot be set',
+        );
+      }
       const recalculated = await this.repriceAgainstOriginalProvider(
         pickupRequest,
         dto.verifiedWeightKg,
@@ -414,10 +421,14 @@ export class PickupRequestsService {
       verifiedPrice = recalculated.finalPrice;
       breakdown = recalculated;
     } else {
-      // Manual-quote path — there's no RateProvider to re-price against (a human already set
-      // this price with their own judgment); the weight/type correction is recorded for the
-      // record, but the price only changes if staff manually re-quote it elsewhere.
-      verifiedPrice = pickupRequest.estimatedPrice;
+      // No RateProvider to re-price against. Two ways to get here:
+      //   - the manual-quote path, where a human already set the price with their own judgment;
+      //   - an unpriced quote (no rate card covered it), which now reaches a partner instead of
+      //     waiting on manual review — nobody has ever named a price for it, and estimatedPrice
+      //     is 0.
+      // The partner's own figure wins when they supply one, which is the whole point of pricing
+      // at the door; otherwise the existing estimate stands, exactly as before.
+      verifiedPrice = dto.verifiedPrice ?? pickupRequest.estimatedPrice;
     }
 
     await this.prisma.pickupRequest.update({

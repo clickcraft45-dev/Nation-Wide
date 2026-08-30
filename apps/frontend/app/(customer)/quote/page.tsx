@@ -19,6 +19,7 @@ import { WeightStep } from "@/components/quote/weight-step";
 import { QuoteLoading } from "@/components/quote/quote-loading";
 import { ProviderComparison } from "@/components/quote/provider-comparison";
 import { ManualReviewNotice } from "@/components/quote/manual-review-notice";
+import { PricedAtPickupNotice } from "@/components/quote/priced-at-pickup-notice";
 import {
   ShipmentDetailsForm,
   type ShipmentDetailsPayload,
@@ -30,6 +31,7 @@ type WizardStep =
   | "loading"
   | "compare"
   | "manual-review"
+  | "priced-at-pickup"
   | "details"
   | "reselect";
 
@@ -95,7 +97,16 @@ export default function GetQuotePage() {
         `/quotes/preview?destinationCountry=${encodeURIComponent(destination.name)}&weightKg=${value}&shipmentType=${type}`,
       );
       setPreview(result);
-      setStep(result.status === "RATED" ? "compare" : "manual-review");
+      // Three outcomes now, not two. PENDING_PICKUP_REQUEST means no rate card covers this
+      // route, so there is no price to compare — but the shipment still goes ahead and is priced
+      // by the partner at the door, which is a different promise from "we'll call you back".
+      setStep(
+        result.status === "RATED"
+          ? "compare"
+          : result.status === "PENDING_PICKUP_REQUEST"
+            ? "priced-at-pickup"
+            : "manual-review",
+      );
     } catch {
       setLoadError("We're unable to calculate your shipping quotes right now. Please try again in a moment.");
       setStep("weight");
@@ -124,6 +135,14 @@ export default function GetQuotePage() {
         destination: payload.destination,
         submissionKey,
       });
+
+      // Unpriced but going ahead: straight to the pickup form, where submitting auto-assigns a
+      // partner. Checked before the RATED reconciliation below, which would otherwise fall
+      // through to the "no exact match" branch and show an empty comparison.
+      if (quote.status === "PENDING_PICKUP_REQUEST") {
+        router.push(`/pickup-request/${quote.id}`);
+        return;
+      }
 
       if (quote.status === "NEEDS_MANUAL_REVIEW") {
         showToast({
@@ -248,6 +267,10 @@ export default function GetQuotePage() {
 
       {step === "manual-review" && (
         <ManualReviewNotice onRequestQuote={handleRequestCustomQuote} />
+      )}
+
+      {step === "priced-at-pickup" && (
+        <PricedAtPickupNotice onContinue={handleRequestCustomQuote} />
       )}
 
       {step === "details" && destination && shipmentType && (

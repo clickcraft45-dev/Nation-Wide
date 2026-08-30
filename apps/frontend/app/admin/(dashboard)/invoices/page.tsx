@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Download, FileText, Send } from "lucide-react";
+import { Download, FileText, Loader2, Send } from "lucide-react";
 import type {
   CustomerDto,
   InvoiceBatchResultDto,
@@ -23,6 +23,7 @@ import {
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/page-state";
 import { useToast } from "@/components/ui/toast";
+import { downloadBlob } from "@/lib/utils/download-blob";
 import { cn } from "@/lib/utils/cn";
 
 /** yyyy-mm-dd, the value format <input type="date"> requires. */
@@ -51,6 +52,8 @@ export default function AdminInvoicesPage() {
   const [from, setFrom] = useState(firstOfThisMonth);
   const [to, setTo] = useState(() => isoDay(new Date()));
   const [selectedInvoiceIds, setSelectedInvoiceIds] = useState<string[]>([]);
+  // Per-row, not a page-wide flag: downloading one invoice must not disable the other rows.
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
   const { showToast } = useToast();
 
@@ -163,18 +166,30 @@ export default function AdminInvoicesPage() {
   }
 
   async function download(invoice: InvoiceDto) {
+    setDownloadingId(invoice.id);
     try {
       const { blob } = await apiClient.getBlob(`/admin/invoices/${invoice.id}/pdf`);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${invoice.invoiceNumber.replace(/\//g, "-")}.pdf`;
-      a.click();
-      // Revoked immediately: the click has already handed the blob to the download manager, and
-      // an un-revoked object URL pins the whole PDF in memory for the life of the tab.
-      URL.revokeObjectURL(url);
-    } catch {
-      showToast({ title: "Could not download that invoice.", variant: "error" });
+      // A zero-byte body still resolves as a Blob, so an empty or truncated file would "download"
+      // as a broken PDF with no error anywhere. Refuse it instead.
+      if (blob.size === 0) throw new ApiError(500, "Empty PDF body");
+      downloadBlob(blob, `${invoice.invoiceNumber.replace(/\//g, "-")}.pdf`);
+    } catch (err) {
+      // 404 here does not mean "no such invoice" — it is the API saying the invoice exists but
+      // its rendered PDF is missing from storage, which is a different problem with a different
+      // fix, and telling an admin "could not download" would send them looking in the wrong place.
+      showToast({
+        title:
+          err instanceof ApiError && err.status === 404
+            ? `${invoice.invoiceNumber} has no stored PDF file.`
+            : "Could not download that invoice.",
+        description:
+          err instanceof ApiError && err.status === 404
+            ? "It was issued but its PDF is missing from the server's storage. Re-issue it, or restore the storage/invoices directory."
+            : undefined,
+        variant: "error",
+      });
+    } finally {
+      setDownloadingId(null);
     }
   }
 
@@ -340,8 +355,10 @@ export default function AdminInvoicesPage() {
                     </TableCell>
                     <TableCell className="font-medium">
                       {inv.invoiceNumber}
+                      {/* text-danger — `destructive` is not a token this app defines, so this
+                          label was rendering in the default ink with no colour at all. */}
                       {inv.status === "CANCELLED" && (
-                        <span className="ml-2 text-xs text-destructive">CANCELLED</span>
+                        <span className="ml-2 text-xs font-medium text-danger">CANCELLED</span>
                       )}
                     </TableCell>
                     <TableCell>{inv.customer?.name ?? inv.recipientName}</TableCell>
@@ -366,10 +383,15 @@ export default function AdminInvoicesPage() {
                       <button
                         type="button"
                         onClick={() => void download(inv)}
+                        disabled={downloadingId === inv.id}
                         aria-label={`Download ${inv.invoiceNumber}`}
-                        className="text-muted-foreground transition-colors hover:text-foreground"
+                        className="text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
                       >
-                        <Download className="h-4 w-4" aria-hidden />
+                        {downloadingId === inv.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                        ) : (
+                          <Download className="h-4 w-4" aria-hidden />
+                        )}
                       </button>
                     </TableCell>
                   </TableRow>

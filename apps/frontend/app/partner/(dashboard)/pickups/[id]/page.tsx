@@ -69,6 +69,8 @@ export default function PartnerPickupDetailPage() {
   const [verifiedWeightKg, setVerifiedWeightKg] = useState("");
   const [verifiedShipmentType, setVerifiedShipmentType] = useState<ShipmentTypeCode>("PACKAGE");
   const [verificationNotes, setVerificationNotes] = useState("");
+  // Only used when this pickup has no rate provider to compute from — see needsManualPrice.
+  const [manualPrice, setManualPrice] = useState("");
   const [parcelPhysicallyChecked, setParcelPhysicallyChecked] = useState(false);
   const [preview, setPreview] = useState<RecalculatePreviewDto | null>(null);
   const [isRecalculating, setIsRecalculating] = useState(false);
@@ -92,6 +94,11 @@ export default function PartnerPickupDetailPage() {
 
   const [rejectReason, setRejectReason] = useState("");
   const [isRejecting, setIsRejecting] = useState(false);
+
+  // No rateProviderId means the pricing engine never produced an option for this shipment — the
+  // quote went straight to pickup unpriced (see QuotesService.create), so the price is set here
+  // rather than recalculated. The manual-quote path lands here too, and works the same way.
+  const needsManualPrice = pickup !== null && pickup.rateProviderId === null;
 
   function load() {
     setIsLoading(true);
@@ -178,6 +185,11 @@ export default function PartnerPickupDetailPage() {
       setVerifyError("Enter a valid weight.");
       return;
     }
+    const price = Number(manualPrice);
+    if (needsManualPrice && (!price || price <= 0)) {
+      setVerifyError("Enter the price you agreed with the customer.");
+      return;
+    }
     setIsVerifying(true);
     setVerifyError(null);
     try {
@@ -186,6 +198,9 @@ export default function PartnerPickupDetailPage() {
         {
           verifiedWeightKg: weightKg,
           verifiedShipmentType,
+          // Sent only on the no-rate path — the server rejects it outright anywhere else rather
+          // than letting the phone name the price on a rate-carded shipment.
+          ...(needsManualPrice ? { verifiedPrice: price } : {}),
           verificationNotes: verificationNotes.trim() || undefined,
         },
       );
@@ -458,6 +473,29 @@ export default function PartnerPickupDetailPage() {
                     </div>
                   </div>
 
+                  {needsManualPrice ? (
+                    /* This shipment was never rated — no rate card covers it, so there is
+                       nothing for the server to recalculate and the partner is the first person
+                       to put a number on it. */
+                    <div className="space-y-1.5 rounded-lg border border-warning-border bg-warning-bg p-3">
+                      <Label htmlFor="manual-price">Price agreed with the customer (₹)</Label>
+                      <Input
+                        id="manual-price"
+                        type="number"
+                        inputMode="decimal"
+                        step="0.01"
+                        min="0.01"
+                        value={manualPrice}
+                        onChange={(e) => setManualPrice(e.target.value)}
+                        className="h-12 text-lg font-semibold"
+                        placeholder="0.00"
+                      />
+                      <p className="text-xs text-warning">
+                        No rate card covers this route, so this parcel has no quoted price. Enter
+                        what the customer pays — this is the amount they will be charged.
+                      </p>
+                    </div>
+                  ) : (
                   <div className="rounded-lg border border-border bg-muted/40 p-3 text-sm">
                     {isRecalculating && <p className="text-muted-foreground">Recalculating…</p>}
                     {!isRecalculating && preview && (
@@ -489,6 +527,7 @@ export default function PartnerPickupDetailPage() {
                       <p className="text-muted-foreground">Enter the verified weight to see the price.</p>
                     )}
                   </div>
+                  )}
 
                   <div className="space-y-1.5">
                     <Label htmlFor="verification-notes">Pickup Notes (optional)</Label>

@@ -157,6 +157,12 @@ export interface RecalculatePreviewDto {
 export interface VerifyPickupRequestDto {
   verifiedWeightKg: number;
   verifiedShipmentType: ShipmentTypeCode;
+  /**
+   * Only for a pickup with no rate provider — one whose quote could not be priced because no
+   * rate card covered it. The server re-prices from its own rate cards everywhere else and
+   * rejects this field there rather than letting the client name its own price.
+   */
+  verifiedPrice?: number;
   verificationNotes?: string;
 }
 
