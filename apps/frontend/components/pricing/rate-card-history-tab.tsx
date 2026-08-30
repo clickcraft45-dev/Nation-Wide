@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { History } from "lucide-react";
 import type { RateCardDocumentDto, RateProviderDto } from "@nationwide/shared-types";
 import { apiClient, ApiError } from "@/lib/api-client";
+import { downloadBlob } from "@/lib/utils/download-blob";
 import {
   Table,
   TableHeader,
@@ -53,12 +54,7 @@ export function RateCardHistoryTab() {
   async function handleDownload(doc: RateCardDocumentDto) {
     try {
       const { blob } = await apiClient.getBlob(`/admin/rate-cards/${doc.id}/download`);
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `${doc.rateProviderName}-RateCard-v${doc.version}.pdf`;
-      link.click();
-      URL.revokeObjectURL(url);
+      downloadBlob(blob, `${doc.rateProviderName}-RateCard-v${doc.version}.pdf`);
     } catch {
       showToast({ variant: "error", title: "Couldn't download the rate card." });
     }

@@ -6,11 +6,10 @@ import { FileQuestion } from "lucide-react";
 import type { QuoteDto } from "@nationwide/shared-types";
 import { apiClient, ApiError } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { TableSkeleton } from "@/components/ui/skeleton";
+import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/page-state";
 import { useToast } from "@/components/ui/toast";
-import { QuoteStatusBadge } from "@/components/ui/status-badge";
+import { QuoteSummaryCard } from "@/components/quote/quote-summary-card";
 
 export default function CustomerQuotesPage() {
   const [quotes, setQuotes] = useState<QuoteDto[]>([]);
@@ -55,14 +54,24 @@ export default function CustomerQuotesPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold text-foreground">My Quotes</h1>
-          <p className="text-sm text-muted-foreground">Track the status of your shipment requests.</p>
+          <p className="text-sm text-muted-foreground">
+            Track the status of your shipment requests.
+          </p>
         </div>
         <Link href="/quote">
           <Button>Request a quote</Button>
         </Link>
       </div>
 
-      {isLoading && <TableSkeleton columns={4} />}
+      {/* Card-shaped skeletons, not a table's — this list has never been a table, and a
+          four-column grid flashing before three stacked cards is a visible layout jump. */}
+      {isLoading && (
+        <div className="space-y-3">
+          {[0, 1, 2].map((i) => (
+            <Skeleton key={i} className="h-32 w-full rounded-2xl" />
+          ))}
+        </div>
+      )}
 
       {!isLoading && error && <ErrorState message={error} onRetry={load} />}
 
@@ -81,61 +90,12 @@ export default function CustomerQuotesPage() {
       {!isLoading && !error && quotes.length > 0 && (
         <div className="space-y-3">
           {quotes.map((q) => (
-            <Card key={q.id}>
-              <CardContent className="flex flex-col gap-3 pt-5 sm:flex-row sm:items-center sm:justify-between">
-                <div className="space-y-1">
-                  <p className="text-sm font-medium text-foreground">
-                    {q.origin ? `${q.origin.city} → ` : "To "}
-                    {q.destination.city}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {q.shipmentType.charAt(0) + q.shipmentType.slice(1).toLowerCase()} · {q.weightKg}kg ·{" "}
-                    {new Date(q.createdAt).toLocaleDateString()}
-                  </p>
-                  {q.status === "NEEDS_MANUAL_REVIEW" && (
-                    <p className="text-xs text-warning">
-                      Our team will review your shipment details and contact you shortly with a
-                      customized quotation.
-                    </p>
-                  )}
-                  {q.status === "RATED" && (
-                    <p className="text-xs text-info">
-                      {q.rateQuoteOptions.length} provider
-                      {q.rateQuoteOptions.length === 1 ? "" : "s"} available to compare.
-                    </p>
-                  )}
-                  {q.status === "QUOTED" && q.quotedAmount != null && (
-                    <p className="text-sm font-medium text-foreground">
-                      Quoted: {q.quotedCurrency ?? "INR"} {q.quotedAmount.toLocaleString("en-IN")}
-                    </p>
-                  )}
-                  {q.status === "REJECTED" && q.rejectionReason && (
-                    <p className="text-xs text-danger">Declined: {q.rejectionReason}</p>
-                  )}
-                </div>
-                <div className="flex items-center gap-3">
-                  <QuoteStatusBadge status={q.status} />
-                  {q.status === "RATED" ? (
-                    <Link href={`/quotes/${q.id}`}>
-                      <Button size="sm">Compare</Button>
-                    </Link>
-                  ) : q.status === "QUOTED" ? (
-                    <Button
-                      size="sm"
-                      isLoading={acceptingId === q.id}
-                      disabled={acceptingId === q.id}
-                      onClick={() => accept(q.id)}
-                    >
-                      Accept
-                    </Button>
-                  ) : (
-                    <Link href={`/quotes/${q.id}`} className="text-xs text-primary hover:underline">
-                      View
-                    </Link>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+            <QuoteSummaryCard
+              key={q.id}
+              quote={q}
+              isAccepting={acceptingId === q.id}
+              onAccept={() => void accept(q.id)}
+            />
           ))}
         </div>
       )}

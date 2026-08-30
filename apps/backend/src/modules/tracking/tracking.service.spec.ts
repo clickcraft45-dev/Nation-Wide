@@ -9,6 +9,9 @@ const CANONICAL_STATUSES = [
 
 const baseShipment = {
   id: 'shipment-1',
+  // The response and the cache key are both taken from the shipment's own number, never from the
+  // string the caller passed in — getStatus now accepts an AWB or an order id too.
+  internalTrackingNumber: 'NW-1',
   providerId: 'provider-1',
   provider: { id: 'provider-1', adapterClass: 'StubShippingProviderAdapter' },
   order: { customerId: 'customer-1' },
@@ -18,6 +21,7 @@ describe('TrackingService', () => {
   let prisma: {
     shipment: {
       findUnique: jest.Mock;
+      findFirst: jest.Mock;
       findUniqueOrThrow: jest.Mock;
       update: jest.Mock;
     };
@@ -41,6 +45,8 @@ describe('TrackingService', () => {
     prisma = {
       shipment: {
         findUnique: jest.fn(),
+        // The AWB and order-id fallbacks getStatus tries when the internal number misses.
+        findFirst: jest.fn().mockResolvedValue(null),
         findUniqueOrThrow: jest.fn().mockResolvedValue({
           id: 'shipment-1',
           currentStatus: null,
@@ -84,6 +90,59 @@ describe('TrackingService', () => {
       NotFoundException,
     );
     expect(redis.cacheGet).not.toHaveBeenCalled();
+  });
+
+  // Every entry point offers more than the internal number — the search box says "Order ID /
+  // Tracking ID" and the hero says "the Order ID from your confirmation, or the carrier tracking
+  // ID". Those used to be a flat 404, which read to a customer as "tracking is broken".
+  describe('accepts any reference the UI offers', () => {
+    beforeEach(() => {
+      prisma.shipment.findUnique.mockResolvedValue(null);
+      prisma.shipment.findFirst.mockResolvedValue(null);
+    });
+
+    it('uppercases and trims a pasted internal number', async () => {
+      prisma.shipment.findUnique.mockResolvedValue({
+        ...baseShipment,
+        externalTrackingNumbers: [],
+      });
+
+      await service.getStatus('  nw-1 ');
+
+      expect(prisma.shipment.findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { internalTrackingNumber: 'NW-1' } }),
+      );
+    });
+
+    it('falls back to the carrier AWB, then to the order id', async () => {
+      await expect(service.getStatus('ICL-999')).rejects.toThrow(
+        NotFoundException,
+      );
+
+      const [awbQuery, orderQuery] = prisma.shipment.findFirst.mock.calls;
+      expect(awbQuery[0].where).toEqual({
+        externalTrackingNumbers: {
+          some: {
+            externalTrackingNumber: { equals: 'ICL-999', mode: 'insensitive' },
+          },
+        },
+      });
+      expect(orderQuery[0].where).toEqual({ orderId: 'ICL-999' });
+    });
+
+    it('reports the canonical number, and caches under it, whatever was typed', async () => {
+      prisma.shipment.findFirst.mockResolvedValueOnce({
+        ...baseShipment,
+        externalTrackingNumbers: [],
+      });
+
+      const result = await service.getStatus('ICL-1');
+
+      // Caching under the typed alias would strand the entry: ShipmentsService busts
+      // `tracking:<internalTrackingNumber>` after a manual override and would never reach it.
+      expect(result.internalTrackingNumber).toBe('NW-1');
+      expect(redis.cacheGet).toHaveBeenCalledWith('tracking:NW-1');
+    });
   });
 
   it('returns the cached result on a cache hit without calling the provider', async () => {

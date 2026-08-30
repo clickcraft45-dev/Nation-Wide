@@ -517,6 +517,50 @@ describe('PickupRequestsService', () => {
       );
     });
 
+    // An unpriced quote (no rate card covered it) now reaches a partner instead of waiting on
+    // manual review, so the partner is the first person to name a price. estimatedPrice is 0
+    // there — without this the customer would be asked to pay nothing.
+    it('takes the price the partner set when there is no rate to compute from', async () => {
+      prisma.pickupRequest.findUnique.mockResolvedValue({
+        ...basePickupRequest,
+        rateProviderId: null,
+        estimatedPrice: decimalLike(0),
+      });
+
+      await service.verify(
+        'pr-1',
+        {
+          verifiedWeightKg: 6,
+          verifiedShipmentType: 'PACKAGE',
+          verifiedPrice: 1250,
+        } as never,
+        'partner-1',
+      );
+
+      expect(prisma.pickupRequest.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ verifiedPrice: 1250 }),
+        }),
+      );
+    });
+
+    // Otherwise whoever holds the partner's phone could charge what they like and have the
+    // system record it as the tariff.
+    it('refuses a partner-set price on a rate-carded pickup', async () => {
+      await expect(
+        service.verify(
+          'pr-1',
+          {
+            verifiedWeightKg: 6,
+            verifiedShipmentType: 'PACKAGE',
+            verifiedPrice: 1,
+          } as never,
+          'partner-1',
+        ),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.pickupRequest.update).not.toHaveBeenCalled();
+    });
+
     it('rejects verifying a terminal pickup request', async () => {
       prisma.pickupRequest.findUnique.mockResolvedValue({
         ...basePickupRequest,

@@ -12,6 +12,14 @@ import { Topbar } from "./topbar";
  * zero-padded. Purely a wayfinding cue, so it is aria-hidden and never intercepts a click; the
  * page's real identity is its <h1> and the topbar breadcrumb.
  *
+ * IT SITS BEHIND THE CONTENT. `-z-10` only means "behind" relative to a stacking context, so the
+ * column below is marked `isolate` to create one: without that the negative index would resolve
+ * against the shell root and put the numeral behind the app's own background, i.e. invisible.
+ * With it, the numeral is the backmost layer of the page area and every card, table and heading
+ * paints over it — a watermark rather than an overlay. It is positioned against that column
+ * rather than the viewport because <main> is a scroll container, and how a fixed descendant of
+ * one gets clipped is not worth relying on.
+ *
  * Outlined with -webkit-text-stroke rather than a stack of SVG glyphs: it is supported
  * everywhere the rest of this app's glass already is, and a browser without it simply renders
  * the transparent fill, which degrades to invisible rather than to wrong.
@@ -25,7 +33,7 @@ function PageNumeral({ items }: { items: NavItem[] }) {
   return (
     <span
       aria-hidden
-      className="pointer-events-none fixed bottom-2 right-6 z-0 select-none font-semibold leading-none text-transparent text-[6rem] [-webkit-text-stroke:1.5px_var(--border)] lg:text-[8rem] lg:[-webkit-text-stroke:2px_var(--border)]"
+      className="pointer-events-none absolute -bottom-6 right-4 -z-10 select-none font-semibold leading-none text-transparent text-[8rem] [-webkit-text-stroke:1.5px_var(--border)] lg:text-[13rem] lg:[-webkit-text-stroke:2px_var(--border)]"
     >
       {String(index).padStart(2, "0")}
     </span>
@@ -66,20 +74,15 @@ export function DashboardShell({
         mobileOpen={mobileNavOpen}
         onCloseMobile={() => setMobileNavOpen(false)}
       />
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="relative isolate flex min-w-0 flex-1 flex-col">
+        <PageNumeral items={items} />
         <Topbar
           user={user}
           items={items}
           profileHref={profileHref}
           onOpenMobileNav={() => setMobileNavOpen(true)}
         />
-        {/* The numeral is fixed, not absolute: `position: absolute` inside a scroll container
-            resolves against the full scrollable box, so it would sit at the bottom of a long
-            table rather than staying in the corner. */}
-        <main className="flex-1 overflow-y-auto p-6">
-          {children}
-          <PageNumeral items={items} />
-        </main>
+        <main className="flex-1 overflow-y-auto p-6">{children}</main>
       </div>
     </div>
   );

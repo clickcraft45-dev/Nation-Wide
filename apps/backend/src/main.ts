@@ -37,7 +37,16 @@ async function bootstrap() {
   // process.cwd() (not __dirname) so this resolves the same way in both `nest start --watch`
   // (running from src/) and the compiled `node dist/src/main.js` (both invoked with apps/backend
   // as the working directory).
-  app.useStaticAssets(join(process.cwd(), 'storage'), { prefix: '/uploads' });
+  //
+  // SCOPED TO storage/logos, NOT storage/. Serving the whole storage directory published every
+  // rendered tax invoice at /uploads/invoices/<invoice-id>.pdf — unauthenticated, and bypassing
+  // the HMAC-signed public route that exists precisely so those PDFs are not reachable by URL
+  // alone (see PublicInvoicesController). Only the logo was ever meant to be public, and the
+  // path is unchanged: logoPath is "logos/<file>", so CompanySettings' "/uploads/logos/<file>"
+  // still resolves. Anything else written under storage/ from now on is private by default.
+  app.useStaticAssets(join(process.cwd(), 'storage', 'logos'), {
+    prefix: '/uploads/logos',
+  });
 
   app.setGlobalPrefix('api/v1');
   app.use(cookieParser());

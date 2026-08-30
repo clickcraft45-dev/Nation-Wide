@@ -8,12 +8,14 @@ import type { AuthUserDto } from "@nationwide/shared-types";
 import { useAuth } from "@/state/auth-context";
 import { CUSTOMER_NAV_ITEMS, CUSTOMER_TAB_ITEMS } from "@/lib/nav-config";
 import { Logo } from "@/components/brand/logo";
+import { MobileTabBar } from "@/components/layout/mobile-tab-bar";
 import { cn } from "@/lib/utils/cn";
 
-// The customer app's dedicated mobile-first shell — a slim top bar, a 4-item bottom tab bar
-// (Home/Ship/Track/Profile, per the approved design), and a hamburger drawer for the rest of the
-// real nav (My Orders, My Quotes) that doesn't fit in the tab bar. Mirrors the pattern already
-// established by PartnerMobileShell, not a responsive collapse of the admin DashboardShell.
+// The customer app's dedicated mobile-first shell — a slim top bar, the shared 4-item floating
+// dock (Home/Ship/Track/Profile, per the approved design), and a hamburger drawer for the rest
+// of the real nav (My Orders, My Quotes) that doesn't fit in the dock. Mirrors the pattern
+// already established by PartnerMobileShell, not a responsive collapse of the admin
+// DashboardShell.
 export function CustomerMobileShell({
   user,
   children,
@@ -58,30 +60,9 @@ export function CustomerMobileShell({
         </button>
       </header>
 
-      <main className="flex-1 overflow-y-auto px-4 py-4 pb-24">{children}</main>
+      <main className="flex-1 overflow-y-auto px-4 py-4 pb-32">{children}</main>
 
-      <nav
-        aria-label="Primary"
-        className="glass-chrome fixed inset-x-0 bottom-0 z-20 flex border-t border-white/40 pb-[env(safe-area-inset-bottom)]"
-      >
-        {CUSTOMER_TAB_ITEMS.map((item) => {
-          const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
-          const Icon = item.icon;
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "flex flex-1 flex-col items-center justify-center gap-1 py-2.5 text-xs font-medium",
-                isActive ? "text-primary" : "text-muted-foreground",
-              )}
-            >
-              <Icon className="h-6 w-6" aria-hidden />
-              {item.label}
-            </Link>
-          );
-        })}
-      </nav>
+      <MobileTabBar items={CUSTOMER_TAB_ITEMS} />
 
       {drawerOpen && (
         <div className="fixed inset-0 z-40">
