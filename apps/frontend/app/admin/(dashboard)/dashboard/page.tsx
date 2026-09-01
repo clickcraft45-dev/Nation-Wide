@@ -16,7 +16,6 @@ import {
 } from "lucide-react";
 import type {
   OrderDto,
-  CustomerDto,
   DashboardSummaryDto,
   PickupRequestDto,
 } from "@nationwide/shared-types";
@@ -73,7 +72,6 @@ const TREND_SERIES = [
 export default function AdminDashboardHomePage() {
   const { user } = useAuth();
   const [orders, setOrders] = useState<OrderDto[] | null>(null);
-  const [customers, setCustomers] = useState<CustomerDto[] | null>(null);
   const [summary, setSummary] = useState<DashboardSummaryDto | null>(null);
   const [pickupRequests, setPickupRequests] = useState<PickupRequestDto[]>([]);
   const [scheduleDay, setScheduleDay] = useState(todayIso);
@@ -84,23 +82,33 @@ export default function AdminDashboardHomePage() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // The reporting window is a SERVER-side filter now, so this re-runs when the range changes
+  // rather than downloading every order once and slicing it in the browser. That old shape was
+  // not just slow: the unpaginated /orders response is capped at 1000 rows server-side, so any
+  // account past that quietly lost the older part of its own window and under-reported every
+  // KPI, the revenue total and the trend chart.
+  //
+  // It fetches one extra window's worth before `from`, because the delta badges compare the
+  // selected window against the equal-length one immediately preceding it (see trendDelta).
+  const fetchFrom = addDaysIso(from, -daysBetween(from, to));
+
   useEffect(() => {
     let cancelled = false;
-    // Fetching on mount is a one-shot lookup, not a subscription to external state.
+    // Fetching is a one-shot lookup keyed on the range, not a subscription to external state.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsLoading(true);
     setError(null);
 
+    const range = `?createdFrom=${fetchFrom}&createdTo=${to}`;
+
     Promise.all([
-      apiClient.get<OrderDto[]>("/orders"),
-      apiClient.get<CustomerDto[]>("/customers"),
+      apiClient.get<OrderDto[]>(`/orders${range}`),
       apiClient.get<DashboardSummaryDto>("/admin/dashboard-summary"),
       apiClient.get<PickupRequestDto[]>("/admin/pickup-requests"),
     ])
-      .then(([ordersRes, customersRes, summaryRes, pickupsRes]) => {
+      .then(([ordersRes, summaryRes, pickupsRes]) => {
         if (cancelled) return;
         setOrders(ordersRes);
-        setCustomers(customersRes);
         setSummary(summaryRes);
         setPickupRequests(pickupsRes);
       })
@@ -119,13 +127,7 @@ export default function AdminDashboardHomePage() {
     return () => {
       cancelled = true;
     };
-  }, []);
-
-  const customerNameById = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const c of customers ?? []) map.set(c.id, c.name);
-    return map;
-  }, [customers]);
+  }, [fetchFrom, to]);
 
   const rangeDays = daysBetween(from, to);
 
@@ -420,7 +422,7 @@ export default function AdminDashboardHomePage() {
                     {recentOrders.map((order) => (
                       <TableRow key={order.id} href={`/admin/orders/${order.id}`}>
                         <TableCell className="font-mono text-xs">{order.id.slice(0, 8)}</TableCell>
-                        <TableCell>{customerNameById.get(order.customerId) ?? "—"}</TableCell>
+                        <TableCell>{order.customerName ?? "—"}</TableCell>
                         <TableCell>
                           <OrderStatusBadge status={order.status} />
                         </TableCell>
@@ -486,7 +488,7 @@ export default function AdminDashboardHomePage() {
           <div className="grid grid-cols-2 gap-3">
             <KpiCard title="Orders Delivered" value={ordersDelivered} icon={CheckCircle2} href="/admin/orders?status=delivered" isLoading={isLoading} />
             <KpiCard title="Orders In Transit" value={ordersInTransit} icon={Truck} href="/admin/orders?status=in-transit" isLoading={isLoading} />
-            <KpiCard title="Total Customers" value={customers?.length ?? 0} icon={Users} href="/admin/customers" isLoading={isLoading} />
+            <KpiCard title="Total Customers" value={summary?.totalCustomers ?? 0} icon={Users} href="/admin/customers" isLoading={isLoading} />
             <KpiCard
               title="Warehouse Drop-offs"
               value={summary?.dropOffs ?? 0}

@@ -33,6 +33,7 @@ describe('AdminService', () => {
       },
       apiRequestLog: { findMany: jest.fn().mockResolvedValue([]) },
       auditLog: { findMany: jest.fn().mockResolvedValue([]) },
+      customer: { count: jest.fn().mockResolvedValue(0) },
       quote: { count: jest.fn().mockResolvedValue(0) },
       pickup: { count: jest.fn().mockResolvedValue(0) },
       order: { count: jest.fn().mockResolvedValue(0) },
@@ -131,10 +132,12 @@ describe('AdminService', () => {
         .mockResolvedValueOnce(4) // scheduledPickups
         .mockResolvedValueOnce(1); // dropOffs
       prisma.order.count.mockResolvedValueOnce(2); // pendingPayments
+      prisma.customer.count.mockResolvedValueOnce(7); // totalCustomers
 
       const result = await service.getDashboardSummary();
 
       expect(result).toEqual({
+        totalCustomers: 7,
         newQuotes: 10,
         needsManualReview: 3,
         scheduledPickups: 4,

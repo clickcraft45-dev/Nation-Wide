@@ -25,6 +25,7 @@ import { GenerateInvoicesDto } from './dto/generate-invoices.dto';
 import { SendInvoicesDto } from './dto/send-invoices.dto';
 import { CancelInvoiceDto } from './dto/cancel-invoice.dto';
 import { QueryInvoicesDto } from './dto/query-invoices.dto';
+import { CreateCustomInvoiceDto } from './dto/create-custom-invoice.dto';
 
 // ADMIN only. Issuing a tax invoice is a financial act with a permanent, numbered record — the
 // same bar as pricing, not the wider STAFF access the operational screens get.
@@ -47,6 +48,26 @@ export class AdminInvoicesController {
       dto.from,
       dto.to,
       user.sub,
+    );
+  }
+
+  // Registered ahead of nothing in particular, but kept next to generate: both issue numbers in
+  // the same statutory series and the two are read together.
+  @Post('custom')
+  async createCustom(
+    @Body() dto: CreateCustomInvoiceDto,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<InvoiceDto> {
+    return toInvoiceDto(await this.invoices.issueCustom(dto, user.sub));
+  }
+
+  @Post('generate-for-order/:orderId')
+  async generateForOrder(
+    @Param('orderId') orderId: string,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<InvoiceDto> {
+    return toInvoiceDto(
+      await this.invoices.generateForOrder(orderId, user.sub),
     );
   }
 

@@ -157,12 +157,14 @@ export class AdminService {
 
   async getDashboardSummary(): Promise<DashboardSummaryDto> {
     const [
+      totalCustomers,
       newQuotes,
       needsManualReview,
       scheduledPickups,
       dropOffs,
       pendingPayments,
     ] = await Promise.all([
+      this.prisma.customer.count(),
       this.prisma.quote.count({
         where: { status: { in: ['SUBMITTED', 'NEEDS_MANUAL_REVIEW'] } },
       }),
@@ -182,6 +184,7 @@ export class AdminService {
     ]);
 
     return {
+      totalCustomers,
       newQuotes,
       needsManualReview,
       scheduledPickups,

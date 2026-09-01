@@ -30,6 +30,9 @@ export interface NavItem {
 }
 
 export interface NavGroup {
+  // Rail icon for the two-level sidebar. Optional: defaults to the first item's icon, which is
+  // already the right mark for every group but "System".
+  icon?: LucideIcon;
   label: string;
   items: NavItem[];
 }
@@ -82,6 +85,7 @@ export const ADMIN_NAV_GROUPS: NavGroup[] = [
   },
   {
     label: "System",
+    icon: Settings,
     items: [
       // Kept — not deleted — but relabeled and moved away from "Pickup Requests" so it reads as
       // a separate, secondary record rather than a duplicate of the active pickup workflow.
@@ -116,6 +120,7 @@ export const CUSTOMER_NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "My Orders", href: "/orders", icon: Package },
   { label: "My Quotes", href: "/quotes", icon: FileQuestion },
+  { label: "My Bills", href: "/bills", icon: ReceiptIndianRupee },
   { label: "Track a Shipment", href: "/tracking", icon: MapPin },
   { label: "Profile", href: "/profile", icon: User },
 ];

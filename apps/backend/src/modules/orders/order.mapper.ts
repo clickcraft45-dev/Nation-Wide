@@ -21,6 +21,7 @@ export function toOrderDto(order: OrderWithShipments): OrderDto {
   return {
     id: order.id,
     customerId: order.customerId,
+    customerName: order.customer?.name ?? null,
     status: order.status,
     quoteId: order.quote?.id ?? null,
     paymentStatus: order.paymentStatus,

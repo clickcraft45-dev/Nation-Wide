@@ -109,7 +109,8 @@ export function MarketingHero() {
         </div>
       </motion.div>
 
-      {/* pt clears the overlaying navbar (see MarketingNavbar's -mb-16 on the homepage). */}
+      {/* pt clears the pinned navbar, which is fixed and so overlays this hero rather than
+          sitting above it in flow. */}
       <motion.div
         style={{ y: contentY }}
         /* Bottom padding is the planet's headroom — see the geometry note above. It must clear

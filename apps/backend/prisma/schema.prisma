@@ -192,6 +192,11 @@ model Order {
   paymentMarkedBy AdminUser?     @relation("OrderPaymentMarkedBy", fields: [paymentMarkedByAdminId], references: [id])
 
   @@index([customerId])
+  // Every admin list (paginated or not) sorts by createdAt desc by default — without this,
+  // MongoDB has to collection-scan and sort every order in memory before it can return even the
+  // first page, which is what made the unbounded /orders read hang instead of just being slow.
+  @@index([createdAt])
+  @@index([status])
   @@map("orders")
 }
 
@@ -885,8 +890,15 @@ model Invoice {
   /// Indian FY the invoice falls in, "2026-27". GST requires the series to restart each year.
   financialYear  String @map("financial_year")
 
-  orderId    String @unique @map("order_id")
-  customerId String @map("customer_id")
+  /// Nullable so an admin can raise a one-off invoice that has no order behind it — a
+  /// re-delivery fee, a packaging charge, a correction billed separately. Still @unique, so an
+  /// order can never be invoiced twice.
+  orderId    String? @unique @map("order_id")
+  customerId String  @map("customer_id")
+
+  /// What is being billed, for an invoice with no order to describe it. Null on order-backed
+  /// invoices, whose line is derived from the shipment.
+  customLineDescription String? @map("custom_line_description")
 
   status      InvoiceStatus @default(ISSUED)
   invoiceDate DateTime      @map("invoice_date")
@@ -945,7 +957,7 @@ model Invoice {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  order    Order      @relation(fields: [orderId], references: [id])
+  order    Order?     @relation(fields: [orderId], references: [id])
   customer Customer   @relation(fields: [customerId], references: [id])
   issuedBy AdminUser? @relation("InvoiceIssuedBy", fields: [issuedByAdminId], references: [id])
 

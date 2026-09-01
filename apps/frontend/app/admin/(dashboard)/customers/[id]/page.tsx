@@ -30,13 +30,12 @@ export default function AdminCustomerProfilePage() {
 
     Promise.all([
       apiClient.get<CustomerDto>(`/customers/${params.id}`),
-      apiClient.get<OrderDto[]>("/orders"),
+      apiClient.get<OrderDto[]>(`/orders?customerId=${params.id}`),
       apiClient.get<PickupDto[]>("/admin/pickups"),
       apiClient.get<PickupDto[]>("/admin/pickups/drop-offs"),
     ])
-      .then(([customerRes, ordersRes, pickupsRes, dropOffsRes]) => {
+      .then(([customerRes, customerOrders, pickupsRes, dropOffsRes]) => {
         if (cancelled) return;
-        const customerOrders = ordersRes.filter((o) => o.customerId === customerRes.id);
         const customerOrderIds = new Set(customerOrders.map((o) => o.id));
         setCustomer(customerRes);
         setOrders(customerOrders);

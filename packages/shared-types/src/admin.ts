@@ -56,6 +56,8 @@ export interface AuditLogEntryDto {
 }
 
 export interface DashboardSummaryDto {
+  /** Total registered customers. A count, so the dashboard KPI never fetches the table to size it. */
+  totalCustomers: number;
   newQuotes: number;
   needsManualReview: number;
   scheduledPickups: number;
