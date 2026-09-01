@@ -19,6 +19,7 @@ export function toInvoiceDto(invoice: InvoiceWithCustomer): InvoiceDto {
     invoiceNumber: invoice.invoiceNumber,
     financialYear: invoice.financialYear,
     orderId: invoice.orderId,
+    customLineDescription: invoice.customLineDescription,
     customerId: invoice.customerId,
     customer: invoice.customer
       ? { name: invoice.customer.name, phone: invoice.customer.phone }

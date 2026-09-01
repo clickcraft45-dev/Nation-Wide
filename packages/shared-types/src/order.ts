@@ -20,6 +20,12 @@ export interface ShipmentSummaryDto {
 export interface OrderDto {
   id: string;
   customerId: string;
+  /**
+   * The customer's display name, joined server-side. Present so a list view can label its rows
+   * without downloading the entire customer table to build an id->name map client-side, which is
+   * what the admin dashboard used to do.
+   */
+  customerName: string | null;
   status: OrderStatusCode;
   quoteId: string | null;
   paymentStatus: PaymentStatusCode;

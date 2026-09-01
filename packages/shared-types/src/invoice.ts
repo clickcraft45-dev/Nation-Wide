@@ -9,13 +9,18 @@ export type InvoiceStatus = "ISSUED" | "CANCELLED";
 export type InvoiceBreakdownSource =
   | "PICKUP_VERIFICATION"
   | "RATE_OPTION"
-  | "MANUAL_QUOTE_INCLUSIVE";
+  | "MANUAL_QUOTE_INCLUSIVE"
+  /** A one-off invoice an admin raised by hand, with no order behind it. */
+  | "CUSTOM";
 
 export interface InvoiceDto {
   id: string;
   invoiceNumber: string;
   financialYear: string;
-  orderId: string;
+  /** Null on a one-off invoice raised without an order — see customLineDescription. */
+  orderId: string | null;
+  /** What is being billed, when there is no order to describe it. */
+  customLineDescription: string | null;
   customerId: string;
   customer: { name: string; phone: string } | null;
   status: InvoiceStatus;

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Download, FileText, Loader2, Send } from "lucide-react";
+import { Download, FileText, Loader2, ReceiptIndianRupee, Send } from "lucide-react";
 import type {
   CustomerDto,
   InvoiceBatchResultDto,
@@ -10,6 +10,7 @@ import type {
 } from "@nationwide/shared-types";
 import { apiClient, ApiError } from "@/lib/api-client";
 import { SearchInput } from "@/components/ui/search-input";
+import { NativeSelect } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -55,6 +56,12 @@ export default function AdminInvoicesPage() {
   // Per-row, not a page-wide flag: downloading one invoice must not disable the other rows.
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
+  // Custom (order-less) invoice form.
+  const [customCustomerId, setCustomCustomerId] = useState("");
+  const [customAmount, setCustomAmount] = useState("");
+  const [customDescription, setCustomDescription] = useState("");
+  const [customPlaceOfSupply, setCustomPlaceOfSupply] = useState("");
+
   const { showToast } = useToast();
 
   function load() {
@@ -99,6 +106,18 @@ export default function AdminInvoicesPage() {
    * actually happens: one unpriced order among forty should not read as "generation failed".
    */
   function reportBatch(result: InvoiceBatchResultDto, verb: string) {
+    // Nothing at all came back — no orders matched the customers and window. That is a filter
+    // problem, not a failure, and "0 generated" on its own sent admins hunting for a bug.
+    if (!result.created.length && !result.skipped.length && !result.failed.length) {
+      showToast({
+        variant: "error",
+        title: "No invoiceable orders in that range.",
+        description:
+          "Those customers have no non-cancelled orders created between the selected dates. Widen the range, or use Custom invoice below to bill something without an order.",
+      });
+      return;
+    }
+
     const parts = [`${result.created.length} ${verb}`];
     if (result.skipped.length) parts.push(`${result.skipped.length} already existed`);
     if (result.failed.length) parts.push(`${result.failed.length} failed`);
@@ -160,6 +179,41 @@ export default function AdminInvoicesPage() {
       load();
     } catch {
       showToast({ title: "Send failed.", variant: "error" });
+    } finally {
+      setIsWorking(false);
+    }
+  }
+
+  async function createCustom() {
+    const grossAmount = Number(customAmount);
+    if (!customCustomerId || !grossAmount || grossAmount <= 0 || customDescription.trim().length < 3) {
+      showToast({
+        variant: "error",
+        title: "Pick a customer, an amount and a description first.",
+      });
+      return;
+    }
+    setIsWorking(true);
+    try {
+      const invoice = await apiClient.post<InvoiceDto>("/admin/invoices/custom", {
+        customerId: customCustomerId,
+        grossAmount,
+        description: customDescription.trim(),
+        placeOfSupplyState: customPlaceOfSupply.trim() || undefined,
+      });
+      showToast({ variant: "success", title: `Issued ${invoice.invoiceNumber}` });
+      setCustomAmount("");
+      setCustomDescription("");
+      setCustomPlaceOfSupply("");
+      load();
+    } catch (err) {
+      showToast({
+        variant: "error",
+        title:
+          err instanceof ApiError && typeof err.body === "object" && err.body !== null
+            ? String((err.body as { message?: string }).message ?? "Couldn't issue that invoice.")
+            : "Couldn't issue that invoice.",
+      });
     } finally {
       setIsWorking(false);
     }
@@ -298,6 +352,91 @@ export default function AdminInvoicesPage() {
             One invoice per order. Orders already invoiced are skipped, and cancelled orders are
             never invoiced.
           </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Custom invoice</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Bill something that has no order behind it — a re-delivery fee, packaging, a
+            correction. It takes the next number in the same statutory series and produces the
+            same document.
+          </p>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="space-y-1">
+              <span className="text-xs font-medium text-muted-foreground">Customer</span>
+              <NativeSelect
+                value={customCustomerId}
+                onChange={(e) => setCustomCustomerId(e.target.value)}
+                aria-label="Customer to invoice"
+              >
+                <option value="">Select a customer…</option>
+                {customers.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} · {c.phone}
+                  </option>
+                ))}
+              </NativeSelect>
+            </label>
+
+            <label className="space-y-1">
+              <span className="text-xs font-medium text-muted-foreground">
+                Amount (₹, including GST)
+              </span>
+              {/* Tax-inclusive on purpose — it is the figure the customer was quoted, and the
+                  taxable value is back-derived from it so the total lands exactly there. */}
+              <input
+                type="number"
+                inputMode="decimal"
+                step="0.01"
+                min="0.01"
+                value={customAmount}
+                onChange={(e) => setCustomAmount(e.target.value)}
+                placeholder="0.00"
+                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+              />
+            </label>
+          </div>
+
+          <label className="block space-y-1">
+            <span className="text-xs font-medium text-muted-foreground">
+              What is being billed
+            </span>
+            <input
+              value={customDescription}
+              onChange={(e) => setCustomDescription(e.target.value)}
+              placeholder="e.g. Re-delivery attempt — AWB NW-26-000123"
+              maxLength={300}
+              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+            />
+            <span className="text-xs text-muted-foreground">
+              Printed as the invoice&apos;s line item.
+            </span>
+          </label>
+
+          <label className="block space-y-1">
+            <span className="text-xs font-medium text-muted-foreground">
+              Place of supply (optional)
+            </span>
+            <input
+              value={customPlaceOfSupply}
+              onChange={(e) => setCustomPlaceOfSupply(e.target.value)}
+              placeholder="Leave blank for an intra-state supply"
+              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+            />
+            <span className="text-xs text-muted-foreground">
+              Naming another state is what makes this charge IGST instead of CGST+SGST.
+            </span>
+          </label>
+
+          <Button onClick={createCustom} disabled={isWorking}>
+            <ReceiptIndianRupee className="mr-2 h-4 w-4" aria-hidden />
+            Issue custom invoice
+          </Button>
         </CardContent>
       </Card>
 

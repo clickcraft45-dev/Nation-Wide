@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { Menu, Bell, LogOut, User as UserIcon, ChevronRight } from "lucide-react";
+import { Bell, LogOut, User as UserIcon, ChevronRight } from "lucide-react";
 import type { AuthUserDto } from "@nationwide/shared-types";
 import { useAuth } from "@/state/auth-context";
 import { findNavItemForPath, type NavItem } from "@/lib/nav-config";
@@ -38,12 +38,10 @@ export function Topbar({
   user,
   items,
   profileHref,
-  onOpenMobileNav,
 }: {
   user: AuthUserDto;
   items: NavItem[];
   profileHref: string;
-  onOpenMobileNav: () => void;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -56,14 +54,6 @@ export function Topbar({
 
   return (
     <header className="glass-chrome z-20 flex h-14 shrink-0 items-center gap-3 border-b border-white/40 px-4">
-      <button
-        onClick={onOpenMobileNav}
-        aria-label="Open navigation menu"
-        className="text-muted-foreground hover:text-foreground lg:hidden"
-      >
-        <Menu className="h-5 w-5" aria-hidden />
-      </button>
-
       <Breadcrumbs pathname={pathname} items={items} />
 
       <div className="ml-auto flex items-center gap-3">

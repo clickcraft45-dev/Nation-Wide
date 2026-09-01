@@ -18,6 +18,7 @@ import {
   formatInvoiceNumber,
   indianFinancialYear,
   resolveChargedBreakdown,
+  round2,
   splitGst,
 } from './gst';
 import { gstStateCode, isIntraStateSupply } from './indian-states';
@@ -138,15 +139,16 @@ export class InvoicesService {
     return this.issueForOrder(order, actorId);
   }
 
-  private async issueForOrder(
-    order: OrderForInvoice,
-    actorId: string,
-  ): Promise<Invoice> {
+  /**
+   * The supplier fields a tax invoice is not a tax invoice without.
+   *
+   * Refuse rather than emit a document with blanks where statutory fields belong. This is the one
+   * check that must never be softened into a warning: an invoice missing the supplier's GSTIN is
+   * not a tax invoice, and issuing it consumes a number in the series regardless. Shared by both
+   * issue paths so a one-off invoice cannot slip past the bar the order path enforces.
+   */
+  private async requireCompleteSettings() {
     const settings = await this.companySettings.get();
-
-    // Refuse rather than emit a document with blanks where statutory fields belong. This is the
-    // one check that must never be softened into a warning: an invoice missing the supplier's
-    // GSTIN is not a tax invoice, and issuing it consumes a number in the series regardless.
     const missing = (
       [
         ['GSTIN', settings.gstin],
@@ -164,6 +166,161 @@ export class InvoicesService {
         `Company ${missing.join(', ')} must be set in Settings before invoices can be issued`,
       );
     }
+    return settings;
+  }
+
+  /**
+   * A one-off invoice with no order behind it — a re-delivery fee, a packaging charge, a
+   * correction billed separately. The admin names the customer, the gross amount and what it is
+   * for; everything statutory (series, supplier snapshot, CGST/SGST vs IGST) is derived exactly
+   * as it is for an order-backed invoice, because an auditor cannot tell the two apart and the
+   * document must not either.
+   *
+   * The amount is TAX-INCLUSIVE, matching the manual-quote path: staff type the number the
+   * customer actually pays, and the taxable value is back-derived from it. Typing a pre-tax
+   * figure and having the total come out higher than the number quoted is the mistake this
+   * avoids.
+   */
+  async issueCustom(
+    input: {
+      customerId: string;
+      grossAmount: number;
+      description: string;
+      placeOfSupplyState?: string;
+    },
+    actorId: string,
+  ): Promise<Invoice> {
+    const settings = await this.requireCompleteSettings();
+
+    const customer = await this.prisma.customer.findUnique({
+      where: { id: input.customerId },
+    });
+    if (!customer) {
+      throw new NotFoundException(`Customer ${input.customerId} not found`);
+    }
+
+    const gstPercent =
+      this.config.get<number>('INVOICE_GST_PERCENT') ?? DEFAULT_GST_PERCENT;
+    const taxableValue = round2(input.grossAmount / (1 + gstPercent / 100));
+
+    // Customer carries only a free-text address, no structured state, so there is nothing
+    // reliable to infer from. Falls back to the supplier's own state, which makes the supply
+    // intra-state — the same conservative default the order path uses when no origin is
+    // recorded. The admin form exposes this field precisely so an inter-state supply can be
+    // stated rather than guessed.
+    const placeOfSupplyState = input.placeOfSupplyState ?? settings.stateName!;
+    const placeOfSupplyCode =
+      gstStateCode(placeOfSupplyState) ?? settings.stateCode!;
+
+    const split = splitGst(
+      taxableValue,
+      // Subtracted rather than computed, so taxable + tax lands exactly on the gross the
+      // customer was told.
+      round2(input.grossAmount - taxableValue),
+      isIntraStateSupply(settings.stateCode, placeOfSupplyCode),
+    );
+
+    const invoiceDate = new Date();
+    const financialYear = indianFinancialYear(invoiceDate);
+    const sequence = await nextSequenceNumber(
+      this.prisma,
+      `invoice:${financialYear}`,
+    );
+
+    const invoice = await this.prisma.invoice.create({
+      data: {
+        invoiceNumber: formatInvoiceNumber(sequence, financialYear),
+        sequenceNumber: sequence,
+        financialYear,
+        orderId: null,
+        customerId: customer.id,
+        customLineDescription: input.description,
+        invoiceDate,
+
+        supplierName: settings.legalName!,
+        supplierGstin: settings.gstin!,
+        supplierAddress: settings.address!,
+        supplierStateName: settings.stateName!,
+        supplierStateCode: settings.stateCode!,
+        supplierEmail: settings.supportEmail,
+        supplierPhone: settings.supportPhone,
+
+        recipientName: customer.name,
+        recipientPhone: customer.phone,
+        recipientGstin: customer.gstin,
+        recipientAddress: customer.address,
+
+        placeOfSupplyState,
+        placeOfSupplyCode,
+        sacCode: settings.sacCode!,
+
+        taxableValue,
+        ...split,
+        nonTaxableCharges: 0,
+        totalAmount: round2(input.grossAmount),
+        breakdownSource: 'CUSTOM',
+        issuedByAdminId: actorId,
+      },
+    });
+
+    const pdfPath = await this.storePdf(
+      invoice,
+      { shipments: [], destination: null, weightKg: null },
+      settings.logoPath,
+    );
+
+    await this.prisma.auditLog.create({
+      data: {
+        actorId,
+        action: 'INVOICE_ISSUED',
+        entity: 'Invoice',
+        entityId: invoice.id,
+        before: {},
+        after: {
+          invoiceNumber: invoice.invoiceNumber,
+          customerId: customer.id,
+          totalAmount: invoice.totalAmount,
+          breakdownSource: 'CUSTOM',
+        },
+      },
+    });
+
+    return this.prisma.invoice.update({
+      where: { id: invoice.id },
+      data: { pdfPath },
+    });
+  }
+
+  /** A customer's own bills. Scoped by customerId, never by a client-supplied filter. */
+  listForCustomer(customerId: string): Promise<Invoice[]> {
+    return this.prisma.invoice.findMany({
+      where: { customerId },
+      orderBy: { invoiceDate: 'desc' },
+    });
+  }
+
+  /**
+   * Same as readPdf, but proves the invoice belongs to the caller first. A customer route must
+   * never reach readPdf directly — invoice ids are uuids, but "hard to guess" is not access
+   * control, and this is somebody's tax document.
+   */
+  async readPdfForCustomer(
+    id: string,
+    customerId: string,
+  ): Promise<{ buffer: Buffer; filename: string }> {
+    const invoice = await this.findOne(id);
+    if (invoice.customerId !== customerId) {
+      // 404, not 403: a 403 would confirm the invoice exists.
+      throw new NotFoundException(`Invoice ${id} not found`);
+    }
+    return this.readPdf(id);
+  }
+
+  private async issueForOrder(
+    order: OrderForInvoice,
+    actorId: string,
+  ): Promise<Invoice> {
+    const settings = await this.requireCompleteSettings();
 
     const breakdown = resolveChargedBreakdown({
       verified: order.pickupRequest
@@ -275,12 +432,12 @@ export class InvoicesService {
     });
   }
 
-  private async renderAndStorePdf(
+  private renderAndStorePdf(
     invoice: Invoice,
     order: OrderForInvoice,
     logoPath: string | null,
   ): Promise<string> {
-    const buffer = await this.invoicePdf.render(
+    return this.storePdf(
       invoice,
       {
         shipments: order.shipments.map((shipment) => ({
@@ -298,6 +455,15 @@ export class InvoicesService {
       },
       logoPath,
     );
+  }
+
+  /** Renders and writes the PDF once, at issue time. Shared by both issue paths. */
+  private async storePdf(
+    invoice: Invoice,
+    extras: Parameters<InvoicePdfService['render']>[1],
+    logoPath: string | null,
+  ): Promise<string> {
+    const buffer = await this.invoicePdf.render(invoice, extras, logoPath);
 
     await mkdir(INVOICES_DIR, { recursive: true });
     const relativePath = join('invoices', `${invoice.id}.pdf`);

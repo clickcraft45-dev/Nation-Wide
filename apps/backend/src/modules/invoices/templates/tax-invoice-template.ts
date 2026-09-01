@@ -149,7 +149,10 @@ export async function renderTaxInvoice(
   // Description line: the SAC, plus whatever identifies the actual shipment(s). One order can
   // produce split shipments, so every tracking number is listed rather than just the first.
   const descriptionLines = [
-    'International courier & logistics services',
+    // A one-off invoice has no shipment to describe, so the admin's own line replaces the
+    // standard one rather than sitting underneath it.
+    invoice.customLineDescription ??
+      'International courier & logistics services',
     extras.destination ? `Destination: ${extras.destination}` : null,
     extras.weightKg !== null
       ? `Chargeable weight: ${extras.weightKg} kg`

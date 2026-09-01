@@ -11,7 +11,7 @@
  */
 
 /** Two-decimal rounding, matching the pricing engine's own `round2`. */
-function round2(value: number): number {
+export function round2(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
@@ -121,6 +121,8 @@ export const BREAKDOWN_SOURCES = {
   RATE_OPTION: 'RATE_OPTION',
   /** Staff typed one gross figure with no breakdown; taxable value is back-derived from it. */
   MANUAL_QUOTE_INCLUSIVE: 'MANUAL_QUOTE_INCLUSIVE',
+  /** A one-off invoice with no order behind it; the gross figure is the admin's own. */
+  CUSTOM: 'CUSTOM',
 } as const;
 
 export type BreakdownSource =

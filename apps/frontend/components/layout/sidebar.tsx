@@ -1,236 +1,174 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Pin, PinOff, X } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import type { NavItem, NavGroup } from "@/lib/nav-config";
 import { Logo } from "@/components/brand/logo";
 import { cn } from "@/lib/utils/cn";
 
-// Dark Deep Navy nav rail, per the approved reference design — a solid Logistics Blue pill marks
-// the active item, light blue-gray for inactive labels/icons. Deep Navy here is the same brand
-// panel used on the marketing hero and login screen (see globals.css --sidebar-* tokens).
+// ICON RAIL, one level. Each icon IS a link to that section's primary page — a real <Link>, so it
+// works everywhere with no JS: keyboard tab, screen reader, and touch (where hover doesn't exist,
+// tapping just navigates). Hovering it on a pointer device also lifts out a glass card with the
+// rest of that section, so nothing beyond the primary page is more than one hover away.
 //
-// MOTION: every transition here is plain CSS on width/max-width/opacity/transform — no animation
-// library, and nothing animates a property that triggers layout on each frame except the rail's
-// own width, which changes only on an explicit click. Labels collapse via `max-w-0` rather than
-// being unmounted so they stay in the accessibility tree (and so the text can animate at all —
-// there is nothing to tween between a node and no node). Everything pairs with
-// `motion-reduce:transition-none`, matching the reduced-motion contract the rest of the app
-// already honours in globals.css.
+// This replaced a second, always-open w-72 panel that just repeated the same section list right
+// next to the flyout showing the same thing — same content, twice, permanently, for every one of
+// its ~20 items across ~7 sections, one of which is almost always empty screen below a single row
+// (see the "System" section, two items in a panel sized for a dozen). The flyout already does
+// this job on demand; the permanent panel was a second way to look at the same fact, so it's
+// gone. Cuts the whole mobile drawer with it — a 64px rail is thin enough to just stay on screen
+// at every width, so there is no overlay/backdrop/hamburger to keep in sync any more.
+//
+// ONE LOGO. It lives at the top of the rail and nowhere else.
+//
+// The palette is the existing --sidebar-* tokens (near-black surface, #27272a hairlines, zinc-400
+// idle text, white active text) — the same brand panel as the login screen and marketing hero.
+//
+// MOTION: plain CSS transitions on opacity/transform/colour, paired with
+// `motion-reduce:transition-none`, matching the reduced-motion contract in globals.css.
 
-const RAIL_WIDTH = "w-[4.5rem]";
-const PANEL_WIDTH = "w-60";
+/** The soft-spring curve from the reference, shared so every row moves as one gesture. */
+const SPRING = "cubic-bezier(0.25, 1.1, 0.4, 1)";
+const MOTION = "duration-500 ease-out motion-reduce:transition-none";
+const springStyle = { transitionTimingFunction: SPRING };
 
-/** Shared easing/duration so the rail, its labels and the drawer all move as one gesture. */
-const MOTION = "duration-300 ease-out motion-reduce:transition-none";
+/** Idle to hover/active row treatment, identical for rail icons and flyout rows. */
+function rowTone(isActive: boolean) {
+  return isActive
+    ? "bg-sidebar-accent text-sidebar-foreground-active"
+    : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground-active";
+}
 
-export function Sidebar({
-  items,
-  groups,
-  mobileOpen,
-  onCloseMobile,
+/**
+ * The hover/focus card for a rail section: a black glass pane that lifts out over the page with
+ * the whole section inside it.
+ *
+ * Pure CSS — `group-hover`/`group-focus-within` on the wrapping cell, no state and no positioning
+ * library. The gap between icon and card is `pl-3` ON THE FLYOUT rather than margin on the card,
+ * so the strip the pointer crosses is still inside the hovered element and the card cannot
+ * flicker shut halfway across it. `visibility` is transitioned alongside opacity because it
+ * interpolates discretely: the card stays rendered for the whole fade-out, then goes untabbable.
+ */
+function SectionFlyout({
+  section,
+  icon: Icon,
+  pathname,
 }: {
-  items: NavItem[];
-  groups?: NavGroup[];
-  mobileOpen: boolean;
-  onCloseMobile: () => void;
+  section: NavGroup;
+  icon: LucideIcon;
+  pathname: string;
 }) {
-  const pathname = usePathname();
-  // The rail is closed by default and opens on hover; the footer button PINS it open so it stops
-  // collapsing when the pointer leaves. Two booleans rather than one tri-state because that is
-  // exactly what they are — a preference and a transient pointer/focus state — and only the
-  // preference is a choice worth remembering.
-  //
-  // ponytail: session-only, deliberately not persisted. The shell layout stays mounted across
-  // client-side navigation, so the choice survives everywhere except a hard reload. Remembering
-  // it across reloads means an external store (localStorage cannot be read during render without
-  // a hydration mismatch) — reach for useSyncExternalStore if that reset ever actually annoys.
-  const [pinnedOpen, setPinnedOpen] = useState(false);
-  const [pointerOpen, setPointerOpen] = useState(false);
-  const collapsed = !pinnedOpen && !pointerOpen;
+  return (
+    <div
+      className={cn(
+        "pointer-events-none invisible absolute left-full top-0 z-50 translate-x-1 pl-3 opacity-0 transition-[opacity,transform,visibility]",
+        MOTION,
+        "group-hover:pointer-events-auto group-hover:visible group-hover:translate-x-0 group-hover:opacity-100",
+        "group-focus-within:pointer-events-auto group-focus-within:visible group-focus-within:translate-x-0 group-focus-within:opacity-100",
+      )}
+      style={springStyle}
+    >
+      <div className="glass-dark relative w-64 overflow-hidden rounded-2xl border p-2">
+        {/* The sheen: one soft highlight raking across the top edge. This is the thing that reads
+            as glass — without it a translucent pane is just a flat grey rectangle. */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 -top-20 h-32 bg-[radial-gradient(65%_100%_at_25%_100%,rgba(255,255,255,0.18),transparent_70%)]"
+        />
 
-  // Fall back to a single unlabeled group so callers without a grouped IA (customer nav) still
-  // render through the same list markup.
-  const renderedGroups: NavGroup[] = groups ?? [{ label: "", items }];
+        <div className="relative flex items-center gap-2 px-2 pb-2 pt-1">
+          <Icon className="h-4 w-4 shrink-0 text-sidebar-foreground-active" aria-hidden />
+          <span className="min-w-0 flex-1 truncate text-sm font-semibold text-sidebar-foreground-active">
+            {section.label}
+          </span>
+          <span className="shrink-0 rounded-full bg-white/10 px-2 py-0.5 text-[11px] tabular-nums text-sidebar-foreground">
+            {section.items.length}
+          </span>
+        </div>
 
-  // `isCollapsed` is a parameter, not the state, because the mobile drawer renders the same
-  // markup and is always full width — collapsing is a desktop-rail affordance only.
-  const content = (isCollapsed: boolean) => (
-    <>
-      <div className="flex h-14 shrink-0 items-center overflow-hidden px-4">
-        <Logo variant="reverse" size="sm" className="min-w-0 shrink-0" />
-        <button
-          onClick={onCloseMobile}
-          aria-label="Close navigation menu"
-          className="ml-auto text-sidebar-foreground transition-colors hover:text-sidebar-foreground-active lg:hidden"
-        >
-          <X className="h-5 w-5" aria-hidden />
-        </button>
-      </div>
+        <div className="relative mb-1 h-px bg-white/10" aria-hidden />
 
-      <nav
-        aria-label="Main navigation"
-        className="flex-1 space-y-4 overflow-y-auto overflow-x-hidden px-2 py-3"
-      >
-        {renderedGroups.map((group) => (
-          <div key={group.label || "default"}>
-            {group.label && (
-              <p
+        {/* Capped rather than unbounded: a section near the foot of the rail would otherwise run
+            its card off the bottom of a short viewport. */}
+        <div className="relative max-h-[60vh] space-y-0.5 overflow-y-auto">
+          {section.items.map((item) => {
+            const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
+            const ItemIcon = item.icon;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                aria-current={isActive ? "page" : undefined}
                 className={cn(
-                  "overflow-hidden whitespace-nowrap px-3 text-[11px] font-semibold uppercase tracking-wider text-sidebar-foreground/60 transition-all",
-                  MOTION,
-                  isCollapsed ? "max-h-0 opacity-0" : "max-h-4 pb-1.5 opacity-100",
+                  "flex h-9 items-center gap-3 rounded-lg px-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  rowTone(isActive),
                 )}
               >
-                {group.label}
-              </p>
-            )}
-            <div className="space-y-0.5">
-              {group.items.map((item) => {
-                const isActive =
-                  pathname === item.href || pathname.startsWith(`${item.href}/`);
-                const Icon = item.icon;
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    onClick={onCloseMobile}
-                    aria-current={isActive ? "page" : undefined}
-                    // Native tooltip rather than a popover component — the rail is icon-only when
-                    // collapsed and the label has to stay recoverable by pointer as well as by
-                    // screen reader.
-                    title={isCollapsed ? item.label : undefined}
-                    className={cn(
-                      "group/nav flex items-center overflow-hidden rounded-md px-3 py-2 text-sm font-medium transition-[background-color,color,transform,box-shadow] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                      MOTION,
-                      isActive
-                        ? "bg-white text-[#0b0b0c] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.9),0_6px_16px_-8px_rgba(0,0,0,0.6)]"
-                        : "text-sidebar-foreground hover:translate-x-0.5 hover:bg-white/10 hover:text-sidebar-foreground-active motion-reduce:hover:translate-x-0",
-                    )}
-                  >
-                    <Icon
-                      className={cn(
-                        "h-4 w-4 shrink-0 transition-transform",
-                        MOTION,
-                        !isActive && "group-hover/nav:scale-110 motion-reduce:group-hover/nav:scale-100",
-                      )}
-                      aria-hidden
-                    />
-                    {/* border-box means max-w-0 clips the padding too, so the collapsed row has
-                        no phantom gap after the icon — hence pl-3 here instead of a flex gap. */}
-                    <span
-                      className={cn(
-                        "overflow-hidden whitespace-nowrap pl-3 transition-[max-width,opacity]",
-                        MOTION,
-                        isCollapsed ? "max-w-0 opacity-0" : "max-w-[12rem] opacity-100",
-                      )}
-                    >
-                      {item.label}
-                    </span>
-                  </Link>
-                );
-              })}
-            </div>
-          </div>
-        ))}
-      </nav>
-
-      {/* Desktop-only: the drawer is dismissed with its own X, not collapsed to a rail. */}
-      <div className="hidden shrink-0 border-t border-sidebar-border p-2 lg:block">
-        <button
-          onClick={() => setPinnedOpen((previous) => !previous)}
-          aria-pressed={pinnedOpen}
-          aria-label={pinnedOpen ? "Unpin sidebar" : "Pin sidebar open"}
-          title={pinnedOpen ? "Unpin sidebar" : "Pin sidebar open"}
-          className={cn(
-            "flex w-full items-center overflow-hidden rounded-md px-3 py-2 text-sm font-medium text-sidebar-foreground transition-colors hover:bg-white/10 hover:text-sidebar-foreground-active focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-            MOTION,
-          )}
-        >
-          {pinnedOpen ? (
-            <PinOff className="h-4 w-4 shrink-0" aria-hidden />
-          ) : (
-            <Pin className="h-4 w-4 shrink-0" aria-hidden />
-          )}
-          <span
-            className={cn(
-              "overflow-hidden whitespace-nowrap pl-3 transition-[max-width,opacity]",
-              MOTION,
-              isCollapsed ? "max-w-0 opacity-0" : "max-w-[12rem] opacity-100",
-            )}
-          >
-            {pinnedOpen ? "Unpin" : "Pin open"}
-          </span>
-        </button>
+                <ItemIcon className="h-4 w-4 shrink-0" aria-hidden />
+                <span className="truncate">{item.label}</span>
+              </Link>
+            );
+          })}
+        </div>
       </div>
-    </>
+    </div>
+  );
+}
+
+export function Sidebar({ items, groups }: { items: NavItem[]; groups?: NavGroup[] }) {
+  const pathname = usePathname();
+
+  // Callers without a grouped IA still render through the same markup, as one section.
+  const sections: NavGroup[] = groups ?? [{ label: "Menu", items }];
+
+  const activeSection = Math.max(
+    0,
+    sections.findIndex((section) =>
+      section.items.some(
+        (item) => pathname === item.href || pathname.startsWith(`${item.href}/`),
+      ),
+    ),
   );
 
   return (
-    <>
-      {/* Desktop rail. The spacer below is what the page layout actually reserves, and it only
-          widens when the rail is PINNED — so opening on hover floats the panel over the content
-          instead of reflowing the whole dashboard every time the pointer crosses the edge. */}
-      <div
-        className={cn(
-          "relative hidden shrink-0 transition-[width] lg:block",
-          MOTION,
-          pinnedOpen ? PANEL_WIDTH : RAIL_WIDTH,
-        )}
+    <div className="flex w-16 shrink-0 flex-col items-center gap-2 border-r border-sidebar-border bg-sidebar-bg px-3 py-3">
+      <Link
+        href={sections[0]?.items[0]?.href ?? "/"}
+        className="mb-1 flex h-10 w-10 items-center justify-center"
+        aria-label="NationWide Logistics home"
       >
-        <aside
-          // Focus opens it as well as hover: tabbing into a collapsed rail has to reveal the
-          // labels, or keyboard users navigate a column of unlabeled icons.
-          onMouseEnter={() => setPointerOpen(true)}
-          onMouseLeave={() => setPointerOpen(false)}
-          onFocus={() => setPointerOpen(true)}
-          onBlur={(event) => {
-            if (!event.currentTarget.contains(event.relatedTarget)) setPointerOpen(false);
-          }}
-          className={cn(
-            "glass-dark absolute inset-y-0 left-0 z-30 flex flex-col overflow-hidden border-r shadow-xl transition-[width]",
-            MOTION,
-            collapsed ? RAIL_WIDTH : PANEL_WIDTH,
-          )}
-        >
-          {content(collapsed)}
-        </aside>
-      </div>
+        <Logo variant="icon" size="sm" />
+      </Link>
 
-      {/* Mobile drawer — mounted at all times so it can animate out as well as in; an unmounted
-          panel can only ever pop. `invisible` keeps it off the tab order while closed, which
-          `pointer-events-none` alone would not do. Transitioning visibility is what makes the
-          close animation visible at all: it interpolates discretely, so the panel stays rendered
-          for the full duration and only then goes hidden. */}
-      <div
-        className={cn(
-          "fixed inset-0 z-40 transition-[visibility] lg:hidden",
-          MOTION,
-          !mobileOpen && "pointer-events-none invisible",
-        )}
-        aria-hidden={!mobileOpen}
-      >
-        <div
-          className={cn(
-            "absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity",
-            MOTION,
-            mobileOpen ? "opacity-100" : "opacity-0",
-          )}
-          onClick={onCloseMobile}
-          aria-hidden
-        />
-        <aside
-          className={cn(
-            "glass-dark relative flex h-full w-60 flex-col border-r transition-transform",
-            MOTION,
-            mobileOpen ? "translate-x-0" : "-translate-x-full",
-          )}
-        >
-          {content(false)}
-        </aside>
-      </div>
-    </>
+      <div className="my-1 h-px w-8 shrink-0 bg-sidebar-border" aria-hidden />
+
+      {sections.map((section, index) => {
+        const Icon = section.icon ?? section.items[0].icon;
+        const isActive = index === activeSection;
+        return (
+          // The cell, not the link, is the hover group: the flyout has to live outside the
+          // <Link> (it holds its own links) while still being revealed by pointing at it.
+          <div key={section.label} className="group relative shrink-0">
+            <Link
+              href={section.items[0].href}
+              // No `title`: the flyout IS the label now, and a native tooltip would fade up over
+              // the top of it a half-second later.
+              aria-label={section.label}
+              aria-current={isActive ? "true" : undefined}
+              className={cn(
+                "flex h-10 w-10 items-center justify-center rounded-xl transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                MOTION,
+                rowTone(isActive),
+              )}
+              style={springStyle}
+            >
+              <Icon className="h-4.5 w-4.5" aria-hidden />
+            </Link>
+            <SectionFlyout section={section} icon={Icon} pathname={pathname} />
+          </div>
+        );
+      })}
+    </div>
   );
 }

@@ -45,6 +45,9 @@ const TARGETS = [
     field: 'provider_message_id',
     name: 'notifications_provider_message_id_key',
   },
+  // Nullable since standalone invoices (a re-delivery fee, a packaging charge) have no order —
+  // without the partial filter, the second such invoice ever raised collides with the first.
+  { collection: 'invoices', field: 'order_id', name: 'invoices_order_id_key' },
 ];
 
 async function main() {
