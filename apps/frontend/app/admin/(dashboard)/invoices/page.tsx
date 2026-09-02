@@ -1,7 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Download, FileText, Loader2, ReceiptIndianRupee, Send } from "lucide-react";
+import {
+  CalendarDays,
+  Download,
+  FileText,
+  Loader2,
+  MessageCircle,
+  ReceiptIndianRupee,
+  UsersRound,
+} from "lucide-react";
 import type {
   CustomerDto,
   InvoiceBatchResultDto,
@@ -26,15 +34,13 @@ import { EmptyState, ErrorState } from "@/components/ui/page-state";
 import { useToast } from "@/components/ui/toast";
 import { downloadBlob } from "@/lib/utils/download-blob";
 import { cn } from "@/lib/utils/cn";
-
-/** yyyy-mm-dd, the value format <input type="date"> requires. */
-function isoDay(date: Date): string {
-  return date.toISOString().slice(0, 10);
-}
+import { todayIso } from "@/components/ui/calendar";
+import { CompanySettingsDialog } from "@/components/pricing/company-settings-dialog";
 
 function firstOfThisMonth(): string {
   const now = new Date();
-  return isoDay(new Date(now.getFullYear(), now.getMonth(), 1));
+  const month = `${now.getMonth() + 1}`.padStart(2, "0");
+  return `${now.getFullYear()}-${month}-01`;
 }
 
 function money(value: number): string {
@@ -51,7 +57,7 @@ export default function AdminInvoicesPage() {
   const [customerSearch, setCustomerSearch] = useState("");
   const [selectedCustomerIds, setSelectedCustomerIds] = useState<string[]>([]);
   const [from, setFrom] = useState(firstOfThisMonth);
-  const [to, setTo] = useState(() => isoDay(new Date()));
+  const [to, setTo] = useState(todayIso);
   const [selectedInvoiceIds, setSelectedInvoiceIds] = useState<string[]>([]);
   // Per-row, not a page-wide flag: downloading one invoice must not disable the other rows.
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
@@ -97,8 +103,21 @@ export default function AdminInvoicesPage() {
     );
   }, [customers, customerSearch]);
 
+  const allFilteredCustomersSelected =
+    filteredCustomers.length > 0 &&
+    filteredCustomers.every((customer) => selectedCustomerIds.includes(customer.id));
+
   function toggle(list: string[], id: string): string[] {
     return list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
+  }
+
+  function toggleAllFilteredCustomers() {
+    const filteredIds = new Set(filteredCustomers.map((customer) => customer.id));
+    setSelectedCustomerIds((current) =>
+      allFilteredCustomersSelected
+        ? current.filter((id) => !filteredIds.has(id))
+        : [...new Set([...current, ...filteredIds])],
+    );
   }
 
   /**
@@ -251,18 +270,45 @@ export default function AdminInvoicesPage() {
   if (error) return <ErrorState message={error} onRetry={load} />;
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold text-foreground">GST Invoices</h1>
-        <p className="text-sm text-muted-foreground">
-          Generate tax invoices for selected customers over a date range, then send them on
-          WhatsApp.
-        </p>
+    <div className="page-enter space-y-6">
+      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+        <div>
+          <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-brand-red">
+            <ReceiptIndianRupee className="h-4 w-4" aria-hidden />
+            Finance workspace
+          </div>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">GST Invoices</h1>
+          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+            Issue compliant tax invoices, keep the tax breakdown clear, and send selected records
+            to customers on WhatsApp.
+          </p>
+        </div>
+        <div className="flex items-center gap-3 self-start sm:self-auto">
+          <div className="glass-rim flex items-center gap-3 rounded-2xl bg-white/55 px-4 py-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-red-tint text-brand-red">
+              <FileText className="h-4 w-4" aria-hidden />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Issued records</p>
+              <p className="text-lg font-semibold tabular-nums text-foreground">{invoices.length}</p>
+            </div>
+          </div>
+          <CompanySettingsDialog trigger={<Button variant="secondary" size="sm">Document brand</Button>} />
+        </div>
       </div>
 
-      <Card>
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(22rem,0.85fr)]">
+      <Card className="glass-sheen">
         <CardHeader>
-          <CardTitle>Generate</CardTitle>
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+              <CalendarDays className="h-4 w-4" aria-hidden />
+            </div>
+            <div>
+              <CardTitle className="text-foreground">Generate from orders</CardTitle>
+              <p className="mt-0.5 text-xs text-muted-foreground">Create one invoice for every eligible order.</p>
+            </div>
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
@@ -275,7 +321,7 @@ export default function AdminInvoicesPage() {
                 value={from}
                 max={to}
                 onChange={(e) => setFrom(e.target.value)}
-                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                className="glass-field h-10 w-full rounded-lg px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               />
             </label>
             <label className="space-y-1">
@@ -285,28 +331,24 @@ export default function AdminInvoicesPage() {
                 value={to}
                 min={from}
                 onChange={(e) => setTo(e.target.value)}
-                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                className="glass-field h-10 w-full rounded-lg px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               />
             </label>
           </div>
 
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-3">
-              <span className="text-xs font-medium text-muted-foreground">
-                Customers ({selectedCustomerIds.length} selected)
+              <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                <UsersRound className="h-3.5 w-3.5" aria-hidden />
+                Customers · {selectedCustomerIds.length} selected
               </span>
               <button
                 type="button"
-                onClick={() =>
-                  setSelectedCustomerIds(
-                    selectedCustomerIds.length === filteredCustomers.length
-                      ? []
-                      : filteredCustomers.map((c) => c.id),
-                  )
-                }
-                className="text-xs font-medium text-primary hover:underline"
+                onClick={toggleAllFilteredCustomers}
+                disabled={filteredCustomers.length === 0}
+                className="text-xs font-semibold text-primary underline-offset-4 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {selectedCustomerIds.length === filteredCustomers.length
+                {allFilteredCustomersSelected
                   ? "Clear all"
                   : "Select all shown"}
               </button>
@@ -317,7 +359,7 @@ export default function AdminInvoicesPage() {
               placeholder="Search customers by name or phone"
               aria-label="Search customers"
             />
-            <div className="max-h-56 overflow-y-auto rounded-md border border-border">
+            <div className="glass-field max-h-56 overflow-y-auto rounded-xl p-1.5">
               {filteredCustomers.length === 0 ? (
                 <p className="p-3 text-sm text-muted-foreground">No customers match.</p>
               ) : (
@@ -325,8 +367,8 @@ export default function AdminInvoicesPage() {
                   <label
                     key={c.id}
                     className={cn(
-                      "flex cursor-pointer items-center gap-3 border-b border-border px-3 py-2 text-sm last:border-b-0",
-                      selectedCustomerIds.includes(c.id) && "bg-muted",
+                      "flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors hover:bg-white/60",
+                      selectedCustomerIds.includes(c.id) && "bg-primary text-primary-foreground",
                     )}
                   >
                     <input
@@ -336,15 +378,15 @@ export default function AdminInvoicesPage() {
                         setSelectedCustomerIds((prev) => toggle(prev, c.id))
                       }
                     />
-                    <span className="font-medium text-foreground">{c.name}</span>
-                    <span className="text-muted-foreground">{c.phone}</span>
+                    <span className={cn("font-medium", selectedCustomerIds.includes(c.id) ? "text-primary-foreground" : "text-foreground")}>{c.name}</span>
+                    <span className={selectedCustomerIds.includes(c.id) ? "text-primary-foreground/70" : "text-muted-foreground"}>{c.phone}</span>
                   </label>
                 ))
               )}
             </div>
           </div>
 
-          <Button onClick={generate} disabled={isWorking || !selectedCustomerIds.length}>
+          <Button className="w-full sm:w-auto" onClick={generate} disabled={isWorking || !selectedCustomerIds.length}>
             <FileText className="mr-2 h-4 w-4" aria-hidden />
             Generate invoices
           </Button>
@@ -355,9 +397,17 @@ export default function AdminInvoicesPage() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="glass-sheen">
         <CardHeader>
-          <CardTitle>Custom invoice</CardTitle>
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-red text-white">
+              <ReceiptIndianRupee className="h-4 w-4" aria-hidden />
+            </div>
+            <div>
+              <CardTitle className="text-foreground">Create a custom invoice</CardTitle>
+              <p className="mt-0.5 text-xs text-muted-foreground">For fees or adjustments that do not have an order.</p>
+            </div>
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">
@@ -397,7 +447,7 @@ export default function AdminInvoicesPage() {
                 value={customAmount}
                 onChange={(e) => setCustomAmount(e.target.value)}
                 placeholder="0.00"
-                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                className="glass-field h-10 w-full rounded-lg px-3 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               />
             </label>
           </div>
@@ -411,7 +461,7 @@ export default function AdminInvoicesPage() {
               onChange={(e) => setCustomDescription(e.target.value)}
               placeholder="e.g. Re-delivery attempt — AWB NW-26-000123"
               maxLength={300}
-              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+              className="glass-field h-10 w-full rounded-lg px-3 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             />
             <span className="text-xs text-muted-foreground">
               Printed as the invoice&apos;s line item.
@@ -426,30 +476,34 @@ export default function AdminInvoicesPage() {
               value={customPlaceOfSupply}
               onChange={(e) => setCustomPlaceOfSupply(e.target.value)}
               placeholder="Leave blank for an intra-state supply"
-              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+              className="glass-field h-10 w-full rounded-lg px-3 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             />
             <span className="text-xs text-muted-foreground">
               Naming another state is what makes this charge IGST instead of CGST+SGST.
             </span>
           </label>
 
-          <Button onClick={createCustom} disabled={isWorking}>
+          <Button className="w-full sm:w-auto" onClick={createCustom} disabled={isWorking}>
             <ReceiptIndianRupee className="mr-2 h-4 w-4" aria-hidden />
             Issue custom invoice
           </Button>
         </CardContent>
       </Card>
+      </div>
 
-      <Card>
+      <Card className="overflow-hidden">
         <CardHeader className="flex-row items-center justify-between space-y-0">
-          <CardTitle>Issued invoices</CardTitle>
+          <div>
+            <CardTitle className="text-foreground">Issued invoices</CardTitle>
+            <p className="mt-0.5 text-xs text-muted-foreground">Download a clean PDF or send the selected invoices.</p>
+          </div>
           <Button
             onClick={sendSelected}
             disabled={isWorking || !selectedInvoiceIds.length}
             variant="secondary"
           >
-            <Send className="mr-2 h-4 w-4" aria-hidden />
-            Send {selectedInvoiceIds.length || ""} on WhatsApp
+            <MessageCircle className="h-4 w-4" aria-hidden />
+            Send{selectedInvoiceIds.length ? ` ${selectedInvoiceIds.length}` : ""} on WhatsApp
           </Button>
         </CardHeader>
         <CardContent>
@@ -492,16 +546,17 @@ export default function AdminInvoicesPage() {
                         }
                       />
                     </TableCell>
-                    <TableCell className="font-medium">
-                      {inv.invoiceNumber}
+                    <TableCell>
+                      <p className="font-mono text-xs font-semibold text-foreground">{inv.invoiceNumber}</p>
+                      {inv.customLineDescription && <p className="mt-1 max-w-48 truncate text-xs text-muted-foreground">{inv.customLineDescription}</p>}
                       {/* text-danger — `destructive` is not a token this app defines, so this
                           label was rendering in the default ink with no colour at all. */}
                       {inv.status === "CANCELLED" && (
                         <span className="ml-2 text-xs font-medium text-danger">CANCELLED</span>
                       )}
                     </TableCell>
-                    <TableCell>{inv.customer?.name ?? inv.recipientName}</TableCell>
-                    <TableCell>{new Date(inv.invoiceDate).toLocaleDateString()}</TableCell>
+                    <TableCell className="font-medium">{inv.customer?.name ?? inv.recipientName}</TableCell>
+                    <TableCell className="whitespace-nowrap">{new Date(inv.invoiceDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</TableCell>
                     <TableCell>
                       {inv.placeOfSupplyState}
                       <span className="ml-1 text-xs text-muted-foreground">
@@ -512,7 +567,7 @@ export default function AdminInvoicesPage() {
                     </TableCell>
                     <TableCell className="text-right">{money(inv.taxableValue)}</TableCell>
                     <TableCell className="text-right">{money(inv.totalTax)}</TableCell>
-                    <TableCell className="text-right font-medium">
+                    <TableCell className="text-right font-semibold tabular-nums">
                       {money(inv.totalAmount)}
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground">
@@ -524,7 +579,7 @@ export default function AdminInvoicesPage() {
                         onClick={() => void download(inv)}
                         disabled={downloadingId === inv.id}
                         aria-label={`Download ${inv.invoiceNumber}`}
-                        className="text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
+                        className="glass-interactive inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground hover:text-foreground disabled:opacity-50"
                       >
                         {downloadingId === inv.id ? (
                           <Loader2 className="h-4 w-4 animate-spin" aria-hidden />

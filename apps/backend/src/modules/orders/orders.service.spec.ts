@@ -203,7 +203,10 @@ describe('OrdersService', () => {
     it('bounds createdAt to whole UTC days, inclusive of the final day', async () => {
       prisma.order.findMany.mockResolvedValue([]);
 
-      await service.findAll({ createdFrom: '2026-01-01', createdTo: '2026-01-31' });
+      await service.findAll({
+        createdFrom: '2026-01-01',
+        createdTo: '2026-01-31',
+      });
 
       expect(whereOf().createdAt).toEqual({
         gte: new Date('2026-01-01T00:00:00.000Z'),

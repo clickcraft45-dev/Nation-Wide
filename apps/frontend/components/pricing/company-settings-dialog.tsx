@@ -120,7 +120,7 @@ export function CompanySettingsDialog({
         restrictedItemsNotice: form.restrictedItemsNotice.trim() || undefined,
       });
       setSettings(saved);
-      showToast({ variant: "success", title: "Rate card settings saved" });
+      showToast({ variant: "success", title: "Document brand settings saved" });
       onSaved?.();
       setOpen(false);
     } catch {
@@ -158,14 +158,17 @@ export function CompanySettingsDialog({
     <Dialog open={open} onOpenChange={setOpen}>
       <span onClick={() => setOpen(true)}>{trigger}</span>
       {open && (
-        <DialogContent title="Rate Card Settings">
+        <DialogContent
+          title="Document Brand Settings"
+          description="Brand, company and legal details for every future rate card and tax invoice."
+        >
           {isLoading || !form ? (
             <p className="text-sm text-muted-foreground">Loading…</p>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
               <p className="text-xs text-muted-foreground">
-                Applies to every future generated rate card automatically — logo, brand color, and
-                contact/legal text never need to be re-entered per document.
+                Applies to every future generated rate card and tax invoice automatically. New
+                documents use these details, while issued documents remain unchanged.
               </p>
 
               <div className="space-y-1.5">
@@ -190,7 +193,7 @@ export function CompanySettingsDialog({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label htmlFor="cs-name">Company Name</Label>
                   <Input

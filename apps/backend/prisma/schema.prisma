@@ -795,7 +795,7 @@ model CompanySettings {
   // renderer reads this straight off local disk; the admin UI previews it via the /uploads
   // static route (see main.ts).
   logoPath              String?  @map("logo_path")
-  primaryColor          String   @default("#4F46E5") @map("primary_color")
+  primaryColor          String   @default("#7F1020") @map("primary_color")
   website               String?
   supportEmail          String?  @map("support_email")
   supportPhone          String?  @map("support_phone")

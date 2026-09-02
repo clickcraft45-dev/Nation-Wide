@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import type { Invoice } from '@prisma/client';
 import {
   renderTaxInvoice,
+  type InvoiceBranding,
   type InvoiceExtras,
 } from './templates/tax-invoice-template';
 
@@ -19,16 +20,21 @@ export class InvoicePdfService {
   async render(
     invoice: Invoice,
     extras: InvoiceExtras,
-    logoPath?: string | null,
+    branding: InvoiceBranding,
   ): Promise<Buffer> {
-    const logoBuffer = logoPath
-      ? await readFile(join(process.cwd(), 'storage', logoPath)).catch(
+    const logoBuffer = branding.logoPath
+      ? await readFile(join(process.cwd(), 'storage', branding.logoPath)).catch(
           () => undefined,
         )
       : undefined;
 
     const { renderToBuffer } = await import('@react-pdf/renderer');
-    const document = await renderTaxInvoice(invoice, extras, logoBuffer);
+    const document = await renderTaxInvoice(
+      invoice,
+      extras,
+      logoBuffer,
+      branding,
+    );
     return renderToBuffer(document as Parameters<typeof renderToBuffer>[0]);
   }
 }

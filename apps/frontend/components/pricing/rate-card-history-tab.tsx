@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { History } from "lucide-react";
+import { Download, History, Trash2 } from "lucide-react";
 import type { RateCardDocumentDto, RateProviderDto } from "@nationwide/shared-types";
 import { apiClient, ApiError } from "@/lib/api-client";
 import { downloadBlob } from "@/lib/utils/download-blob";
@@ -54,6 +54,7 @@ export function RateCardHistoryTab() {
   async function handleDownload(doc: RateCardDocumentDto) {
     try {
       const { blob } = await apiClient.getBlob(`/admin/rate-cards/${doc.id}/download`);
+      if (blob.size === 0) throw new ApiError(500, "Empty PDF body");
       downloadBlob(blob, `${doc.rateProviderName}-RateCard-v${doc.version}.pdf`);
     } catch {
       showToast({ variant: "error", title: "Couldn't download the rate card." });
@@ -71,10 +72,14 @@ export function RateCardHistoryTab() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
+    <div className="page-enter space-y-4">
+      <div className="glass flex flex-col justify-between gap-3 rounded-2xl p-4 sm:flex-row sm:items-center">
+        <div>
+          <p className="text-sm font-semibold text-foreground">Document archive</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">Every generated version remains available here.</p>
+        </div>
         <NativeSelect
-          className="w-56"
+          className="w-full sm:w-56"
           value={providerFilter}
           onChange={(e) => setProviderFilter(e.target.value)}
           aria-label="Filter by provider"
@@ -113,18 +118,20 @@ export function RateCardHistoryTab() {
           <TableBody>
             {docs.map((doc) => (
               <TableRow key={doc.id}>
-                <TableCell>{new Date(doc.createdAt).toLocaleString()}</TableCell>
-                <TableCell>{doc.generatedByAdminEmail}</TableCell>
-                <TableCell>{doc.rateProviderName}</TableCell>
-                <TableCell>{doc.countryNames.join(", ")}</TableCell>
-                <TableCell>v{doc.version}</TableCell>
-                <TableCell>{doc.effectiveDate}</TableCell>
+                <TableCell className="whitespace-nowrap">{new Date(doc.createdAt).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}</TableCell>
+                <TableCell className="max-w-52 truncate">{doc.generatedByAdminEmail}</TableCell>
+                <TableCell className="font-medium">{doc.rateProviderName}</TableCell>
+                <TableCell className="max-w-xs">{doc.countryNames.join(", ")}</TableCell>
+                <TableCell className="font-mono text-xs font-semibold">v{doc.version}</TableCell>
+                <TableCell className="whitespace-nowrap">{doc.effectiveDate}</TableCell>
                 <TableCell>
                   <div className="flex flex-wrap items-center gap-2">
                     <Button variant="secondary" size="sm" onClick={() => handleDownload(doc)}>
-                      Download Again
+                      <Download className="h-3.5 w-3.5" aria-hidden />
+                      Download
                     </Button>
                     <Button variant="ghost" size="sm" onClick={() => handleDelete(doc)}>
+                      <Trash2 className="h-3.5 w-3.5" aria-hidden />
                       Delete
                     </Button>
                   </div>

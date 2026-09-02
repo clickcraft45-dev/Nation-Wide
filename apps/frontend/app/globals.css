@@ -414,6 +414,24 @@
   transform: translateX(120%);
 }
 
+/* Short page entrance used by data-heavy workspace screens. The animation only moves opacity
+   and transform, stays subtle enough not to delay reading, and collapses to a static paint when
+   motion is reduced. */
+.page-enter {
+  animation: page-enter 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 /* --------------------------------------------------------------------------
    Degradation. All three of these are correctness rather than polish: a viewer who asked the OS
    to cut transparency, a browser with no backdrop-filter, and a viewer who asked for less motion

@@ -12,6 +12,33 @@ export interface InvoiceExtras {
   weightKg: number | null;
 }
 
+/**
+ * The non-statutory part of an invoice's identity. These values are rendered when the PDF is
+ * issued and frozen in the stored file, so later setting changes cannot rewrite tax records.
+ */
+export interface InvoiceBranding {
+  companyName?: string | null;
+  tagline?: string | null;
+  primaryColor?: string | null;
+  logoPath?: string | null;
+  website?: string | null;
+  supportEmail?: string | null;
+  supportPhone?: string | null;
+  termsAndConditions?: string | null;
+  footerNotes?: string | null;
+  legalDisclaimer?: string | null;
+}
+
+const INK = '#0b0b0c';
+const MUTED = '#667085';
+const PAPER = '#f7f7f8';
+const LINE = '#dde1e6';
+const BRAND_FALLBACK = '#7f1020';
+
+function brandColor(value: string | null | undefined): string {
+  return value && /^#[0-9a-f]{6}$/i.test(value) ? value : BRAND_FALLBACK;
+}
+
 let fontRegistered = false;
 function ensureFontRegistered(
   Font: Awaited<typeof import('@react-pdf/renderer')>['Font'],
@@ -49,56 +76,120 @@ export async function renderTaxInvoice(
   invoice: Invoice,
   extras: InvoiceExtras,
   logoBuffer?: Buffer,
+  branding: InvoiceBranding = {},
 ) {
   const { Document, Page, Text, View, Image, StyleSheet, Font } =
     await import('@react-pdf/renderer');
   ensureFontRegistered(Font);
+
+  const brand = brandColor(branding.primaryColor);
+  const displayName = branding.companyName?.trim() || invoice.supplierName;
+  const supportEmail = branding.supportEmail ?? invoice.supplierEmail;
+  const supportPhone = branding.supportPhone ?? invoice.supplierPhone;
 
   const s = StyleSheet.create({
     page: {
       padding: 32,
       fontSize: 9,
       fontFamily: 'NotoSans',
-      color: '#1f2937',
+      color: INK,
     },
-    title: {
-      fontSize: 15,
-      fontWeight: 'bold',
-      textAlign: 'center',
-      marginBottom: 2,
+    topRule: {
+      height: 5,
+      backgroundColor: brand,
+      marginHorizontal: -32,
+      marginTop: -32,
+      marginBottom: 22,
     },
-    subtitle: {
-      fontSize: 8,
-      textAlign: 'center',
-      color: '#6b7280',
-      marginBottom: 10,
-    },
-    headerRow: {
+    masthead: {
       flexDirection: 'row',
       justifyContent: 'space-between',
-      marginBottom: 10,
+      alignItems: 'flex-start',
+      marginBottom: 16,
     },
-    logo: { width: 54, height: 54, objectFit: 'contain' },
+    identity: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flex: 1,
+      paddingRight: 12,
+    },
+    logoFrame: {
+      width: 52,
+      height: 52,
+      borderWidth: 1,
+      borderColor: LINE,
+      borderRadius: 10,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 10,
+      backgroundColor: '#ffffff',
+    },
+    title: {
+      fontSize: 19,
+      fontWeight: 'bold',
+      textAlign: 'right',
+      letterSpacing: 0.5,
+    },
+    subtitle: {
+      fontSize: 8.5,
+      textAlign: 'right',
+      color: MUTED,
+      marginTop: 3,
+    },
+    companyName: { fontSize: 15, fontWeight: 'bold', color: INK },
+    tagline: { fontSize: 8, color: MUTED, marginTop: 2 },
+    website: { fontSize: 7.5, color: brand, marginTop: 4 },
+    supplierRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      marginBottom: 12,
+    },
+    logo: { width: 42, height: 42, objectFit: 'contain' },
+    logoFallback: { fontSize: 15, color: '#ffffff', fontWeight: 'bold' },
     box: {
       borderWidth: 1,
-      borderColor: '#d1d5db',
-      padding: 8,
+      borderColor: LINE,
+      padding: 9,
       marginBottom: 8,
     },
-    twoCol: { flexDirection: 'row', gap: 8, marginBottom: 8 },
-    col: { flex: 1, borderWidth: 1, borderColor: '#d1d5db', padding: 8 },
-    label: { fontSize: 7.5, color: '#6b7280', marginBottom: 1 },
+    invoiceMeta: {
+      width: '38%',
+      borderWidth: 1,
+      borderColor: LINE,
+      borderTopWidth: 3,
+      borderTopColor: brand,
+      borderRadius: 7,
+      padding: 9,
+      backgroundColor: PAPER,
+    },
+    twoCol: { flexDirection: 'row', gap: 10, marginBottom: 12 },
+    col: {
+      flex: 1,
+      borderWidth: 1,
+      borderColor: LINE,
+      borderRadius: 7,
+      padding: 10,
+      backgroundColor: '#ffffff',
+    },
+    label: {
+      fontSize: 7.5,
+      color: MUTED,
+      marginBottom: 2,
+      textTransform: 'uppercase',
+    },
     strong: { fontWeight: 'bold' },
-    h: { fontSize: 9, fontWeight: 'bold', marginBottom: 3 },
+    h: { fontSize: 9, fontWeight: 'bold', marginBottom: 4, color: INK },
+    small: { fontSize: 8, color: MUTED, marginTop: 3 },
     row: { flexDirection: 'row' },
     th: {
-      backgroundColor: '#f3f4f6',
+      backgroundColor: INK,
+      color: '#ffffff',
       fontWeight: 'bold',
-      padding: 5,
+      padding: 6,
       borderWidth: 1,
-      borderColor: '#d1d5db',
+      borderColor: INK,
     },
-    td: { padding: 5, borderWidth: 1, borderColor: '#d1d5db' },
+    td: { padding: 6, borderWidth: 1, borderColor: LINE },
     right: { textAlign: 'right' },
     totalsWrap: {
       flexDirection: 'row',
@@ -109,35 +200,45 @@ export async function renderTaxInvoice(
     totalRow: {
       flexDirection: 'row',
       justifyContent: 'space-between',
-      paddingVertical: 2.5,
+      paddingVertical: 3,
       paddingHorizontal: 6,
     },
     grand: {
       flexDirection: 'row',
       justifyContent: 'space-between',
-      paddingVertical: 5,
-      paddingHorizontal: 6,
-      backgroundColor: '#f3f4f6',
-      borderWidth: 1,
-      borderColor: '#d1d5db',
+      paddingVertical: 7,
+      paddingHorizontal: 8,
+      backgroundColor: INK,
+      color: '#ffffff',
+      borderRadius: 6,
       fontWeight: 'bold',
-      fontSize: 10.5,
+      fontSize: 11,
     },
-    foot: { marginTop: 14, fontSize: 7.5, color: '#6b7280' },
+    notes: { flexDirection: 'row', gap: 10, marginTop: 16 },
+    note: { flex: 1, borderTopWidth: 1, borderTopColor: LINE, paddingTop: 7 },
+    foot: { marginTop: 12, fontSize: 7.5, color: MUTED, lineHeight: 1.35 },
+    footerBar: {
+      marginTop: 12,
+      borderTopWidth: 1,
+      borderTopColor: LINE,
+      paddingTop: 8,
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+    },
     cancelled: {
       color: '#b91c1c',
       fontWeight: 'bold',
       textAlign: 'center',
-      marginBottom: 6,
+      marginBottom: 10,
     },
   });
 
   const isIntraState = invoice.cgstAmount > 0 || invoice.sgstAmount > 0;
 
   const field = (label: string, value: string | null | undefined) =>
-    h(View, { key: label }, [
+    h(View, { key: label, style: { marginBottom: 5 } }, [
       h(Text, { key: 'l', style: s.label }, label),
-      h(Text, { key: 'v' }, value ?? '—'),
+      h(Text, { key: 'v', style: s.strong }, value ?? '—'),
     ]);
 
   const totalRow = (label: string, value: string) =>
@@ -166,14 +267,45 @@ export async function renderTaxInvoice(
     Document,
     { title: invoice.invoiceNumber },
     h(Page, { size: 'A4', style: s.page }, [
-      h(Text, { key: 't', style: s.title }, 'TAX INVOICE'),
-      h(
-        Text,
-        { key: 'st', style: s.subtitle },
-        isIntraState
-          ? 'Intra-state supply — CGST + SGST'
-          : 'Inter-state supply — IGST',
-      ),
+      h(View, { key: 'rule', style: s.topRule }),
+      h(View, { key: 'masthead', style: s.masthead }, [
+        h(View, { key: 'identity', style: s.identity }, [
+          h(
+            View,
+            {
+              key: 'logo-frame',
+              style: [
+                s.logoFrame,
+                !logoBuffer
+                  ? { backgroundColor: brand, borderColor: brand }
+                  : undefined,
+              ],
+            },
+            logoBuffer
+              ? h(Image, { key: 'logo', src: logoBuffer, style: s.logo })
+              : h(Text, { key: 'fallback', style: s.logoFallback }, 'NW'),
+          ),
+          h(View, { key: 'brand-copy' }, [
+            h(Text, { key: 'company', style: s.companyName }, displayName),
+            branding.tagline
+              ? h(Text, { key: 'tagline', style: s.tagline }, branding.tagline)
+              : null,
+            branding.website
+              ? h(Text, { key: 'website', style: s.website }, branding.website)
+              : null,
+          ]),
+        ]),
+        h(View, { key: 'title-block' }, [
+          h(Text, { key: 't', style: s.title }, 'TAX INVOICE'),
+          h(
+            Text,
+            { key: 'st', style: s.subtitle },
+            isIntraState
+              ? 'Intra-state supply · CGST + SGST'
+              : 'Inter-state supply · IGST',
+          ),
+        ]),
+      ]),
 
       invoice.status === 'CANCELLED'
         ? h(
@@ -184,27 +316,39 @@ export async function renderTaxInvoice(
         : null,
 
       // --- Supplier + invoice meta ---
-      h(View, { key: 'hdr', style: s.headerRow }, [
-        h(View, { key: 'sup', style: { flex: 1 } }, [
-          logoBuffer
-            ? h(Image, { key: 'logo', src: logoBuffer, style: s.logo })
-            : null,
-          h(Text, { key: 'n', style: s.strong }, invoice.supplierName),
-          h(Text, { key: 'a' }, invoice.supplierAddress),
-          h(Text, { key: 'g' }, `GSTIN: ${invoice.supplierGstin}`),
-          h(
-            Text,
-            { key: 's' },
-            `State: ${invoice.supplierStateName} (${invoice.supplierStateCode})`,
-          ),
-          invoice.supplierEmail
-            ? h(Text, { key: 'e' }, invoice.supplierEmail)
-            : null,
-          invoice.supplierPhone
-            ? h(Text, { key: 'p' }, invoice.supplierPhone)
-            : null,
-        ]),
-        h(View, { key: 'meta', style: { width: '38%' } }, [
+      h(View, { key: 'hdr', style: s.supplierRow }, [
+        h(
+          View,
+          {
+            key: 'sup',
+            style: [
+              s.box,
+              { flex: 1, marginRight: 10, marginBottom: 0, borderRadius: 7 },
+            ],
+          },
+          [
+            h(
+              Text,
+              { key: 'label', style: s.label },
+              'Supplier / registered business',
+            ),
+            h(Text, { key: 'n', style: s.strong }, invoice.supplierName),
+            h(Text, { key: 'a' }, invoice.supplierAddress),
+            h(Text, { key: 'g' }, `GSTIN: ${invoice.supplierGstin}`),
+            h(
+              Text,
+              { key: 's' },
+              `State: ${invoice.supplierStateName} (${invoice.supplierStateCode})`,
+            ),
+            invoice.supplierEmail
+              ? h(Text, { key: 'e' }, invoice.supplierEmail)
+              : null,
+            invoice.supplierPhone
+              ? h(Text, { key: 'p' }, invoice.supplierPhone)
+              : null,
+          ],
+        ),
+        h(View, { key: 'meta', style: s.invoiceMeta }, [
           field('Invoice No.', invoice.invoiceNumber),
           field('Invoice Date', formatDate(invoice.invoiceDate)),
           field(
@@ -233,9 +377,23 @@ export async function renderTaxInvoice(
           ),
         ]),
         h(View, { key: 'rc', style: s.col }, [
-          h(Text, { key: 'h', style: s.h }, 'Details'),
+          h(Text, { key: 'h', style: s.h }, 'Supply details'),
           h(Text, { key: 'r' }, 'Reverse charge applicable: No'),
           h(Text, { key: 'c' }, `Currency: ${invoice.currency}`),
+          extras.destination
+            ? h(
+                Text,
+                { key: 'd', style: s.small },
+                `Destination: ${extras.destination}`,
+              )
+            : null,
+          extras.shipments.length
+            ? h(
+                Text,
+                { key: 'awb', style: s.small },
+                `${extras.shipments.length} shipment${extras.shipments.length === 1 ? '' : 's'} included`,
+              )
+            : null,
         ]),
       ]),
 
@@ -311,17 +469,52 @@ export async function renderTaxInvoice(
         ]),
       ]),
 
+      branding.termsAndConditions ||
+      branding.footerNotes ||
+      branding.legalDisclaimer
+        ? h(View, { key: 'notes', style: s.notes }, [
+            branding.termsAndConditions
+              ? h(View, { key: 'terms', style: s.note }, [
+                  h(Text, { key: 'h', style: s.label }, 'Terms'),
+                  h(
+                    Text,
+                    { key: 'v', style: s.foot },
+                    branding.termsAndConditions,
+                  ),
+                ])
+              : null,
+            branding.footerNotes || branding.legalDisclaimer
+              ? h(View, { key: 'notes', style: s.note }, [
+                  h(Text, { key: 'h', style: s.label }, 'Notes'),
+                  h(
+                    Text,
+                    { key: 'v', style: s.foot },
+                    branding.footerNotes ?? branding.legalDisclaimer,
+                  ),
+                ])
+              : null,
+          ])
+        : null,
+
       h(View, { key: 'foot', style: s.foot }, [
         h(
           Text,
           { key: 'a' },
           'This is a computer-generated invoice and does not require a physical signature.',
         ),
-        h(
-          Text,
-          { key: 'b' },
-          `Issued ${formatDate(invoice.invoiceDate)} · FY ${invoice.financialYear} · Ref ${invoice.breakdownSource}`,
-        ),
+        h(View, { key: 'bar', style: s.footerBar }, [
+          h(
+            Text,
+            { key: 'b' },
+            `Issued ${formatDate(invoice.invoiceDate)} · FY ${invoice.financialYear}`,
+          ),
+          h(
+            Text,
+            { key: 'c' },
+            [supportEmail, supportPhone].filter(Boolean).join(' · ') ||
+              'Customer support',
+          ),
+        ]),
       ]),
     ]),
   );

@@ -23,6 +23,7 @@ import {
 } from './gst';
 import { gstStateCode, isIntraStateSupply } from './indian-states';
 import { InvoicePdfService } from './invoice-pdf.service';
+import type { InvoiceBranding } from './templates/tax-invoice-template';
 
 const INVOICES_DIR = join(process.cwd(), 'storage', 'invoices');
 
@@ -266,7 +267,7 @@ export class InvoicesService {
     const pdfPath = await this.storePdf(
       invoice,
       { shipments: [], destination: null, weightKg: null },
-      settings.logoPath,
+      settings,
     );
 
     await this.prisma.auditLog.create({
@@ -404,11 +405,7 @@ export class InvoicesService {
     // Rendered once, at issue time, and served from disk forever after. Re-rendering on each
     // download would let a template change silently alter a document already sent to a customer
     // and filed with their accountant.
-    const pdfPath = await this.renderAndStorePdf(
-      invoice,
-      order,
-      settings.logoPath,
-    );
+    const pdfPath = await this.renderAndStorePdf(invoice, order, settings);
 
     await this.prisma.auditLog.create({
       data: {
@@ -435,7 +432,7 @@ export class InvoicesService {
   private renderAndStorePdf(
     invoice: Invoice,
     order: OrderForInvoice,
-    logoPath: string | null,
+    branding: InvoiceBranding,
   ): Promise<string> {
     return this.storePdf(
       invoice,
@@ -453,7 +450,7 @@ export class InvoicesService {
           order.quote?.weightKg ??
           null,
       },
-      logoPath,
+      branding,
     );
   }
 
@@ -461,9 +458,9 @@ export class InvoicesService {
   private async storePdf(
     invoice: Invoice,
     extras: Parameters<InvoicePdfService['render']>[1],
-    logoPath: string | null,
+    branding: InvoiceBranding,
   ): Promise<string> {
-    const buffer = await this.invoicePdf.render(invoice, extras, logoPath);
+    const buffer = await this.invoicePdf.render(invoice, extras, branding);
 
     await mkdir(INVOICES_DIR, { recursive: true });
     const relativePath = join('invoices', `${invoice.id}.pdf`);
