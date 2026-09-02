@@ -48,15 +48,19 @@ export default function PricingLayout({ children }: { children: React.ReactNode 
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold text-foreground">Pricing Management</h1>
-        <p className="text-sm text-muted-foreground">
+      <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
+        <div>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-brand-red">Commercial control</p>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Pricing Management</h1>
+          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
           Rates, providers, and destination countries the pricing engine uses to quote customers.
           Changes here take effect immediately — no deployment required.
         </p>
+        </div>
+        <div className="glass-rim rounded-2xl bg-white/55 px-4 py-3 text-sm text-muted-foreground">Rate changes are logged for audit.</div>
       </div>
 
-      <nav className="flex flex-wrap gap-1 border-b border-border" aria-label="Pricing sections">
+      <nav className="glass flex gap-1 overflow-x-auto rounded-2xl p-1.5" aria-label="Pricing sections">
         {PRICING_NAV_ITEMS.map((item) => {
           const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
           return (
@@ -64,10 +68,10 @@ export default function PricingLayout({ children }: { children: React.ReactNode 
               key={item.href}
               href={item.href}
               className={cn(
-                "-mb-px border-b-2 px-3 py-2 text-sm font-medium",
+                "shrink-0 rounded-xl px-3 py-2 text-sm font-medium transition-all duration-200 motion-reduce:transition-none",
                 isActive
-                  ? "border-primary text-primary"
-                  : "border-transparent text-muted-foreground hover:text-foreground",
+                  ? "bg-primary text-primary-foreground shadow-[inset_0_1px_0_0_rgba(255,255,255,0.22),0_8px_18px_-12px_rgba(9,9,11,0.65)]"
+                  : "text-muted-foreground hover:bg-white/55 hover:text-foreground",
               )}
             >
               {item.label}

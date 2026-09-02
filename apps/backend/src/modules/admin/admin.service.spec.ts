@@ -18,6 +18,7 @@ describe('AdminService', () => {
     shippingProvider: { findUnique: jest.Mock };
     apiRequestLog: { findMany: jest.Mock };
     auditLog: { findMany: jest.Mock };
+    customer: { count: jest.Mock };
     quote: { count: jest.Mock };
     pickup: { count: jest.Mock };
     order: { count: jest.Mock };

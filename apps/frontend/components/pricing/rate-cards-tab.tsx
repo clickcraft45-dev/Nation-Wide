@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { FileText } from "lucide-react";
+import { Download, Eye, FileText, Globe2, SlidersHorizontal } from "lucide-react";
 import type {
   RateCardCountryOptionDto,
   RateCardDocumentDto,
@@ -18,6 +18,7 @@ import { NativeSelect } from "@/components/ui/select";
 import { SearchInput } from "@/components/ui/search-input";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/page-state";
+import { todayIso } from "@/components/ui/calendar";
 import { CompanySettingsDialog } from "./company-settings-dialog";
 
 const SHIPMENT_TYPE_OPTIONS: { value: ShipmentTypeCode; label: string }[] = [
@@ -25,10 +26,6 @@ const SHIPMENT_TYPE_OPTIONS: { value: ShipmentTypeCode; label: string }[] = [
   { value: "PARCEL", label: "Parcel" },
   { value: "PACKAGE", label: "Package" },
 ];
-
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
-}
 
 interface SelectedCountry {
   countryId: string;
@@ -58,11 +55,20 @@ export function RateCardsTab() {
 
   useEffect(() => {
     // One-shot lookup, not a subscription.
-    apiClient.get<RateProviderDto[]>("/admin/rate-providers").then((p) => setProviders(p.filter((x) => x.isActive)));
+    apiClient
+      .get<RateProviderDto[]>("/admin/rate-providers")
+      .then((p) => setProviders(p.filter((x) => x.isActive)))
+      .catch(() => setError("Couldn't load rate-card providers. Please refresh and try again."));
     loadRecent();
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setEffectiveDate(todayIso());
   }, []);
+
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [previewUrl]);
 
   function loadRecent() {
     apiClient
@@ -111,6 +117,7 @@ export function RateCardsTab() {
       // A plain <a href> to this endpoint would 401 — it needs the Bearer token apiClient
       // attaches, which a raw browser navigation never sends.
       const { blob } = await apiClient.getBlob(`/admin/rate-cards/${doc.id}/download`);
+      if (blob.size === 0) throw new ApiError(500, "Empty PDF body");
       downloadBlob(blob, `RateCard-v${doc.version}.pdf`);
     } catch {
       showToast({ variant: "error", title: "Couldn't download the rate card." });
@@ -147,6 +154,7 @@ export function RateCardsTab() {
     setIsPreviewing(true);
     try {
       const { blob } = await apiClient.postBlob("/admin/rate-cards/preview", buildPayload());
+      if (blob.size === 0) throw new ApiError(500, "Empty PDF body");
       if (previewUrl) URL.revokeObjectURL(previewUrl);
       setPreviewUrl(URL.createObjectURL(blob));
     } catch {
@@ -167,12 +175,8 @@ export function RateCardsTab() {
     try {
       const { blob, headers } = await apiClient.postBlob("/admin/rate-cards", buildPayload());
       const version = headers.get("X-Rate-Card-Version");
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `rate-card-v${version ?? ""}.pdf`;
-      link.click();
-      URL.revokeObjectURL(url);
+      if (blob.size === 0) throw new ApiError(500, "Empty PDF body");
+      downloadBlob(blob, `rate-card-v${version ?? ""}.pdf`);
       showToast({ variant: "success", title: `Rate card generated (v${version})` });
       loadRecent();
     } catch (err) {
@@ -187,11 +191,19 @@ export function RateCardsTab() {
   }
 
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,460px)_1fr]">
-      <div className="space-y-4 rounded-lg border border-border p-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-foreground">Generate a Rate Card</h2>
-          <CompanySettingsDialog trigger={<Button variant="ghost" size="sm">Rate Card Settings</Button>} />
+    <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,470px)_1fr]">
+      <section className="glass rounded-2xl p-5 sm:p-6">
+        <div className="mb-6 flex items-start justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+              <SlidersHorizontal className="h-4 w-4" aria-hidden />
+            </div>
+            <div>
+              <h2 className="text-base font-semibold text-foreground">Build a rate card</h2>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">Pick the carrier, service and countries that should appear in this PDF.</p>
+            </div>
+          </div>
+          <CompanySettingsDialog trigger={<Button variant="secondary" size="sm">Document brand</Button>} />
         </div>
 
         <div className="space-y-1.5">
@@ -234,14 +246,14 @@ export function RateCardsTab() {
             disabled={!rateProviderId}
             aria-label="Search countries"
           />
-          <div className="max-h-40 space-y-1 overflow-y-auto rounded-md border border-border p-2">
+          <div className="glass-field max-h-48 space-y-1 overflow-y-auto rounded-xl p-2">
             {filteredCountries.length === 0 ? (
               <p className="p-2 text-xs text-muted-foreground">
                 {rateProviderId ? "No countries found." : "Select a provider to see its countries."}
               </p>
             ) : (
               filteredCountries.map((c) => (
-                <label key={c.id} className="flex items-center gap-2 rounded px-1.5 py-1 text-sm hover:bg-muted/40">
+                <label key={c.id} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 text-sm transition-colors hover:bg-white/60">
                   <input
                     type="checkbox"
                     checked={selected.some((s) => s.countryId === c.id)}
@@ -255,7 +267,7 @@ export function RateCardsTab() {
         </div>
 
         {selected.length > 0 && (
-          <div className="space-y-1.5">
+          <div className="space-y-2 rounded-xl border border-[color:var(--glass-edge)] bg-white/35 p-3">
             <Label>Transit Time per Country (optional)</Label>
             <div className="space-y-1.5">
               {selected.map((c) => (
@@ -293,18 +305,29 @@ export function RateCardsTab() {
 
         {error && <FieldError>{error}</FieldError>}
 
-        <div className="flex gap-2 pt-2">
-          <Button variant="secondary" size="sm" onClick={handlePreview} isLoading={isPreviewing}>
+        <div className="flex flex-col gap-2 pt-2 sm:flex-row">
+          <Button className="flex-1" variant="secondary" onClick={handlePreview} isLoading={isPreviewing}>
+            <Eye className="h-4 w-4" aria-hidden />
             Preview
           </Button>
-          <Button size="sm" onClick={handleGenerate} isLoading={isGenerating}>
+          <Button className="flex-1" onClick={handleGenerate} isLoading={isGenerating}>
+            <Download className="h-4 w-4" aria-hidden />
             Generate & Download
           </Button>
         </div>
-      </div>
+      </section>
 
-      <div className="space-y-3">
-        <h2 className="text-sm font-semibold text-foreground">Recently Generated</h2>
+      <section className="glass-sheen min-h-80 rounded-2xl p-5 sm:p-6">
+        <div className="mb-5 flex items-center justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <Globe2 className="h-4 w-4 text-brand-red" aria-hidden />
+              <h2 className="text-base font-semibold text-foreground">Recently generated</h2>
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">Your latest five documents stay ready to download.</p>
+          </div>
+          <span className="rounded-full bg-brand-red-tint px-2.5 py-1 text-xs font-semibold tabular-nums text-brand-red">{recent.length}</span>
+        </div>
         {recent.length === 0 ? (
           <EmptyState
             icon={<FileText className="h-8 w-8" aria-hidden />}
@@ -316,22 +339,24 @@ export function RateCardsTab() {
             {recent.map((doc) => (
               <li
                 key={doc.id}
-                className="flex items-center justify-between rounded-md border border-border p-3 text-sm"
+                className="glass-interactive flex flex-col justify-between gap-3 rounded-xl border border-[color:var(--glass-edge)] bg-white/35 p-4 text-sm sm:flex-row sm:items-center"
               >
                 <div>
-                  <p className="font-medium text-foreground">v{doc.version}</p>
+                  <p className="font-mono text-xs font-semibold text-foreground">RATE CARD · v{doc.version}</p>
                   <p className="text-xs text-muted-foreground">
-                    {doc.countryNames.join(", ")} · Effective {doc.effectiveDate}
+                    {doc.rateProviderName} · {doc.countryNames.join(", ")}
                   </p>
+                  <p className="mt-1 text-xs font-medium text-foreground">Effective {doc.effectiveDate}</p>
                 </div>
-                <Button variant="ghost" size="sm" onClick={() => handleDownload(doc)}>
+                <Button variant="secondary" size="sm" onClick={() => handleDownload(doc)}>
+                  <Download className="h-3.5 w-3.5" aria-hidden />
                   Download
                 </Button>
               </li>
             ))}
           </ul>
         )}
-      </div>
+      </section>
 
       <Dialog
         open={Boolean(previewUrl)}
@@ -343,8 +368,8 @@ export function RateCardsTab() {
         }}
       >
         {previewUrl && (
-          <DialogContent title="Rate Card Preview" className="max-w-4xl">
-            <iframe src={previewUrl} title="Rate card preview" className="h-[70vh] w-full rounded border border-border" />
+          <DialogContent title="Rate Card Preview" description="Review the document before saving a version." className="max-w-5xl">
+            <iframe src={previewUrl} title="Rate card preview" className="h-[72vh] w-full rounded-xl border border-[color:var(--glass-edge)] bg-white" />
           </DialogContent>
         )}
       </Dialog>

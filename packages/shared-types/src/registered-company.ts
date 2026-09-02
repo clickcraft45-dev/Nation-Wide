@@ -23,6 +23,9 @@
 export const REGISTERED_COMPANY = {
   /** Trade name on the certificate. Title-cased for documents; GSTN stores every field in caps. */
   companyName: "NationWide Courier Delivery Service",
+  /** Shared document identity — used by new invoice and rate-card PDFs. */
+  tagline: "Delivering trust worldwide",
+  primaryColor: "#7F1020",
   /** Legal name — the proprietor, which is not the same as the trade name above. */
   legalName: "Rohit Reddy",
   gstin: "36CZWPR1095K1ZE",
