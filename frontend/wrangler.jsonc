@@ -1,0 +1,17 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "nation-wide",
+  // OpenNext emits the Worker entry here; this path is its build output, not a source file.
+  "main": ".open-next/worker.js",
+  // nodejs_compat is required, not optional: the Next.js server runtime uses node: builtins.
+  // The compatibility_date must be 2024-09-23 or later for nodejs_compat v2 to apply.
+  "compatibility_date": "2026-09-03",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "observability": {
+    "enabled": true
+  }
+}

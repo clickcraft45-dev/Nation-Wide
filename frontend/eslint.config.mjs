@@ -12,6 +12,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // OpenNext's generated Worker bundle — build output, not source. It inlines Next's own
+    // server runtime, which trips ~1000 rules that say nothing about this codebase.
+    ".open-next/**",
+    ".wrangler/**",
   ]),
 ]);
 
