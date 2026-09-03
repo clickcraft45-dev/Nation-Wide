@@ -107,7 +107,7 @@ parallel with engineering, not after.
    `pickup_confirmation`, `in_transit_update`, `out_for_delivery`, `delivered`,
    `delivery_exception`, `quote_ready`, `quote_rejected`, `pickup_request_needed`,
    `pickup_rejected`):
-   - Enter the template name exactly as it appears in `apps/backend/src/modules/notifications/templates.ts`
+   - Enter the template name exactly as it appears in `backend/src/modules/notifications/templates.ts`
    - Select category: **Utility** for all of these (none are Marketing — see the strategy doc's
      categorization table if you want to double-check any individual one)
    - Write the body text with `{{1}}`, `{{2}}` variable placeholders where needed, and provide
@@ -132,7 +132,7 @@ parallel with engineering, not after.
    - **Source number** (the WhatsApp-registered number itself, in the format Gupshup's API
      expects — shown in Settings)
 3. These map directly to new environment variables on the backend, following the existing pattern
-   in `apps/backend/.env.example`:
+   in `backend/.env.example`:
 
    ```
    WHATSAPP_PROVIDER=GUPSHUP

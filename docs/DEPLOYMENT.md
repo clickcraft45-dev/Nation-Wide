@@ -2,71 +2,115 @@
 
 ## Prerequisites
 
-- MongoDB 6+ as a replica set (MongoDB Atlas — any tier; a replica set is required for Prisma transactions)
-- Redis 7+ (managed or self-hosted)
+- An AWS account (the backend runs on one EC2 instance) and a Cloudflare account (the frontend runs on Cloudflare Pages)
+- PostgreSQL 14+ installed on the EC2 host (already present) — it is NOT a container and is not duplicated in compose
+- Redis 7, which does run as a container via `docker-compose.yml`
+- A private S3 bucket (`nationwide-logistics-s3`) and an EC2 instance role (`nantionwides3`) that can read/write it
 - Node 20+ if not deploying via Docker
 - Real credentials for: JWT signing secrets, ICL Tracking API (`ICL_API_USER_ID`/`ICL_API_PASSWORD`),
   and WhatsApp/Meta webhook verification, once those integrations go live for the target environment
 
-## Test deploy: Vercel (frontend) + Railway (backend)
+## Deploy: EC2 (backend) + Cloudflare Pages (frontend)
 
-Recommended path for a pre-production test deploy reachable from multiple devices, before
-pointing the real domain at anything. **The backend does not belong on Vercel** — it runs a
-BullMQ worker (`notifications.processor.ts`) that needs a persistent, always-running process to
-poll Redis, which Vercel's stateless serverless functions can't provide. Railway (or Render/
-Fly.io/a VPS — anything that runs the existing `apps/backend/Dockerfile` as a long-lived
-container) is what the worker needs.
+**The backend cannot go on Pages or any serverless platform.** It runs a BullMQ worker
+(`notifications.processor.ts`) that polls Redis from a persistent, always-running process.
+Cloudflare Pages Functions and Workers are request-scoped and cannot host it. One EC2 instance
+running the existing `docker-compose.yml` is what the worker needs.
 
-### 1. Backend on Railway
+PostgreSQL runs on the instance itself and Redis runs as a container bound to `127.0.0.1`.
+Nothing outside the box ever connects to either. Files do not live on the instance at all —
+invoice PDFs, company logos and rate-card PDFs go to S3, so they survive a rebuild, a
+container recreation and a full redeploy.
 
-1. New Railway project → deploy from this GitHub repo. Railway auto-detects `railway.json` at
-   the repo root, which points it at `apps/backend/Dockerfile` with the repo root as build
-   context (required — the backend depends on the `packages/shared-types` workspace, same as the
-   Docker Compose setup).
-2. Add Railway's Redis plugin — it injects `REDIS_URL` automatically. The database is MongoDB
-   Atlas, so set `DATABASE_URL` by hand from Atlas → Connect → Drivers. Railway's egress IPs are
-   dynamic, so Atlas Network Access has to accept `0.0.0.0/0` for the service to connect at all;
-   that makes the connection string the only thing guarding the data, so pair it with the
-   least-privilege user described under [Database access](#database-access) and treat the string
-   as a rotatable secret.
-3. Set the remaining required env vars on the service (see [`ENV_VARS.md`](./ENV_VARS.md) for the
-   full list) — at minimum real (non-dev-default) `JWT_ACCESS_SECRET` and `JWT_REFRESH_SECRET`
-   (e.g. `openssl rand -base64 32` for each), `JWT_ACCESS_EXPIRES_IN=15m`,
-   `JWT_REFRESH_EXPIRES_IN=7d`. Leave `FRONTEND_URL` unset for now — set it after step 2 gives you
-   the Vercel URL. Railway injects its own `PORT`; the app already listens on
-   `process.env.PORT ?? 4000`, nothing to configure.
-4. After the first successful deploy, run the release steps once against the new database (via
-   `railway run`, or a one-off shell from the Railway dashboard):
+### 1. Backend on EC2
+
+1. **Launch the instance.** Ubuntu 24.04 LTS, `t3.small` or larger (`t3.micro`'s 1 GB RAM is not
+   enough to run Postgres, Redis and a Node build at once). Attach an Elastic IP so the address
+   survives a stop/start.
+
+2. **Security group — this is the part that matters.** Inbound: `443` and `80` from anywhere,
+   `22` from your own IP only. **Do not open `5432`, `6379` or `4000`.** Postgres listens on the
+   host, Redis and the backend publish on `127.0.0.1` only, and Nginx/Caddy is the single public
+   entry point — but an open port plus a future config change is how databases end up ransomed.
+
+   The instance also needs the **`nantionwides3` IAM role attached** (Actions → Security →
+   Modify IAM role). That role is how the backend gets S3 credentials; there are no access keys
+   anywhere in the app.
+
+3. **Install Docker and clone:**
    ```bash
-   railway run npx prisma migrate deploy --schema apps/backend/prisma/schema.prisma
-   railway run npm run db:seed --workspace=apps/backend
+   sudo apt update && sudo apt install -y docker.io docker-compose-v2 git
+   sudo usermod -aG docker $USER && newgrp docker
+   git clone https://github.com/clickcraft45-dev/Nation-Wide.git && cd Nation-Wide
    ```
-   Set `SEED_ADMIN_PASSWORD`/`SEED_PICKUP_PARTNER_PASSWORD` to something other than the
-   `ChangeMe123!` default first (see [Seeding](#seeding) above) — this is a real, internet-
-   reachable deploy, not local-only.
-5. Note the public URL Railway assigns the service (Settings → Networking → Generate Domain if
-   one isn't already there) — you'll need it in step 2.
 
-### 2. Frontend on Vercel
+4. **Create the env file.** Copy `backend/.env.example` to `backend/.env` and set real
+   values (see [`ENV_VARS.md`](./ENV_VARS.md)). At minimum, generate real signing secrets —
+   the dev defaults must never reach an internet-reachable deploy:
+   ```bash
+   cp backend/.env.example backend/.env
+   openssl rand -base64 32   # JWT_ACCESS_SECRET
+   openssl rand -base64 32   # JWT_REFRESH_SECRET
+   ```
+   Set `PUBLIC_BASE_URL` to the backend's real public origin (e.g.
+   `https://api.nationwidelogistics.co`) — see [Invoices](#invoices) for why an internal AWS
+   hostname breaks WhatsApp attachments. Leave `FRONTEND_URL` until step 2 gives you the Pages
+   URL. `DATABASE_URL` and `REDIS_URL` are overridden by compose, so their values in this file
+   only affect running the backend natively on the box.
 
-1. Import this repo as a new Vercel project. Set **Root Directory** to `apps/frontend` in the
-   project settings — `apps/frontend/vercel.json` (already in the repo) handles the rest: it
-   builds `packages/shared-types` before `next build`, since that workspace package isn't
-   published to npm and Next.js won't compile it on its own.
-2. Set the env var `NEXT_PUBLIC_API_BASE_URL` to the Railway URL from step 1.5, plus `/api/v1`
-   (e.g. `https://your-service.up.railway.app/api/v1`). This is inlined at *build* time — if you
-   change it later, redeploy, don't just restart.
-3. Deploy. Note the `*.vercel.app` URL Vercel assigns.
+5. **Create the database and role** on the host's existing PostgreSQL, if not already done:
+   ```bash
+   sudo -u postgres createuser --pwprompt nationwide
+   sudo -u postgres createdb --owner=nationwide nationwide
+   ```
+   Confirm Postgres is listening on loopback only (`ss -lntp | grep 5432` should show `127.0.0.1`
+   and not `0.0.0.0`), then put the resulting URL in `backend/.env` as `DATABASE_URL`, using
+   `host.docker.internal` as the host so the backend container can reach it.
+
+6. **Start the stack:**
+   ```bash
+   docker compose up -d --build
+   docker compose ps   # backend and redis; there is no database container
+   ```
+
+7. **Run the release steps once** against the database:
+   ```bash
+   docker compose exec backend npx prisma migrate deploy --schema backend/prisma/schema.prisma
+   docker compose exec backend npm run db:seed --workspace=backend
+   ```
+   `migrate deploy` (not `migrate dev`) is the production-safe command: it applies the committed
+   migrations and never generates or prompts. Set `SEED_ADMIN_PASSWORD` and
+   `SEED_PICKUP_PARTNER_PASSWORD` to something other than the `ChangeMe123!` default first (see
+   [Seeding](#seeding)) — this is a real, internet-reachable deploy.
+
+8. **Put TLS in front of it.** Point an `api.` DNS record at the Elastic IP. Either terminate TLS
+   with Caddy/nginx on the box, or proxy the record through Cloudflare (orange cloud) with SSL
+   mode **Full (strict)**. If you proxy `/api/*` through Cloudflare, read the caching warning in
+   [Invoices](#invoices) first — it is not optional.
+
+### 2. Frontend on Cloudflare Pages
+
+1. Cloudflare dashboard → Workers & Pages → Create → Pages → connect this GitHub repo.
+2. Build settings:
+   - **Framework preset:** Next.js
+   - **Build command:** `npm run build --workspace=packages/shared-types && npm run build --workspace=frontend`
+   - **Build output directory:** `frontend/.next`
+   - **Root directory:** leave as the repo root — `packages/shared-types` is an unpublished
+     workspace package, so a build rooted at `frontend` cannot resolve it.
+3. Set the env var `NEXT_PUBLIC_API_BASE_URL` to the backend origin from step 1.8 plus `/api/v1`
+   (e.g. `https://api.nationwidelogistics.co/api/v1`). This is inlined at **build** time — after
+   changing it, redeploy; a restart will not pick it up.
+4. Deploy, and note the `*.pages.dev` URL.
 
 ### 3. Close the loop
 
-Go back to Railway and set `FRONTEND_URL` to the Vercel URL from step 2.3, then redeploy/restart
-the backend service so CORS and the post-login redirects (see below) pick it up.
+On the EC2 box, set `FRONTEND_URL` in `backend/.env` to the Pages URL from step 2.4, then
+`docker compose up -d backend` so CORS and the post-login redirects pick it up.
 
-If you also want to test Google sign-in in this environment: set `GOOGLE_CALLBACK_URL` on Railway
-to `<railway-url>/api/v1/auth/google/callback`, and add that exact URL as an Authorized redirect
-URI on the Google OAuth client (see the [Google sign-in](#google-sign-in) section below) — a
-second entry alongside the localhost one, not a replacement for it.
+For Google sign-in in this environment: set `GOOGLE_CALLBACK_URL` to
+`<backend-origin>/api/v1/auth/google/callback` and add that exact URL as an Authorized redirect
+URI on the Google OAuth client (see [Google sign-in](#google-sign-in)) — a second entry
+alongside the localhost one, not a replacement.
 
 ## Building the images
 
@@ -74,12 +118,12 @@ Both apps are containerized. **Build context must be the monorepo root** — bot
 depend on `packages/shared-types`, which lives outside `apps/*`:
 
 ```bash
-docker build -f apps/backend/Dockerfile -t nationwide-backend:latest .
-docker build -f apps/frontend/Dockerfile -t nationwide-frontend:latest .
+docker build -f backend/Dockerfile -t nationwide-backend:latest .
+docker build -f frontend/Dockerfile -t nationwide-frontend:latest .
 ```
 
-Or use the provided `docker-compose.yml`, which builds and wires both services together with
-Redis (the database is Atlas — the backend service reads `apps/backend/.env` for `DATABASE_URL`):
+Or use the provided `docker-compose.yml`, which builds the backend and wires it to Redis.
+It contains no database service — Postgres is the host's:
 
 ```bash
 docker compose up --build
@@ -88,7 +132,7 @@ docker compose up --build
 The backend image is `node:20-bookworm-slim` (not alpine) deliberately — `sharp` and `bcrypt`
 ship native bindings that need glibc; alpine's musl libc causes native-module ABI mismatches.
 
-The frontend image uses Next.js's `output: "standalone"` build (see `apps/frontend/next.config.ts`)
+The frontend image uses Next.js's `output: "standalone"` build (see `frontend/next.config.ts`)
 so the runtime image only ships the node_modules that app actually needs, not the whole
 monorepo's.
 
@@ -98,7 +142,7 @@ Migrations are **not** run automatically by the backend container on startup —
 explicit deploy step, before starting new backend instances:
 
 ```bash
-npx prisma migrate deploy --schema apps/backend/prisma/schema.prisma
+npx prisma migrate deploy --schema backend/prisma/schema.prisma
 ```
 
 `migrate deploy` (not `migrate dev`) is the production-safe command: it applies pending
@@ -107,7 +151,7 @@ migrations without generating new ones or prompting.
 ## Seeding
 
 ```bash
-npm run db:seed --workspace=apps/backend
+npm run db:seed --workspace=backend
 ```
 
 Idempotent for the core seed data (admin user, pickup partner, shipping provider, tracking
@@ -146,7 +190,7 @@ existing STAFF/ADMIN/PICKUP_PARTNER account is rejected by design (see
 
 ## Health checks
 
-`GET /api/v1/health` (unauthenticated) checks MongoDB (`{ ping: 1 }`) and Redis (`PING`) in
+`GET /api/v1/health` (unauthenticated) checks PostgreSQL (`SELECT 1`) and Redis (`PING`) in
 parallel. **Only the database decides the status code.** Redis is a cache that fails open (see
 `redis.service.ts`), so a Redis outage returns `200` with `{status: "degraded", checks: {database:
 "ok", redis: "error"}}` — the app is still serving every request correctly. A `503` means the
@@ -218,18 +262,34 @@ Meta-shaped route.
 
 ## Backup / restore
 
-No application-level backup tooling exists — back up MongoDB using Atlas's own mechanism
-(automated cloud backups on M10+, or scheduled `mongodump` against the cluster on M0/M2/M5,
-which have no built-in snapshots). The one non-database piece of
-state is `apps/backend/storage/uploads/` (uploaded company logos) — include it in your backup plan
-if you're not running on ephemeral storage, or move it to object storage (S3-compatible) before a
-production deploy, since the container filesystem is not persisted across restarts/redeploys as
-configured today.
+No application-level backup tooling exists, and self-hosting Postgres means **nobody is taking
+snapshots for you**. Schedule a `pg_dump` on the instance and copy it off the box:
+
+```bash
+# ~/backup-db.sh — chmod 700. Reads the password from ~/.pgpass (chmod 600), never from this file
+# and never from the command line, where it would be visible in `ps` and in shell history.
+set -euo pipefail
+STAMP=$(date +%F)
+pg_dump --format=custom --host=127.0.0.1 --username=nationwide nationwide \
+  > "/tmp/nationwide-$STAMP.dump"
+aws s3 cp "/tmp/nationwide-$STAMP.dump" "s3://your-backup-bucket/postgres/"
+rm -f "/tmp/nationwide-$STAMP.dump"
+```
+
+Put that in a cron job, and take EBS snapshots of the volume as a second line of defence. Restore
+with `pg_restore --clean --if-exists --dbname=nationwide <file>`.
+
+**Do not put the database password in the script**, in cron, or in any file that reaches git — use
+`~/.pgpass`, or a peer-authenticated local socket. The S3 copy needs no credentials: the instance
+role covers it.
+
+Application files need no backup plan of their own: they are in S3, which is already durable and
+versionable. Enable bucket versioning if you want protection against an accidental delete.
 
 ## CI/CD
 
 `.github/workflows/ci.yml` runs on every push/PR to `main`: install → build shared-types →
-generate Prisma client → `db push` against a throwaway single-node MongoDB replica set → lint → unit
+generate Prisma client → `migrate deploy` against a throwaway PostgreSQL service container → lint → unit
 tests (backend + frontend, `--workspaces --if-present` picks up both automatically) → backend
 e2e tests → build both apps → seed → a production-runtime smoke test (boots the built backend,
 hits `/api/v1` and `/api/v1/tracking/NW-DEMOTRACK1`) → `npm audit --audit-level=high`, which
@@ -246,30 +306,28 @@ chosen.
 
 ## Database access
 
-Every environment's `DATABASE_URL` should connect as a dedicated, least-privilege user — never
-an `atlasAdmin` or project-owner credential (INFRA-5). In Atlas → Database Access → Add New
-Database User, choose **Specific Privileges** and grant `readWrite` on the `nationwide` database
-only, rather than accepting the `Atlas admin` / `Read and write to any database` default the
-quickstart flow hands you. A leaked app credential should not be able to read other databases,
-create users, or drop the cluster.
+The database runs unauthenticated on loopback (INFRA-5), so `DATABASE_URL` carries no credential
+to leak. That trades a credential boundary for a network one, which holds only as long as the
+network boundary does:
 
-This matters more here than it would elsewhere, because of how Atlas network access works:
+The database listens on `127.0.0.1` inside the EC2 instance and is never exposed to the
+internet, so network reachability — not a credential — is the outer perimeter here:
 
-- **Atlas Network Access is an IP allowlist, and it is the outer perimeter.** A non-allowlisted
-  client is rejected during the TLS handshake, before authentication.
-- **Private networking (PrivateLink, VPC peering) requires M10+.** On the free/shared tiers it is
-  simply unavailable, so an allowlist entry is the only control there is.
-- Platforms with dynamic egress IPs (Railway, most PaaS) and developer laptops on residential
-  connections therefore end up on `0.0.0.0/0`. That is a deliberate tradeoff, not an oversight —
-  but it means **TLS plus the connection string are the entire defence**, so:
-  - keep `DATABASE_URL` out of git (`apps/backend/.env` is gitignored; `.env.example` carries
-    only placeholders),
-  - use a long random password unique to this cluster,
-  - rotate it if it is ever pasted into a chat, ticket, log, or CI output,
-  - keep the user scoped as above so the blast radius of a rotation-lag window is one database.
+- **Keep `5432` out of the security group.** Postgres should listen on `127.0.0.1` only
+  (`ss -lntp | grep 5432`); the backend container reaches it via `host.docker.internal`, which
+  resolves to the host's own loopback, not a public interface.
+- **Use a dedicated, least-privilege role.** `DATABASE_URL` should connect as `nationwide`, owner
+  of that one database — never as `postgres` or another superuser. A leaked app credential should
+  not be able to read other databases or drop the cluster.
+- **The password is a real secret.** It lives only in `backend/.env` on the instance (gitignored)
+  and in `~/.pgpass` for backups. It must never appear in a committed script, in a command line
+  (visible in `ps`), or in application logs — `PrismaService` never logs the connection string.
+- **SSH is the real attack surface.** Restrict `22` to your own IP, use key auth only, and keep
+  the instance patched.
+- **`backend/.env` on the instance holds every secret.** Keep it out of AMIs and snapshots you
+  share.
 
-CI never touches Atlas — it runs its own throwaway MongoDB container, so no allowlist entry
-exists for GitHub's runners.
+CI never touches a deployed database — it runs its own throwaway PostgreSQL service container.
 
 ## Auth audit trail
 
@@ -280,8 +338,8 @@ mutation actions (rate changes, payment updates, pickup-request lifecycle), so i
 can't represent a `CUSTOMER` login without a schema change. This is a deliberate tradeoff, not an
 oversight (INFRA-6) — but it means the audit trail for logins/failed-login patterns is **only as
 durable as your log pipeline**. Before production go-live, confirm your hosting platform actually
-captures and retains backend stdout (container log aggregation is standard on Railway/most
-container platforms, but isn't automatic everywhere) — without that, `LOGIN_FAILED` bursts
+captures and retains backend stdout (on a single EC2 instance this means configuring the
+CloudWatch agent or a `docker compose` logging driver — nothing captures stdout by default) — without that, `LOGIN_FAILED` bursts
 (credential stuffing) are invisible after the fact even though they're logged in real time.
 There is currently no admin-role-change feature in the app (`AdminUser.role` is set once at
 creation and not editable via any endpoint), so there is nothing yet for a `ROLE_CHANGED` audit
@@ -295,3 +353,36 @@ project's migrations have not been audited for backward-compatibility (no expand
 pattern enforced), so a rollback that also needs a migration rollback is a manual, careful
 operation: restore the pre-migration `migrations` table state and database backup together,
 don't just redeploy old code against a newer schema.
+
+## S3 file storage
+
+Invoice PDFs, company logos and rate-card PDFs are stored in the private bucket
+`nationwide-logistics-s3`, never on the instance filesystem. `backend/storage/` no longer exists.
+
+| What | Key prefix |
+|---|---|
+| Invoice PDFs | `invoices/<year>/<month>/<invoice-number>.pdf` |
+| Company logos | `uploads/company-logos/<settings-id>/<uuid>.<ext>` |
+| Rate-card PDFs | `rate-cards/<provider-id>/v<version>-<uuid>.pdf` |
+
+**Credentials.** There are none in the app. `StorageService` constructs an `S3Client` with only a
+region; on EC2 the SDK's default provider chain reads the `nantionwides3` instance role. Do not
+set `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` — the app does not read them and adding them only
+creates a long-lived credential to leak. Locally, use `AWS_PROFILE` with a named profile.
+
+**The role needs**, on `arn:aws:s3:::nationwide-logistics-s3/*`: `s3:GetObject`, `s3:PutObject`,
+`s3:DeleteObject`.
+
+**Access control.** The bucket keeps Block Public Access on and nothing sets an ACL. Files reach
+users two ways, both of which authorise first:
+
+- the authenticated download routes stream the object through the backend after the usual guards;
+- `CompanySettingsService.logoUrl` mints a 15-minute presigned URL for the admin UI's `<img>`.
+
+The public invoice link (`/api/v1/public/invoices/:id/:token`) is unchanged: still an HMAC in the
+path, still served through the backend, because Meta's servers fetch it with no session. It is not
+a presigned S3 URL and the bucket is not reachable directly.
+
+Set `NEXT_PUBLIC_S3_ORIGIN` on the frontend to the bucket's origin
+(`https://nationwide-logistics-s3.s3.<region>.amazonaws.com`) or the admin logo preview is blocked
+by the frontend's own `img-src` CSP.

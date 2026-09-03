@@ -17,9 +17,10 @@ Customer-facing shipment tracking platform. See [`docs/architecture-research.doc
 
 ## Stack
 
-- Frontend: Next.js + TypeScript (`apps/frontend`)
-- Backend: NestJS + TypeScript, modular monolith (`apps/backend`)
-- Database: MongoDB (Atlas) via Prisma (`apps/backend/prisma`)
+- Frontend: Next.js + TypeScript (`frontend`)
+- Backend: NestJS + TypeScript, modular monolith (`backend`)
+- Database: PostgreSQL via Prisma (`backend/prisma`)
+- File storage: Amazon S3 (invoice PDFs, company logos, rate-card PDFs)
 - Cache/Queue: Redis + BullMQ
 - Shared types: `packages/shared-types`
 
@@ -28,17 +29,17 @@ Customer-facing shipment tracking platform. See [`docs/architecture-research.doc
 Requires Docker, Node 20+.
 
 ```bash
-# 1. start Redis (the database is MongoDB Atlas, no local container)
+# 1. start the database and cache
 docker compose up -d redis
 
 # 2. install dependencies
 npm install
 
 # 3. set up env files
-cp apps/backend/.env.example apps/backend/.env
+cp backend/.env.example backend/.env
 
-# 4. sync the schema (MongoDB has no migration history — db push creates collections + indexes)
-cd apps/backend && npx prisma db push
+# 4. apply the schema
+cd backend && npx prisma migrate deploy
 
 # 5. seed the three dev logins — admin@nationwide.dev, pickup@nationwide.com and
 #    customer@nationwide.dev, all ChangeMe123! by default (the seed prints the table)
@@ -57,7 +58,7 @@ npm run dev:backend   # backend on 4000
 npm run dev:frontend  # frontend on 3004, backend API URL is auto-derived from BACKEND_PORT or NEXT_PUBLIC_API_BASE_URL
 ```
 
-**`packages/shared-types` must be built before `apps/backend` or `apps/frontend` will resolve it
+**`packages/shared-types` must be built before `backend` or `frontend` will resolve it
 correctly** — its `package.json` points `main`/`types` at compiled `dist/` output, not the raw
 `.ts` source. Re-run the build above whenever you change anything under `packages/shared-types/src`.
 The root `npm run build` handles this ordering automatically; `npm run dev:*` does not, since Nest's
@@ -93,17 +94,19 @@ Note: this machine also runs unrelated projects' containers on several default p
 6379 (another project) and 3000-3003 (a persistent IDE container) — so this repo uses fixed ports
 chosen to avoid all of them: backend `4000`, frontend `3004`, Redis `6380` (see
 `scripts/ports.cjs` and `docker-compose.yml`). Adjust if that's not the case in your environment.
-The database is MongoDB Atlas in every environment — nothing local to run, but your current IP has
-to be in Atlas → Network Access or the connection fails during the TLS handshake (see
-[Troubleshooting](docs/TROUBLESHOOTING.md)).
+The database is PostgreSQL. `docker-compose.yml` does not run one: production uses the
+PostgreSQL already installed on the EC2 host, and locally you point `DATABASE_URL` at whatever
+Postgres you have (a local install, or `docker run -p 5432:5432 -e POSTGRES_PASSWORD=... postgres:16`).
+Only Redis is in compose. Uploaded and generated files go to S3, not the local disk — see
+[Troubleshooting](docs/TROUBLESHOOTING.md) if `S3_BUCKET_NAME` is unset.
 
 ## Project structure
 
 See Section 14 of the architecture doc. Summary:
 
 ```
-/apps/frontend        - Next.js app (routes: /, /track, /orders, /admin)
-/apps/backend          - NestJS app (modular monolith: auth, customers, orders,
+/frontend        - Next.js app (routes: /, /track, /orders, /admin)
+/backend          - NestJS app (modular monolith: auth, customers, orders,
                           shipments, tracking, provider-integration, notifications, admin, jobs)
 /packages/shared-types - DTOs/enums shared between frontend and backend
 /infrastructure        - Docker, IaC, CI config
@@ -118,7 +121,7 @@ Phase 1 (Foundation) complete: monorepo scaffold, Docker Compose, CI skeleton, c
 
 Phase 2 (Authentication) complete: JWT access/refresh tokens with rotation, RBAC guards
 (customer/staff/admin), a seeded dev admin user, and a CI pipeline that runs the schema sync +
-e2e tests against a real MongoDB replica set.
+e2e tests against a real PostgreSQL database.
 
 Phase 3 (Customer system) complete: Customer CRUD (staff/admin only), E.164 phone validation,
 DPDP-compliant consent capture (`consentGivenAt`/`consentSource` stamped server-side at creation,

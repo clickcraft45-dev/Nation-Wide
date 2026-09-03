@@ -6,7 +6,7 @@ export interface CompanySettingsDto {
   id: string;
   companyName: string;
   tagline: string | null;
-  logoUrl: string | null; // served via the backend's /uploads static route
+  logoUrl: string | null; // short-lived presigned S3 URL; re-fetch rather than caching it
   primaryColor: string; // hex, e.g. "#4F46E5"
   website: string | null;
   supportEmail: string | null;

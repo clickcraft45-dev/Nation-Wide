@@ -6,7 +6,7 @@ async function run() {
   await assertPortFree(BACKEND_PORT, 'backend');
   console.log(`Starting backend on port ${BACKEND_PORT}`);
 
-  const child = spawn('npm', ['run', 'start:dev', '--workspace=apps/backend'], {
+  const child = spawn('npm', ['run', 'start:dev', '--workspace=backend'], {
     stdio: 'inherit',
     env: { ...process.env, PORT: String(BACKEND_PORT) },
   });

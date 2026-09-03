@@ -4,7 +4,7 @@
     {
       "name": "frontend",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--workspace=apps/frontend"],
+      "runtimeArgs": ["run", "dev", "--workspace=frontend"],
       "port": 3004,
       "autoPort": false,
       "env": { "PORT": "3004" }
@@ -12,7 +12,7 @@
     {
       "name": "backend",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "start:dev", "--workspace=apps/backend"],
+      "runtimeArgs": ["run", "start:dev", "--workspace=backend"],
       "port": 4000,
       "autoPort": false
     }

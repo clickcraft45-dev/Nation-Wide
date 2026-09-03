@@ -35,7 +35,7 @@ deployment, and documentation.
 ## Bugs Fixed
 
 - **Two independent, pre-existing `dist/main` path bugs** that would have failed any real
-  production start: `apps/backend/package.json`'s `start:prod` script and the CI smoke-test step
+  production start: `backend/package.json`'s `start:prod` script and the CI smoke-test step
   both referenced `dist/main`, but Nest's actual compiled entry point is `dist/src/main.js`. Found
   while boot-testing the new Docker image, fixed in both places.
 - **Hydration mismatches on statically-generated pages**: the login footer, marketing footer, and
@@ -131,7 +131,7 @@ the client-side gap in the SVG fix (see Bugs Fixed).
 6. CI builds and tests both apps but does not build/push the Docker images or deploy anywhere —
    add that once a target platform is chosen.
 7. Uploaded company logos live on the container's local filesystem
-   (`apps/backend/storage/uploads/`), which is not persisted across restarts/redeploys as
+   (now Amazon S3 — `backend/storage/` no longer exists), which used not to be persisted across restarts/redeploys as
    configured — move to object storage (S3-compatible) before relying on this in a real multi-instance
    or ephemeral-filesystem deployment.
 8. No application-level backup/restore tooling — relies entirely on the hosting provider's

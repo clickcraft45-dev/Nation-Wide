@@ -5,7 +5,7 @@ text-and-SVG output). **Prompt B** is for image models when you want to look at 
 **Prompt C** is a short one if you only want the type decision.
 
 Everything in these prompts matches what the app already ships — the palette tokens in
-`apps/frontend/app/globals.css`, the placeholder mark in `components/brand/logo.tsx`, and the
+`frontend/app/globals.css`, the placeholder mark in `components/brand/logo.tsx`, and the
 Poppins / Geist Mono pairing in `app/layout.tsx` — so whatever comes back can be dropped straight
 in.
 
@@ -154,12 +154,12 @@ when the mono face is used instead of the UI face. Be decisive.
 
 ## After you get the answers
 
-- The mark drops into `apps/frontend/components/brand/logo.tsx` — every screen already goes
+- The mark drops into `frontend/components/brand/logo.tsx` — every screen already goes
   through that one component, so replacing the internals of `NwMark` swaps the logo everywhere.
-- Palette tokens live in `:root` in `apps/frontend/app/globals.css`; keep the variable NAMES and
+- Palette tokens live in `:root` in `frontend/app/globals.css`; keep the variable NAMES and
   change only the values, or every component that consumes them has to be touched. The red scale
   is `--brand-red*` there, next to `--brand-navy` — and note the rule in the comment above it:
   brand red is identity, `--danger` is failure, and they are not interchangeable.
 - `app/icon.svg` carries the same geometry AND the same red as the mark, with the hex inlined
   (a static file cannot read CSS variables) — change one and change the other.
-- Fonts are loaded in `apps/frontend/app/layout.tsx` via `next/font/google`.
+- Fonts are loaded in `frontend/app/layout.tsx` via `next/font/google`.

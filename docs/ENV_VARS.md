@@ -1,10 +1,10 @@
 # Environment Variable Reference
 
-## Backend (`apps/backend/.env`, see `.env.example`)
+## Backend (`backend/.env`, see `.env.example`)
 
 | Variable | Required | Default (dev) | Notes |
 |---|---|---|---|
-| `DATABASE_URL` | Yes | — | MongoDB Atlas connection string, e.g. `mongodb+srv://user:pass@cluster.xxxxx.mongodb.net/nationwide?retryWrites=true&w=majority`. Must be a replica set (every Atlas cluster is) — Prisma's mongodb connector needs one for transactions. Use a least-privilege user with `readWrite` on this database only |
+| `DATABASE_URL` | Yes | — | PostgreSQL connection string, e.g. `postgresql://nationwide:pass@localhost:5432/nationwide?schema=public`. In production this is the Postgres installed on the EC2 host — `host.docker.internal` from inside the backend container, `localhost` when run natively. Port 5432 must never be internet-reachable. Never commit a real value |
 | `REDIS_URL` | Yes | — | Redis connection string, used for both caching and the BullMQ notifications queue |
 | `JWT_ACCESS_SECRET` | Yes | — | Signs short-lived access tokens. Must be a real, unguessable secret in any non-dev environment |
 | `JWT_REFRESH_SECRET` | Yes | — | Signs refresh tokens (httpOnly cookie). Must differ from `JWT_ACCESS_SECRET` |
@@ -33,7 +33,7 @@ A leaked real ICL credential pair was found and scrubbed from `.env.example` dur
 readiness pass (Aug 2026) — if you have an older checkout, regenerate your local `.env` from the
 current `.env.example` and rotate those credentials with ICL if you'd used the leaked ones.
 
-## Frontend (`apps/frontend`, build-time + runtime)
+## Frontend (`frontend`, build-time + runtime)
 
 | Variable | Required | Default (dev) | Notes |
 |---|---|---|---|
@@ -44,5 +44,5 @@ current `.env.example` and rotate those credentials with ICL if you'd used the l
 ## CI (`.github/workflows/ci.yml`)
 
 CI sets its own throwaway values for all required backend vars (`ci-only-*` secrets, a Redis
-service container, and a local single-node MongoDB replica set) — nothing there needs to match any
-real environment's values, and CI never connects to Atlas.
+service container, and a throwaway PostgreSQL service container) — nothing there needs to match any
+real environment's values, and CI never connects to a deployed database.
