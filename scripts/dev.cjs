@@ -13,7 +13,7 @@ async function run() {
   console.log(`Starting backend on port ${BACKEND_PORT}`);
   console.log(`Starting frontend on port ${FRONTEND_PORT} with backend API at ${backendApiUrl}`);
 
-  const backend = spawn('npm', ['run', 'start:dev', '--workspace=apps/backend'], {
+  const backend = spawn('npm', ['run', 'start:dev', '--workspace=backend'], {
     stdio: 'inherit',
     env: {
       ...process.env,
@@ -21,7 +21,7 @@ async function run() {
     },
   });
 
-  const frontend = spawn('npm', ['run', 'dev', '--workspace=apps/frontend'], {
+  const frontend = spawn('npm', ['run', 'dev', '--workspace=frontend'], {
     stdio: 'inherit',
     env: {
       ...process.env,

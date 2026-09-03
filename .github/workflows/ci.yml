@@ -11,6 +11,20 @@ jobs:
     runs-on: ubuntu-latest
 
     services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: nationwide
+          POSTGRES_PASSWORD: ci-only-not-a-real-password
+          POSTGRES_DB: nationwide
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U nationwide"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
       redis:
         image: redis:7-alpine
         ports:
@@ -22,9 +36,9 @@ jobs:
           --health-retries 5
 
     env:
-      # Throwaway local Mongo, never Atlas: CI must not need a network allowlist entry, and a
-      # run that seeds and mutates data must not point at a shared cluster.
-      DATABASE_URL: "mongodb://localhost:27017/nationwide?replicaSet=rs0"
+      # Throwaway local Postgres: a run that seeds and mutates data must never point at a
+      # deployed database.
+      DATABASE_URL: "postgresql://nationwide:ci-only-not-a-real-password@localhost:5432/nationwide"
       REDIS_URL: "redis://localhost:6379"
       JWT_ACCESS_SECRET: "ci-only-access-secret-not-for-prod"
       JWT_REFRESH_SECRET: "ci-only-refresh-secret-not-for-prod"
@@ -48,17 +62,6 @@ jobs:
           node-version: "20"
           cache: "npm"
 
-      # Not a service container: Prisma's mongodb connector needs a replica set for transactions,
-      # and service containers can't override the image's command to pass --replSet. The set is
-      # initiated with host localhost:27017 so the address the driver discovers is the same one
-      # the runner can reach.
-      - name: Start MongoDB (single-node replica set)
-        run: |
-          docker run -d --name mongo -p 27017:27017 mongo:7 --replSet rs0 --bind_ip_all
-          until docker exec mongo mongosh --quiet --eval 'db.adminCommand("ping").ok' >/dev/null 2>&1; do sleep 1; done
-          docker exec mongo mongosh --quiet --eval 'rs.initiate({_id:"rs0",members:[{_id:0,host:"localhost:27017"}]})'
-          until docker exec mongo mongosh --quiet --eval 'rs.status().myState === 1 || quit(1)' >/dev/null 2>&1; do sleep 1; done
-
       - name: Install dependencies
         run: npm ci
 
@@ -66,12 +69,13 @@ jobs:
         run: npm run build --workspace=packages/shared-types
 
       - name: Generate Prisma Client
-        run: npx prisma generate --schema=apps/backend/prisma/schema.prisma
+        run: npx prisma generate --schema=backend/prisma/schema.prisma
 
-      # db push, not migrate deploy: the mongodb connector has no migration history — the schema
-      # is applied by creating collections and indexes directly.
-      - name: Sync database schema
-        run: npx prisma db push --schema=apps/backend/prisma/schema.prisma
+      # migrate deploy, not db push: Postgres has a real migration history now, and CI applying
+      # the same migrations production will apply is the point — a migration that fails here does
+      # not reach the server.
+      - name: Apply database migrations
+        run: npx prisma migrate deploy --schema=backend/prisma/schema.prisma
 
       - name: Lint
         run: npm run lint --workspaces --if-present
@@ -80,16 +84,16 @@ jobs:
         run: npm run test --workspaces --if-present
 
       - name: E2E tests (backend, against mocked ICL adapter once integrated)
-        run: npm run test:e2e --workspace=apps/backend
+        run: npm run test:e2e --workspace=backend
 
       - name: Build
-        run: npm run build --workspace=apps/backend && npm run build --workspace=apps/frontend
+        run: npm run build --workspace=backend && npm run build --workspace=frontend
 
       - name: Seed database
-        run: npm run db:seed --workspace=apps/backend
+        run: npm run db:seed --workspace=backend
 
       - name: Production runtime smoke test
-        working-directory: apps/backend
+        working-directory: backend
         run: |
           node dist/src/main.js &
           SERVER_PID=$!

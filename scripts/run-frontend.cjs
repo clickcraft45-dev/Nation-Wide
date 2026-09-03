@@ -16,7 +16,7 @@ async function run() {
   const backendApiUrl = resolveBackendApiUrl();
   console.log(`Starting frontend on port ${FRONTEND_PORT} with backend API at ${backendApiUrl}`);
 
-  const child = spawn('npm', ['run', 'dev', '--workspace=apps/frontend'], {
+  const child = spawn('npm', ['run', 'dev', '--workspace=frontend'], {
     stdio: 'inherit',
     env: {
       ...process.env,

@@ -2,7 +2,7 @@
 
 ## "Cannot find module '@nationwide/shared-types'" (or type errors resolving it)
 
-`packages/shared-types` must be built before `apps/backend` or `apps/frontend` will resolve it —
+`packages/shared-types` must be built before `backend` or `frontend` will resolve it —
 its `package.json` points `main`/`types` at compiled `dist/`, not raw `.ts` source.
 
 ```bash
@@ -16,12 +16,28 @@ startup) do not — rebuild manually after changing anything under `packages/sha
 
 The response body tells you which check failed (`checks.database` / `checks.redis`). Most common
 causes: the Redis container not actually running (`docker compose ps`; note this repo uses the
-non-default port 6380, see `docker-compose.yml`), or `DATABASE_URL` not reaching Atlas.
+non-default port 6380, see `docker-compose.yml`), or `DATABASE_URL` not pointing at a reachable
+PostgreSQL.
 
-A `checks.database` failure that reports `received fatal alert: InternalError` against every
-shard host is Atlas refusing the TLS handshake, not a bad password: the cluster is paused, or your
-current IP is not in **Atlas → Network Access**. DNS resolving and TCP 27017 connecting does not
-rule this out — Atlas rejects at the TLS layer, after the socket opens.
+A `checks.database` failure mentioning `Transactions are not supported` or
+`relation "..." does not exist` means the migrations were never applied to this database. Run:
+
+```bash
+npx prisma migrate deploy --schema backend/prisma/schema.prisma
+```
+
+`ECONNREFUSED` on 5432 means Postgres is not running or `DATABASE_URL` names the wrong host. From
+inside the backend container the EC2 host is `host.docker.internal`, not `localhost` — `localhost`
+there is the container itself.
+
+## Invoice download or logo upload fails with "S3_BUCKET_NAME is not set"
+
+File storage is unconfigured. Set `S3_BUCKET_NAME` and `AWS_REGION` in `backend/.env`. On EC2 no
+credentials are needed — the instance IAM role supplies them. Locally, export `AWS_PROFILE` for a
+named profile; never put access keys in `.env`.
+
+An `AccessDenied` instead means the IAM role lacks `s3:GetObject`/`s3:PutObject`/`s3:DeleteObject`
+on `arn:aws:s3:::<bucket>/*`.
 
 ## Login fails with "Invalid email or password" for a seeded account
 

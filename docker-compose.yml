@@ -1,12 +1,17 @@
-# The database is MongoDB Atlas in every environment, so there is no db service here — the
-# backend reads DATABASE_URL out of apps/backend/.env like it does when run natively. Redis is
-# the only stateful dependency worth running locally.
+# Production runs the backend and Redis here; PostgreSQL is installed directly on the EC2 host and
+# is NOT duplicated as a container. The backend reaches it over the host loopback — see the
+# extra_hosts entry below.
+#
+# There is no database container and no mongo service: MongoDB was only ever the testing database
+# and is gone from the architecture entirely.
 services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
     ports:
-      - "6380:6379" # 6379 is taken by another project's container on this machine
+      # Loopback only. Redis has no password here, so not listening on a public interface is the
+      # control that keeps it private — the EC2 security group must not open 6379 either.
+      - "127.0.0.1:6380:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -15,45 +20,33 @@ services:
       timeout: 5s
       retries: 5
 
-  # backend/frontend are containerized only for smoke-testing the production images or as a
-  # deploy starting point — `npm run dev` runs them natively against the postgres/redis
-  # containers above, not through these two services.
   backend:
     build:
       context: .
-      dockerfile: apps/backend/Dockerfile
+      dockerfile: backend/Dockerfile
     restart: unless-stopped
     depends_on:
       redis:
         condition: service_healthy
     ports:
-      - "4000:4000"
+      # Loopback only: Nginx/Caddy on the host terminates TLS and proxies to this port. The Node
+      # process is never exposed to the internet directly, and 4000 stays closed in the security
+      # group.
+      - "127.0.0.1:4000:4000"
+    # host.docker.internal resolves to the EC2 host itself, which is where PostgreSQL runs. This
+    # is what lets DATABASE_URL point at the host's Postgres without publishing 5432 anywhere.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     # Reads the same file the natively-run backend reads instead of re-listing every variable
     # here. That hand-maintained copy is what silently drifted (it still said Postgres long after
     # the app moved to MongoDB); one source of truth can't drift from itself. Copy
-    # apps/backend/.env.example to apps/backend/.env first — compose fails fast if it's missing.
+    # backend/.env.example to backend/.env first — compose fails fast if it's missing.
     env_file:
-      - apps/backend/.env
+      - backend/.env
     # Only the values that must differ inside the compose network. These win over env_file.
     environment:
       REDIS_URL: redis://redis:6379
       PORT: 4000
-
-  frontend:
-    build:
-      context: .
-      dockerfile: apps/frontend/Dockerfile
-      # Build args, not runtime environment: see the ARG block in the Dockerfile.
-      args:
-        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:4000/api/v1}
-        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-http://localhost:3004}
-    restart: unless-stopped
-    depends_on:
-      - backend
-    ports:
-      - "3004:3000"
-    environment:
-      PORT: 3000
 
 volumes:
   redis_data:

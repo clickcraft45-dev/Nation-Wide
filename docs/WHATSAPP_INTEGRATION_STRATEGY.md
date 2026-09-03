@@ -351,7 +351,7 @@ Sources: [Meta — Template categorization](https://developers.facebook.com/docu
 ### Recommended template list
 
 Cross-referenced against NationWide's **existing** `NOTIFICATION_TEMPLATES` constant
-(`apps/backend/src/modules/notifications/templates.ts`) — that file already defines the template
+(`backend/src/modules/notifications/templates.ts`) — that file already defines the template
 *names* the codebase will call; this section maps each to what should actually be submitted to
 Meta, and flags which ones can be merged or are genuinely unnecessary.
 

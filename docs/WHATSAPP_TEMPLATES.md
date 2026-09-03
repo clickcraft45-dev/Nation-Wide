@@ -46,7 +46,7 @@ you can migrate one at a time.
 
 ## 3. The templates
 
-Names match `NOTIFICATION_TEMPLATES` in `apps/backend/src/modules/notifications/templates.ts`, and
+Names match `NOTIFICATION_TEMPLATES` in `backend/src/modules/notifications/templates.ts`, and
 the wording matches `message-bodies.ts` so customers get the same message either way. This table is
 generated from that file — if you edit wording, edit it there and regenerate, don't hand-edit here.
 

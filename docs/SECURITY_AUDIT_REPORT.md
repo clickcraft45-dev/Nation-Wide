@@ -3,7 +3,7 @@
 **Date:** 2026-08-15
 **Auditor role:** Application security review (authentication, authorization, injection, business
 logic, infrastructure, dependencies)
-**Scope:** `apps/backend` (NestJS/Prisma/PostgreSQL API) and `apps/frontend` (Next.js/React) as
+**Scope:** `backend` (NestJS/Prisma/PostgreSQL API) and `frontend` (Next.js/React) as
 they exist in the working tree at audit time.
 **Method:** Direct source review of every controller, guard, DTO, and service in the areas listed
 below — not a generic checklist. Every finding cites the exact file and line it was found at.
@@ -33,12 +33,12 @@ mechanical, not structural.
 | INFRA-1 | Endpoint-specific `@Throttle` overrides added: tracking 20/min/IP, quote/order/pickup-request creation 10/min. |
 | AUTH-1 | `changePassword` now nulls `hashedRefreshToken` in the same write as the password hash — a stolen refresh token no longer survives a password change. Frontend signs the user out immediately after a successful change. |
 | INFRA-2 | `continue-on-error: true` removed from the CI `npm audit --audit-level=high` step — it now blocks the merge. Three unrelated pre-existing high-severity transitive advisories (fast-uri, js-yaml, nanoid) were also cleared via `npm audit fix` so this gate isn't red on day one. |
-| INFRA-3 | Both Dockerfiles now run as the non-root `node` user (uid/gid 1000, pre-created in the official `node:20-bookworm-slim` image) rather than root. Verified live: both images built, booted against real Postgres/Redis, confirmed `whoami` → `node`, and confirmed `storage/logos`/`storage/uploads` are writable by that user. |
+| INFRA-3 | Both Dockerfiles now run as the non-root `node` user (uid/gid 1000, pre-created in the official `node:20-bookworm-slim` image) rather than root. Verified live: both images built, booted against real Postgres/Redis, confirmed `whoami` → `node`, The image now needs no writable directory at all: every uploaded and generated file goes to S3. |
 | BIZ-2 | `collectPayment` now rejects a `collectedAmount` that deviates from the verified/estimated price by more than max(5%, ₹50). |
 | AUTHZ-1 | Covered by INFRA-1's tracking-endpoint throttle. |
 | VAL-1 | `@Max` ceilings added to `baseRate`/`nationwideCut` (₹10,00,000) and `gstPercent` (100%) across every rate DTO, plus `collectedAmount`/`paidAmount` (₹10,00,000). |
 | VAL-2 | `CreateCountryDto.code` now requires `@Length(2,2)` + `/^[A-Z]{2}$/` (real ISO 3166-1 alpha-2 shape only). |
-| VAL-3 | `next.config.ts` now sets a site-wide CSP, `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, and `Strict-Transport-Security` on every page response. Verified live via `curl -I` against a running container. **Amended 2026-08-27** — an interim `middleware.ts` issuing a per-request `nonce` + `strict-dynamic` policy was reverted. A nonce has to be stamped onto the script tags while the page renders, and virtually every route here is prerendered at build time, so the shipped HTML contained zero nonce attributes and the browser blocked every script on every page: the server HTML painted, hydration never ran, and nothing in the app was clickable. `script-src` is now `'self' 'unsafe-inline'`. Everything else is unchanged — `object-src 'none'`, `base-uri 'self'`, `form-action 'self'`, `frame-ancestors 'none'`, and the scoped `connect-src`/`img-src` — and the app contains no `dangerouslySetInnerHTML`, so React's own escaping remains the primary defence. Guarded against reintroduction by `apps/frontend/next.config.test.ts`. |
+| VAL-3 | `next.config.ts` now sets a site-wide CSP, `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, and `Strict-Transport-Security` on every page response. Verified live via `curl -I` against a running container. **Amended 2026-08-27** — an interim `middleware.ts` issuing a per-request `nonce` + `strict-dynamic` policy was reverted. A nonce has to be stamped onto the script tags while the page renders, and virtually every route here is prerendered at build time, so the shipped HTML contained zero nonce attributes and the browser blocked every script on every page: the server HTML painted, hydration never ran, and nothing in the app was clickable. `script-src` is now `'self' 'unsafe-inline'`. Everything else is unchanged — `object-src 'none'`, `base-uri 'self'`, `form-action 'self'`, `frame-ancestors 'none'`, and the scoped `connect-src`/`img-src` — and the app contains no `dangerouslySetInnerHTML`, so React's own escaping remains the primary defence. Guarded against reintroduction by `frontend/next.config.test.ts`. |
 | BIZ-4 | `CreateQuoteDto.weightKg` capped at `@Max(1000)`. |
 | BIZ-3 | Both the webhook verify-token comparison and the new signature comparison use `crypto.timingSafeEqual`, not `===`. |
 | AUTH-2 | `/auth/register` now returns the identical conflict message regardless of whether the email or the phone number matched an existing account. |
@@ -95,7 +95,7 @@ high-impact — money/data/RCE at scale) · **High** (serious impact, some preco
 ### DEPENDENCIES
 
 #### DEP-1 — HIGH — Next.js version has multiple public HIGH-severity CVEs
-**Description:** `apps/frontend` runs `next@16.2.10`. `npm audit` reports this version is affected
+**Description:** `frontend` runs `next@16.2.10`. `npm audit` reports this version is affected
 by, among others: unauthenticated disclosure of internal Server Function endpoints
 (GHSA-955p-x3mx-jcvp), SSRF in Server Actions on custom servers (GHSA-89xv-2m56-2m9x), SSRF via
 attacker-controlled rewrite destination hostname (GHSA-p9j2-gv94-2wf4), middleware/proxy bypass
@@ -109,15 +109,15 @@ cloud metadata endpoints if deployed on AWS/GCP/Azure) that are not meant to be 
 **Impact:** Information disclosure and SSRF are both directly actionable against a deployed
 instance without any credentials. SSRF against cloud metadata services can lead to credential
 theft (IAM role tokens) in the worst case, depending on hosting provider.
-**Fix:** `npm install next@16.3.1 --workspace=apps/frontend` (or later patch), re-run `npm audit`
+**Fix:** `npm install next@16.3.1 --workspace=frontend` (or later patch), re-run `npm audit`
 to confirm zero remaining `next` advisories, re-test the app (`npm run build`, smoke-test key
 pages) since this is a semver-minor bump that can carry behavior changes.
-**Test:** `npm audit --workspace=apps/frontend` shows no `next` advisories; manually verify no
+**Test:** `npm audit --workspace=frontend` shows no `next` advisories; manually verify no
 Server Action/rewrite regression by re-running the app's existing test suite and hitting the
 quote/order flows end-to-end.
 
 #### DEP-2 — HIGH — `sharp` / libvips has public HIGH-severity CVEs (both apps)
-**Description:** `sharp <0.35.0` is installed in both `apps/backend` and `apps/frontend`
+**Description:** `sharp <0.35.0` is installed in both `backend` and `frontend`
 (transitively via Next's image optimizer and directly for PDF/logo processing in the backend).
 `npm audit` cites CVE-2026-33327, CVE-2026-33328, CVE-2026-35590, CVE-2026-35591 in the bundled
 libvips. Fix available at `sharp@0.35.3` (breaking change per npm's own flag).
@@ -133,7 +133,7 @@ an image URL rendered through `/_next/image` (if that route accepts external URL
 **Fix:** `npm install sharp@0.35.3` in both workspaces; run `npm run build` in both apps afterward
 and manually re-verify the logo upload → PDF generation flow (`RateCardPdfService`) and the
 Next.js image optimizer still function, since this is flagged as a breaking upgrade.
-**Test:** `npm audit --workspace=apps/backend` / `--workspace=apps/frontend` show no `sharp`
+**Test:** `npm audit --workspace=backend` / `--workspace=frontend` show no `sharp`
 advisories; upload a company logo through the admin UI and confirm a rate-card PDF still renders
 the logo correctly.
 
@@ -312,7 +312,7 @@ low current risk — cheap to fix, removes the theoretical path-traversal shape 
 **Test:** Attempt to create a country with `code: "../evil"` → expect 400 post-fix.
 
 #### VAL-3 — LOW/MEDIUM — No page-level Content-Security-Policy on the frontend
-**Description:** `apps/frontend/next.config.ts:8-16` sets a CSP scoped only to Next's image
+**Description:** `frontend/next.config.ts:8-16` sets a CSP scoped only to Next's image
 optimizer responses (`images.contentSecurityPolicy`), not the application's actual HTML pages.
 There is no `middleware.ts` and no `headers()` function providing a site-wide CSP, and `helmet()`
 on the backend (which does set a CSP) only covers API JSON responses, not the pages the browser
@@ -364,7 +364,7 @@ still caught.
 post-fix.
 
 #### INFRA-3 — MEDIUM — Application containers run as root
-**Description:** Neither `apps/backend/Dockerfile` nor `apps/frontend/Dockerfile` contains a
+**Description:** Neither `backend/Dockerfile` nor `frontend/Dockerfile` contains a
 `USER` directive — both run their final process as root inside the container.
 **Attack scenario:** Root-in-container is not itself remotely exploitable, but it removes a layer
 of defense-in-depth: if any other vulnerability in this report (or an undiscovered one) achieves
