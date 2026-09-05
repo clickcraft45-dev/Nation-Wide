@@ -1357,9 +1357,10 @@ async function reset() {
     'quote', 'customer',
   ];
   for (const model of models) {
-    // Quote.selectedOption <-> RateQuoteOption.quote is a reference cycle, and MongoDB emulates
-    // referential actions in the Prisma client — so the options can only be deleted once no quote
-    // still points at one. Same for orderId, whose orders are already gone by this point.
+    // Quote.selectedOption <-> RateQuoteOption.quote is a reference cycle, so both FKs are
+    // ON DELETE NO ACTION — the options can only be deleted once no quote still points at one,
+    // and Postgres now enforces that rather than merely expecting it. orderId is nulled in the
+    // same statement for tidiness; its own FK is ON DELETE SET NULL, so it would clear itself.
     if (model === 'rateQuoteOption') {
       await prisma.quote.updateMany({ data: { selectedOptionId: null, orderId: null } });
     }
