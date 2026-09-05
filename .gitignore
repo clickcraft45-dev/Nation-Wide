@@ -16,3 +16,6 @@ coverage/
 backups/
 .open-next/
 .wrangler/
+
+# SSH keys — never commit
+*.pem
