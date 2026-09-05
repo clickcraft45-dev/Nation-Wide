@@ -64,3 +64,46 @@ export interface DashboardSummaryDto {
   dropOffs: number;
   pendingPayments: number;
 }
+
+// ---------------------------------------------------------------------------
+// Staff / admin account management
+// ---------------------------------------------------------------------------
+
+/**
+ * A STAFF or ADMIN account. PICKUP_PARTNER rows live in the same table but are managed through
+ * their own endpoints (see PickupPartnerDto) — the two have different lifecycles and different
+ * people administer them.
+ *
+ * There is deliberately no password field: the hash never leaves the backend.
+ */
+export interface AdminUserDto {
+  id: string;
+  email: string;
+  name: string | null;
+  phone: string | null;
+  role: 'STAFF' | 'ADMIN';
+  isActive: boolean;
+  createdAt: string; // ISO 8601
+  updatedAt: string; // ISO 8601
+}
+
+export interface CreateAdminUserDto {
+  email: string;
+  password: string;
+  role: 'STAFF' | 'ADMIN';
+  name?: string;
+  phone?: string;
+}
+
+/** Every field optional — the dashboard PATCHes only what changed. */
+export interface UpdateAdminUserDto {
+  name?: string;
+  phone?: string;
+  role?: 'STAFF' | 'ADMIN';
+  /** Deactivating also revokes the account's refresh token, ending its sessions. */
+  isActive?: boolean;
+}
+
+export interface ResetAdminUserPasswordDto {
+  password: string;
+}

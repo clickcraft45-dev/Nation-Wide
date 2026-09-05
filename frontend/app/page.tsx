@@ -6,6 +6,7 @@ import { MarketingHowItWorks } from "@/components/marketing/how-it-works";
 import { MarketingAbout } from "@/components/marketing/about";
 import { MarketingTrustedNetwork } from "@/components/marketing/trusted-network";
 import { MarketingCapabilities } from "@/components/marketing/capabilities";
+import { MarketingReviews } from "@/components/marketing/reviews";
 import { MarketingFaqs } from "@/components/marketing/faqs";
 import { MarketingFinalCta } from "@/components/marketing/final-cta";
 import { MarketingFooter } from "@/components/marketing/footer";
@@ -47,6 +48,9 @@ export default function HomePage() {
       </Reveal>
       <Reveal from="fade">
         <MarketingCapabilities />
+      </Reveal>
+      <Reveal from="fade">
+        <MarketingReviews />
       </Reveal>
       <Reveal from="fade">
         <MarketingFaqs />

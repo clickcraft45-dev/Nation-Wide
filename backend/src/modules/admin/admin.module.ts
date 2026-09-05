@@ -13,6 +13,8 @@ import { AdminZonesController } from './admin-zones.controller';
 import { AdminRatesController } from './admin-rates.controller';
 import { AdminCompanySettingsController } from './admin-company-settings.controller';
 import { AdminRateCardsController } from './admin-rate-cards.controller';
+import { AdminUsersController } from './admin-users.controller';
+import { AdminUsersService } from './admin-users.service';
 import { PickupPartnersController } from './pickup-partners.controller';
 import { PickupPartnersService } from './pickup-partners.service';
 import { AdminPickupRequestsController } from './admin-pickup-requests.controller';
@@ -51,8 +53,9 @@ import { PickupRequestsModule } from '../pickup-requests/pickup-requests.module'
     AdminCompanySettingsController,
     AdminRateCardsController,
     PickupPartnersController,
+    AdminUsersController,
     AdminPickupRequestsController,
   ],
-  providers: [AdminService, PickupPartnersService],
+  providers: [AdminService, PickupPartnersService, AdminUsersService],
 })
 export class AdminModule {}

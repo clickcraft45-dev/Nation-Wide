@@ -12,6 +12,14 @@ const API_ORIGIN = new URL(
 // S3: set NEXT_PUBLIC_S3_ORIGIN to e.g. https://nationwide-logistics-s3.s3.ap-south-1.amazonaws.com.
 const S3_ORIGIN = process.env.NEXT_PUBLIC_S3_ORIGIN ?? "";
 
+// Cloudflare injects its Web Analytics beacon into every HTML response when the feature is on
+// for the zone. It is added at the edge, AFTER Next.js renders, so nothing in this repo requests
+// it and no amount of app-side code review reveals why it is there. Without these two entries the
+// browser blocks it on every page load and the console fills with CSP violations.
+// Remove them only if Web Analytics is turned off in the Cloudflare dashboard.
+const CF_BEACON_SCRIPT = "https://static.cloudflareinsights.com";
+const CF_BEACON_REPORT = "https://cloudflareinsights.com";
+
 const isDev = process.env.NODE_ENV !== "production";
 
 /**
@@ -43,14 +51,16 @@ const isDev = process.env.NODE_ENV !== "production";
 const CSP = [
   "default-src 'self'",
   // Dev additionally needs 'unsafe-eval' for Turbopack's HMR runtime; production never gets it.
-  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
+  `script-src 'self' 'unsafe-inline' ${CF_BEACON_SCRIPT}${isDev ? " 'unsafe-eval'" : ""}`,
   // Tailwind/Radix ship some styling via inline <style>/style attributes at runtime. style-src is
   // a far lower-value target than script-src, so 'unsafe-inline' here is uncontroversial.
   "style-src 'self' 'unsafe-inline'",
   `img-src 'self' data: ${API_ORIGIN} ${S3_ORIGIN}`.trim(),
   "font-src 'self' data:",
   // 'self' also covers the same-origin ws:// upgrade Turbopack's HMR socket uses in dev.
-  `connect-src 'self' ${API_ORIGIN}`,
+  // The beacon POSTs its measurements to cloudflareinsights.com/cdn-cgi/rum — allowing the
+  // script without this just moves the CSP violation from load time to report time.
+  `connect-src 'self' ${API_ORIGIN} ${CF_BEACON_REPORT}`,
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",

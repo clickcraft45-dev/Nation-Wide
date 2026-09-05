@@ -12,7 +12,8 @@
     "dev:frontend": "node ./scripts/run-frontend.cjs",
     "build": "npm run build --workspace=packages/shared-types && npm run build --workspace=backend && npm run build --workspace=frontend",
     "lint": "npm run lint --workspaces --if-present",
-    "test": "npm run test --workspaces --if-present"
+    "test": "npm run test --workspaces --if-present",
+    "ship": "node ./scripts/ship.cjs"
   },
   "engines": {
     "node": ">=20"
