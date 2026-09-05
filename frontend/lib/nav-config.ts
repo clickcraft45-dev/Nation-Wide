@@ -14,6 +14,7 @@ import {
   Tag,
   ClipboardList,
   UserCog,
+  ShieldCheck,
   CalendarClock,
   Home,
   type LucideIcon,
@@ -52,6 +53,9 @@ export const ADMIN_NAV_GROUPS: NavGroup[] = [
       { label: "Pickup Requests", href: "/admin/pickup-requests", icon: ClipboardList },
       { label: "Pickup Partners", href: "/admin/pickup-partners", icon: UserCog },
       { label: "Customers", href: "/admin/customers", icon: Users },
+      // ADMIN-only, matching AdminUsersController: anything less lets a STAFF account promote
+      // itself to ADMIN, which makes the role boundary decorative.
+      { label: "Staff & Admins", href: "/admin/users", icon: ShieldCheck, roles: ["ADMIN"] },
     ],
   },
   {
