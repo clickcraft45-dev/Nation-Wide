@@ -1,6 +1,9 @@
 import {
   Body,
   Controller,
+  Delete,
+  HttpCode,
+  HttpStatus,
   Get,
   Param,
   Patch,
@@ -61,5 +64,15 @@ export class AdminUsersController {
     return toAdminUserDto(
       await this.adminUsers.resetPassword(id, dto.password, user.sub),
     );
+  }
+
+  // Only ever succeeds for an account with no recorded activity — see AdminUsersService.remove.
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async remove(
+    @Param('id') id: string,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<void> {
+    await this.adminUsers.remove(id, user.sub);
   }
 }

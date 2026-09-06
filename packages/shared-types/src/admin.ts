@@ -76,12 +76,15 @@ export interface DashboardSummaryDto {
  *
  * There is deliberately no password field: the hash never leaves the backend.
  */
+/** Every internal role. CUSTOMER is excluded — customers are not AdminUser rows. */
+export type ManagedAdminRole = 'STAFF' | 'ADMIN' | 'PICKUP_PARTNER';
+
 export interface AdminUserDto {
   id: string;
   email: string;
   name: string | null;
   phone: string | null;
-  role: 'STAFF' | 'ADMIN';
+  role: ManagedAdminRole;
   isActive: boolean;
   createdAt: string; // ISO 8601
   updatedAt: string; // ISO 8601
@@ -90,6 +93,8 @@ export interface AdminUserDto {
 export interface CreateAdminUserDto {
   email: string;
   password: string;
+  // Creation stays STAFF/ADMIN: partner accounts come from the application-approval flow, which
+  // records who approved whom. An existing account can still be moved to PICKUP_PARTNER by edit.
   role: 'STAFF' | 'ADMIN';
   name?: string;
   phone?: string;
@@ -99,7 +104,7 @@ export interface CreateAdminUserDto {
 export interface UpdateAdminUserDto {
   name?: string;
   phone?: string;
-  role?: 'STAFF' | 'ADMIN';
+  role?: ManagedAdminRole;
   /** Deactivating also revokes the account's refresh token, ending its sessions. */
   isActive?: boolean;
 }

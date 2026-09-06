@@ -1,28 +1,42 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
-import type { AdminUser, Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import type { AdminUser } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { CreateAdminUserDto } from './dto/create-admin-user.dto';
 import { UpdateAdminUserDto } from './dto/update-admin-user.dto';
 
 const PASSWORD_HASH_ROUNDS = 10;
 
-/** STAFF and ADMIN only. PICKUP_PARTNER rows are managed by PickupPartnersService. */
-const MANAGED_ROLES: Prisma.EnumAdminRoleFilter = { in: ['STAFF', 'ADMIN'] };
+/**
+ * Every internal account. PICKUP_PARTNER is included so one screen manages all staff — a role
+ * change between the office and the field is then an edit, not a delete-and-recreate that would
+ * orphan the person's history. PickupPartnersService still owns partner *creation* (and the
+ * application-approval path that calls it); this service owns listing, editing and removal.
+ *
+ * CUSTOMER never appears: customers are rows in the customers table, and an AdminUser carrying
+ * that role would be able to authenticate with no usable surface anywhere in the app.
+ */
+const MANAGED_ROLES: Prisma.EnumAdminRoleFilter = {
+  in: ['STAFF', 'ADMIN', 'PICKUP_PARTNER'],
+};
 
 /**
  * Staff/admin account management — the gap PickupPartnersService's own comment names: until now
  * STAFF/ADMIN rows could only be created by the seed script, and a role could never be changed.
  *
- * THERE IS NO DELETE, and that is not an oversight. AdminUser is the target of twelve foreign
- * keys (audit logs, quoted quotes, assigned pickups, issued invoices, ...), so Postgres refuses
- * the delete outright — and it should: removing the actor would erase who priced a quote or
- * issued a statutory invoice. Deactivation is the terminal state.
+ * DELETE exists only for accounts that never did anything. AdminUser is the target of thirteen
+ * foreign keys (audit logs, quoted quotes, assigned pickups, issued invoices, ...) and Postgres
+ * refuses to remove a referenced row — correctly, because erasing the actor would erase who
+ * priced a quote or issued a statutory invoice. So remove() lets the database decide: a typo
+ * account with no history is deleted outright, and anything with history is refused with a
+ * message pointing at deactivation, which remains the terminal state for a real account.
  */
 @Injectable()
 export class AdminUsersService {
@@ -142,6 +156,52 @@ export class AdminUsersService {
     return updated;
   }
 
+  /**
+   * Removes an account that never did anything — a typo, a duplicate, an application approved
+   * twice. Anything that has acted in the system is refused, because the thirteen foreign keys
+   * pointing at admin_users are what record who priced a quote or issued a statutory invoice.
+   *
+   * The reference check is Postgres's own: attempting the delete and catching P2003 is both
+   * simpler and more reliable than counting thirteen relations by hand, which would silently go
+   * stale the next time someone adds a fourteenth.
+   */
+  async remove(id: string, actorId: string): Promise<void> {
+    const existing = await this.findManagedOrThrow(id);
+
+    // Same two lockout guards as update() — deleting yourself or the last admin is worse than
+    // demoting either, and has no recovery path inside the app.
+    if (id === actorId) {
+      throw new ForbiddenException('You cannot delete your own account');
+    }
+    if (existing.role === 'ADMIN' && (await this.activeAdminCount()) <= 1) {
+      throw new BadRequestException(
+        'This is the last active admin — promote another admin first',
+      );
+    }
+
+    try {
+      await this.prisma.adminUser.delete({ where: { id } });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2003'
+      ) {
+        throw new ConflictException(
+          'This account has activity recorded against it and cannot be deleted. Deactivate it instead — that ends every session and blocks sign-in, while keeping the record of what they did.',
+        );
+      }
+      throw error;
+    }
+
+    await this.audit(
+      actorId,
+      'ADMIN_USER_DELETED',
+      id,
+      { email: existing.email, role: existing.role },
+      {},
+    );
+  }
+
   private activeAdminCount(): Promise<number> {
     return this.prisma.adminUser.count({
       where: { role: 'ADMIN', isActive: true },
@@ -150,9 +210,8 @@ export class AdminUsersService {
 
   private async findManagedOrThrow(id: string): Promise<AdminUser> {
     const user = await this.prisma.adminUser.findUnique({ where: { id } });
-    // A PICKUP_PARTNER id must 404 here rather than being editable through this endpoint —
-    // otherwise this becomes a second, ruleless way to edit partner accounts.
-    if (!user || (user.role !== 'STAFF' && user.role !== 'ADMIN')) {
+    // A CUSTOMER-role row (none exist today) must still 404 rather than become editable here.
+    if (!user || user.role === 'CUSTOMER') {
       throw new NotFoundException(`Admin user ${id} not found`);
     }
     return user;

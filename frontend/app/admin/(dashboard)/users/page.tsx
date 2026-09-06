@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ShieldCheck } from "lucide-react";
-import type { AdminUserDto } from "@nationwide/shared-types";
+import type { AdminUserDto, ManagedAdminRole } from "@nationwide/shared-types";
 import { apiClient, ApiError, errorMessage } from "@/lib/api-client";
 import {
   Table,
@@ -19,6 +19,16 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
 import { useAuth } from "@/state/auth-context";
 import { AdminUserDialog } from "@/components/admin-users/admin-user-dialog";
+import { EditAdminUserDialog } from "@/components/admin-users/edit-admin-user-dialog";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+
+const ROLE_OPTIONS: ManagedAdminRole[] = ['STAFF', 'ADMIN', 'PICKUP_PARTNER'];
+
+const ROLE_LABELS: Record<ManagedAdminRole, string> = {
+  STAFF: 'Staff',
+  ADMIN: 'Admin',
+  PICKUP_PARTNER: 'Pickup partner',
+};
 
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<AdminUserDto[]>([]);
@@ -70,14 +80,29 @@ export default function AdminUsersPage() {
     }
   }
 
+  async function remove(u: AdminUserDto) {
+    try {
+      await apiClient.delete(`/admin/users/${u.id}`);
+      setUsers((prev) => prev.filter((x) => x.id !== u.id));
+      showToast({ variant: "success", title: `${u.email} deleted` });
+    } catch (err) {
+      // A 409 means the account has activity recorded against it and says to deactivate
+      // instead — exactly the guidance the admin needs, so it is shown verbatim.
+      showToast({
+        variant: "error",
+        title: errorMessage(err, "Couldn't delete the account."),
+      });
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-foreground">Staff &amp; Admins</h1>
+          <h1 className="text-xl font-semibold text-foreground">Staff, Admins &amp; Partners</h1>
           <p className="text-sm text-muted-foreground">
-            Internal accounts that can sign into this panel. Pickup partners are managed
-            separately, and customers under Customers.
+            Every internal account. Change a role to move someone between the office and the
+            field without recreating them. Customers live under Customers.
           </p>
         </div>
         <AdminUserDialog
@@ -120,7 +145,25 @@ export default function AdminUsersPage() {
                   </TableCell>
                   <TableCell className="text-muted-foreground">{u.email}</TableCell>
                   <TableCell>
-                    <Badge variant={u.role === "ADMIN" ? "success" : "neutral"}>{u.role}</Badge>
+                    <select
+                      aria-label={`Role for ${u.email}`}
+                      value={u.role}
+                      disabled={isSelf}
+                      onChange={(e) =>
+                        patch(
+                          u.id,
+                          { role: e.target.value as ManagedAdminRole },
+                          `Role changed to ${ROLE_LABELS[e.target.value as ManagedAdminRole]}`,
+                        )
+                      }
+                      className="rounded-md border border-border bg-background px-2 py-1 text-sm text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {ROLE_OPTIONS.map((role) => (
+                        <option key={role} value={role}>
+                          {ROLE_LABELS[role]}
+                        </option>
+                      ))}
+                    </select>
                   </TableCell>
                   <TableCell>
                     <Badge variant={u.isActive ? "success" : "neutral"}>
@@ -128,21 +171,20 @@ export default function AdminUsersPage() {
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <div className="flex gap-2">
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        disabled={isSelf}
-                        onClick={() =>
-                          patch(
-                            u.id,
-                            { role: u.role === "ADMIN" ? "STAFF" : "ADMIN" },
-                            u.role === "ADMIN" ? "Changed to Staff" : "Promoted to Admin",
+                    <div className="flex flex-wrap gap-2">
+                      <EditAdminUserDialog
+                        user={u}
+                        onSaved={(updated) =>
+                          setUsers((prev) =>
+                            prev.map((x) => (x.id === updated.id ? updated : x)),
                           )
                         }
-                      >
-                        {u.role === "ADMIN" ? "Make Staff" : "Make Admin"}
-                      </Button>
+                        trigger={
+                          <Button variant="secondary" size="sm">
+                            Edit
+                          </Button>
+                        }
+                      />
                       <Button
                         variant="secondary"
                         size="sm"
@@ -157,6 +199,18 @@ export default function AdminUsersPage() {
                       >
                         {u.isActive ? "Deactivate" : "Reactivate"}
                       </Button>
+                      <ConfirmDialog
+                        title={`Delete ${u.email}?`}
+                        description="This only works for an account with no recorded activity. Anything that has priced a quote, run a pickup or issued an invoice must be deactivated instead, so the record of what they did survives."
+                        confirmLabel="Delete"
+                        variant="danger"
+                        onConfirm={() => remove(u)}
+                        trigger={
+                          <Button variant="secondary" size="sm" disabled={isSelf}>
+                            Delete
+                          </Button>
+                        }
+                      />
                     </div>
                   </TableCell>
                 </TableRow>

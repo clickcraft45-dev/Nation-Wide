@@ -1,4 +1,9 @@
-import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+} from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { AdminUsersService } from './admin-users.service';
 
 // The guards worth a test are the ones whose failure mode is "nobody can administer this system
@@ -30,6 +35,7 @@ function harness(found: unknown, activeAdmins = 2) {
         Promise.resolve({ ...ADMIN, ...args.data }),
       ),
       create: jest.fn(),
+      delete: jest.fn().mockResolvedValue({}),
     },
     auditLog: { create: jest.fn().mockResolvedValue({}) },
   };
@@ -123,10 +129,49 @@ describe('AdminUsersService', () => {
     });
   });
 
-  it('404s on a pickup partner id rather than editing it through this endpoint', async () => {
-    const { service } = harness(PARTNER);
-    await expect(
-      service.update('p-1', { name: 'x' }, 'admin-1'),
-    ).rejects.toThrow(/not found/);
+  it('manages pickup partners too, so a role change is an edit rather than a recreate', async () => {
+    const { prisma, service } = harness(PARTNER);
+    await service.update('p-1', { role: 'STAFF' }, 'admin-1');
+    expect(prisma.adminUser.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ role: 'STAFF' }) }),
+    );
+  });
+
+  describe('remove', () => {
+    it('deletes an account that has no recorded activity', async () => {
+      const { prisma, service } = harness(STAFF);
+      await service.remove('staff-1', 'admin-1');
+      expect(prisma.adminUser.delete).toHaveBeenCalledWith({ where: { id: 'staff-1' } });
+    });
+
+    it('refuses an account with history, pointing at deactivation instead', async () => {
+      const { prisma, service } = harness(STAFF);
+      // What Postgres raises when a row is still referenced by any of the thirteen FKs.
+      prisma.adminUser.delete.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('FK violation', {
+          code: 'P2003',
+          clientVersion: 'test',
+        }),
+      );
+      await expect(service.remove('staff-1', 'admin-1')).rejects.toBeInstanceOf(
+        ConflictException,
+      );
+    });
+
+    it('refuses to delete your own account', async () => {
+      const { prisma, service } = harness(ADMIN);
+      await expect(service.remove('admin-1', 'admin-1')).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+      expect(prisma.adminUser.delete).not.toHaveBeenCalled();
+    });
+
+    it('refuses to delete the last active admin', async () => {
+      const { prisma, service } = harness(ADMIN, 1);
+      await expect(service.remove('admin-1', 'someone-else')).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+      expect(prisma.adminUser.delete).not.toHaveBeenCalled();
+    });
   });
 });
