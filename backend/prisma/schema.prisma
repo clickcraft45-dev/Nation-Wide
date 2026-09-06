@@ -731,6 +731,7 @@ model AdminUser {
   updatedCompanySettings     CompanySettings[]  @relation("CompanySettingsUpdatedBy")
   assignedPickupRequests     PickupRequest[]    @relation("PickupRequestAssignedPartner")
   issuedInvoices             Invoice[]          @relation("InvoiceIssuedBy")
+  reviewedPartnerApplications PartnerApplication[] @relation("PartnerApplicationReviewedBy")
 
   @@map("admin_users")
 }
@@ -969,4 +970,47 @@ model Invoice {
   @@index([customerId, invoiceDate])
   @@index([invoiceDate])
   @@map("invoices")
+}
+
+// ---------------------------------------------------------------------------
+// Pickup-partner onboarding
+// ---------------------------------------------------------------------------
+
+enum PartnerApplicationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+/// A request to become a pickup partner, submitted from the public sign-up page.
+///
+/// Deliberately NOT an AdminUser. A PICKUP_PARTNER account can read customer addresses and phone
+/// numbers, verify weights and collect payments, so it stays a privileged internal account that
+/// only STAFF/ADMIN can bring into existence. This table is the queue in front of that decision:
+/// anyone may apply, nobody self-provisions. Approving one calls the same
+/// PickupPartnersService.create() an admin uses by hand.
+model PartnerApplication {
+  id          String  @id @default(uuid())
+  name        String
+  email       String
+  phone       String
+  serviceArea String  @map("service_area")
+  note        String?
+
+  status            PartnerApplicationStatus @default(PENDING)
+  reviewedByAdminId String?                  @map("reviewed_by_admin_id")
+  reviewedAt        DateTime?                @map("reviewed_at")
+  reviewNote        String?                  @map("review_note")
+  /// The AdminUser this application produced, set only on approval — the audit link between a
+  /// public submission and the privileged account it became.
+  createdAdminUserId String?                 @map("created_admin_user_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  reviewedBy AdminUser? @relation("PartnerApplicationReviewedBy", fields: [reviewedByAdminId], references: [id])
+
+  @@index([status, createdAt])
+  @@index([email])
+  @@map("partner_applications")
 }

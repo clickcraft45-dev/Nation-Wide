@@ -3,7 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { ArrowRight, Loader2 } from "lucide-react";
 import { useAuth } from "@/state/auth-context";
 import { errorMessage } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
@@ -186,6 +186,26 @@ export default function RegisterPage() {
             Sign in
           </Link>
         </p>
+
+        {/* One login page serves every role, so the only thing that differs at sign-up is which
+            kind of account you are asking for. A partner cannot self-provision — this links to an
+            application our operations team reviews. */}
+        <Link
+          href="/register/partner"
+          className="block rounded-lg border border-border p-4 transition-colors hover:border-primary hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+        >
+          <span className="flex items-center justify-between gap-3">
+            <span>
+              <span className="block text-sm font-medium text-foreground">
+                Want to collect parcels instead?
+              </span>
+              <span className="mt-0.5 block text-sm text-muted-foreground">
+                Apply to become a pickup partner in your area.
+              </span>
+            </span>
+            <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+          </span>
+        </Link>
       </div>
     </div>
   );

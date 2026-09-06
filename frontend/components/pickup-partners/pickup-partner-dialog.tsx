@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import type { PickupPartnerDto } from "@nationwide/shared-types";
-import { apiClient, ApiError } from "@/lib/api-client";
+import { apiClient, errorMessage } from "@/lib/api-client";
 import { useToast } from "@/components/ui/toast";
 import { Dialog, DialogContent, DialogClose } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -51,11 +51,7 @@ export function PickupPartnerDialog({
       setName("");
       setPhone("");
     } catch (err) {
-      setError(
-        err instanceof ApiError && err.status === 400
-          ? "An account with that email already exists."
-          : "Couldn't create the partner. Please try again.",
-      );
+      setError(errorMessage(err, "Couldn't create the partner. Please try again."));
     } finally {
       setIsSubmitting(false);
     }

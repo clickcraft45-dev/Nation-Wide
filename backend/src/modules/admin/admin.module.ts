@@ -57,5 +57,8 @@ import { PickupRequestsModule } from '../pickup-requests/pickup-requests.module'
     AdminPickupRequestsController,
   ],
   providers: [AdminService, PickupPartnersService, AdminUsersService],
+  // PartnerApplicationsService approves an application by calling straight into this, so an
+  // approved partner is provisioned by the same code path as a hand-created one.
+  exports: [PickupPartnersService],
 })
 export class AdminModule {}

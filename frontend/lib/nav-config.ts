@@ -12,6 +12,7 @@ import {
   Settings,
   User,
   Tag,
+  ClipboardCheck,
   ClipboardList,
   UserCog,
   ShieldCheck,
@@ -52,6 +53,7 @@ export const ADMIN_NAV_GROUPS: NavGroup[] = [
       { label: "Orders", href: "/admin/orders", icon: Package },
       { label: "Pickup Requests", href: "/admin/pickup-requests", icon: ClipboardList },
       { label: "Pickup Partners", href: "/admin/pickup-partners", icon: UserCog },
+      { label: "Partner Applications", href: "/admin/partner-applications", icon: ClipboardCheck },
       { label: "Customers", href: "/admin/customers", icon: Users },
       // ADMIN-only, matching AdminUsersController: anything less lets a STAFF account promote
       // itself to ADMIN, which makes the role boundary decorative.

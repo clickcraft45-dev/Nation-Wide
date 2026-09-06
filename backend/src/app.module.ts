@@ -13,6 +13,7 @@ import { StorageModule } from './database/storage.module';
 import { validateEnv } from './common/config/env.validation';
 import { AuthModule } from './modules/auth/auth.module';
 import { AdminModule } from './modules/admin/admin.module';
+import { PartnerApplicationsModule } from './modules/partner-applications/partner-applications.module';
 import { CustomersModule } from './modules/customers/customers.module';
 import { OrdersModule } from './modules/orders/orders.module';
 import { ShipmentsModule } from './modules/shipments/shipments.module';
@@ -36,6 +37,7 @@ import { InvoicesModule } from './modules/invoices/invoices.module';
     StorageModule,
     AuthModule,
     AdminModule,
+    PartnerApplicationsModule,
     CustomersModule,
     ShipmentsModule,
     OrdersModule,
