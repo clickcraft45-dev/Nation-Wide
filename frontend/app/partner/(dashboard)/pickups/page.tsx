@@ -4,7 +4,7 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { CalendarClock, X } from "lucide-react";
 import type { PickupRequestDto } from "@nationwide/shared-types";
-import { apiClient, ApiError } from "@/lib/api-client";
+import { apiClient, errorMessage } from "@/lib/api-client";
 import { SearchInput } from "@/components/ui/search-input";
 import { EmptyState, ErrorState } from "@/components/ui/page-state";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -52,7 +52,7 @@ function PartnerPickupsPageInner() {
       .get<PickupRequestDto[]>("/partner/pickup-requests")
       .then(setPickups)
       .catch((err) => {
-        setError(err instanceof ApiError ? "Failed to load your pickups." : "Something went wrong.");
+        setError(errorMessage(err, "Failed to load your pickups."));
       })
       .finally(() => setIsLoading(false));
   }

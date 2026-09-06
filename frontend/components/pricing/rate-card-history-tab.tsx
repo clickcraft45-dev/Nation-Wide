@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Download, History, Trash2 } from "lucide-react";
 import type { RateCardDocumentDto, RateProviderDto } from "@nationwide/shared-types";
-import { apiClient, ApiError } from "@/lib/api-client";
+import { apiClient, ApiError, errorMessage } from "@/lib/api-client";
 import { downloadBlob } from "@/lib/utils/download-blob";
 import {
   Table,
@@ -40,7 +40,7 @@ export function RateCardHistoryTab() {
         setProviders(p);
       })
       .catch((err) => {
-        setError(err instanceof ApiError ? "Failed to load rate card history." : "Something went wrong.");
+        setError(errorMessage(err, "Failed to load rate card history."));
       })
       .finally(() => setIsLoading(false));
   }

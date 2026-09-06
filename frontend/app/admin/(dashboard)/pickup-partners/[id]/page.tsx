@@ -4,7 +4,7 @@ import { use, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, ClipboardList, Package, Wallet } from "lucide-react";
 import type { PickupPartnerDto, PickupRequestDto } from "@nationwide/shared-types";
-import { apiClient, ApiError } from "@/lib/api-client";
+import { apiClient, errorMessage } from "@/lib/api-client";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -62,7 +62,7 @@ export default function PickupPartnerDetailPage({
         if (!found) setError("That pickup partner no longer exists.");
       })
       .catch((err) =>
-        setError(err instanceof ApiError ? "Failed to load the partner." : "Something went wrong."),
+        setError(errorMessage(err, "Failed to load the partner.")),
       )
       .finally(() => setIsLoading(false));
   }

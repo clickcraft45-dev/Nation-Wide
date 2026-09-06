@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Truck } from "lucide-react";
 import type { PickupDto, PickupStatusCode } from "@nationwide/shared-types";
-import { apiClient, ApiError } from "@/lib/api-client";
+import { apiClient, errorMessage } from "@/lib/api-client";
 import { NativeSelect } from "@/components/ui/select";
 import {
   Table,
@@ -46,7 +46,7 @@ export default function AdminPickupsPage() {
       .get<PickupDto[]>(`${path}${query ? `?${query}` : ""}`)
       .then(setPickups)
       .catch((err) => {
-        setError(err instanceof ApiError ? "Failed to load pickups." : "Something went wrong.");
+        setError(errorMessage(err, "Failed to load pickups."));
       })
       .finally(() => setIsLoading(false));
   }

@@ -16,7 +16,7 @@ import type {
   InvoiceDto,
   InvoiceListDto,
 } from "@nationwide/shared-types";
-import { apiClient, ApiError } from "@/lib/api-client";
+import { apiClient, ApiError, errorMessage } from "@/lib/api-client";
 import { SearchInput } from "@/components/ui/search-input";
 import { NativeSelect } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
@@ -83,7 +83,7 @@ export default function AdminInvoicesPage() {
       })
       .catch((err) => {
         setError(
-          err instanceof ApiError ? "Failed to load invoices." : "Something went wrong.",
+          errorMessage(err, "Failed to load invoices."),
         );
       })
       .finally(() => setIsLoading(false));

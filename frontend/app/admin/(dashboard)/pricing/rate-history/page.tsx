@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { FileClock } from "lucide-react";
 import type { AuditLogEntryDto } from "@nationwide/shared-types";
-import { apiClient, ApiError } from "@/lib/api-client";
+import { apiClient, errorMessage } from "@/lib/api-client";
 import {
   Table,
   TableHeader,
@@ -66,7 +66,7 @@ export default function RateHistoryPage() {
       .get<AuditLogEntryDto[]>(`/admin/audit-logs?${params.toString()}`)
       .then(setEntries)
       .catch((err) => {
-        setError(err instanceof ApiError ? "Failed to load rate history." : "Something went wrong.");
+        setError(errorMessage(err, "Failed to load rate history."));
       })
       .finally(() => setIsLoading(false));
   }

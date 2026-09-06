@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { ClipboardList } from "lucide-react";
 import type { PickupRequestDto, PickupRequestStatusCode } from "@nationwide/shared-types";
-import { apiClient, ApiError } from "@/lib/api-client";
+import { apiClient, errorMessage } from "@/lib/api-client";
 import { SearchInput } from "@/components/ui/search-input";
 import { NativeSelect } from "@/components/ui/select";
 import {
@@ -48,7 +48,7 @@ export default function AdminPickupRequestsPage() {
       .get<PickupRequestDto[]>(`/admin/pickup-requests${query ? `?${query}` : ""}`)
       .then(setPickupRequests)
       .catch((err) => {
-        setError(err instanceof ApiError ? "Failed to load pickup requests." : "Something went wrong.");
+        setError(errorMessage(err, "Failed to load pickup requests."));
       })
       .finally(() => setIsLoading(false));
   }

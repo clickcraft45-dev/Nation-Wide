@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { UserCog } from "lucide-react";
 import type { PickupPartnerDto } from "@nationwide/shared-types";
-import { apiClient, ApiError } from "@/lib/api-client";
+import { apiClient, errorMessage } from "@/lib/api-client";
 import {
   Table,
   TableHeader,
@@ -32,7 +32,7 @@ export default function AdminPickupPartnersPage() {
       .get<PickupPartnerDto[]>("/admin/pickup-partners")
       .then(setPartners)
       .catch((err) => {
-        setError(err instanceof ApiError ? "Failed to load pickup partners." : "Something went wrong.");
+        setError(errorMessage(err, "Failed to load pickup partners."));
       })
       .finally(() => setIsLoading(false));
   }

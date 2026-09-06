@@ -9,7 +9,7 @@ import type {
   PaymentMethodCode,
   ShipmentTypeCode,
 } from "@nationwide/shared-types";
-import { apiClient, ApiError } from "@/lib/api-client";
+import { apiClient, ApiError, errorMessage } from "@/lib/api-client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input, Label, FieldError } from "@/components/ui/input";
@@ -111,7 +111,7 @@ export default function PartnerPickupDetailPage() {
         setVerifiedShipmentType(res.verifiedShipmentType ?? res.shipmentType);
       })
       .catch((err) => {
-        setError(err instanceof ApiError ? "Couldn't load this pickup." : "Something went wrong.");
+        setError(errorMessage(err, "Couldn't load this pickup."));
       })
       .finally(() => setIsLoading(false));
   }

@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import type { PickupRequestDto, PaymentMethodCode } from "@nationwide/shared-types";
-import { apiClient, ApiError } from "@/lib/api-client";
+import { apiClient, errorMessage } from "@/lib/api-client";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -37,7 +37,7 @@ export default function AdminPickupRequestDetailPage() {
       .get<PickupRequestDto>(`/admin/pickup-requests/${params.id}`)
       .then(setPickup)
       .catch((err) => {
-        setError(err instanceof ApiError ? "Couldn't load this pickup request." : "Something went wrong.");
+        setError(errorMessage(err, "Couldn't load this pickup request."));
       })
       .finally(() => setIsLoading(false));
   }

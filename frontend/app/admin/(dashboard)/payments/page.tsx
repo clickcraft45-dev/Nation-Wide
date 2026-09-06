@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { CreditCard } from "lucide-react";
 import type { OrderDto, CustomerDto, PaymentMethodCode } from "@nationwide/shared-types";
-import { apiClient, ApiError } from "@/lib/api-client";
+import { apiClient, errorMessage } from "@/lib/api-client";
 import { SearchInput } from "@/components/ui/search-input";
 import { NativeSelect } from "@/components/ui/select";
 import {
@@ -42,7 +42,7 @@ export default function AdminPaymentsPage() {
         setCustomers(customersRes);
       })
       .catch((err) => {
-        setError(err instanceof ApiError ? "Failed to load payments." : "Something went wrong.");
+        setError(errorMessage(err, "Failed to load payments."));
       })
       .finally(() => setIsLoading(false));
   }

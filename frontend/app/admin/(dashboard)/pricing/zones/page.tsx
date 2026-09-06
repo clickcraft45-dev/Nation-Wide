@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { MapPinned } from "lucide-react";
 import type { RateProviderDto, ZoneDto } from "@nationwide/shared-types";
-import { apiClient, ApiError } from "@/lib/api-client";
+import { apiClient, errorMessage } from "@/lib/api-client";
 import {
   Table,
   TableHeader,
@@ -44,7 +44,7 @@ export default function PricingZonesPage() {
       .get<ZoneDto[]>(`/admin/zones?rateProviderId=${providerId}`)
       .then(setZones)
       .catch((err) => {
-        setError(err instanceof ApiError ? "Failed to load zones." : "Something went wrong.");
+        setError(errorMessage(err, "Failed to load zones."));
       })
       .finally(() => setIsLoading(false));
   }

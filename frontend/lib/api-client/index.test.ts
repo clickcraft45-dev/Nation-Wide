@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { apiClient, ApiError, setAccessToken, setUnauthorizedHandler } from "./index";
+import {
+  apiClient,
+  ApiError,
+  errorMessage,
+  setAccessToken,
+  setUnauthorizedHandler,
+} from "./index";
 
 function jsonResponse(body: unknown, init: ResponseInit = {}) {
   return new Response(JSON.stringify(body), {
@@ -116,6 +122,59 @@ describe("apiClient", () => {
 
       const [, init] = fetchMock.mock.calls[0];
       expect((init.headers as Record<string, string>)["Content-Type"]).toBeUndefined();
+    });
+  });
+
+  describe("error messages shown to users", () => {
+    async function failWith(body: unknown, status: number): Promise<unknown> {
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(body, { status })));
+      return apiClient.get("/anything").then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+    }
+
+    it("carries the server's own message rather than a developer string", async () => {
+      const error = await failWith(
+        { message: "An account with this email or phone number already exists" },
+        409,
+      );
+      expect((error as ApiError).message).toBe(
+        "An account with this email or phone number already exists",
+      );
+    });
+
+    it("joins class-validator's array of field errors into one sentence", async () => {
+      const error = await failWith(
+        { message: ["password must be longer than or equal to 10 characters"] },
+        400,
+      );
+      expect(errorMessage(error, "fallback")).toBe(
+        "password must be longer than or equal to 10 characters",
+      );
+    });
+
+    it("prefers the server reason for a 4xx", async () => {
+      const error = await failWith({ message: "Invalid credentials" }, 401);
+      expect(errorMessage(error, "Failed to load invoices.")).toBe("Invalid credentials");
+    });
+
+    it("keeps the caller's context for a 5xx and appends the request id", async () => {
+      // The backend masks 5xx internals on purpose, so its message carries no information —
+      // but the request id it stamps on the body is traceable in the server logs.
+      const error = await failWith(
+        { message: "Something went wrong. Please try again.", requestId: "8e410bbe" },
+        500,
+      );
+      expect(errorMessage(error, "Failed to load invoices.")).toBe(
+        "Failed to load invoices. (reference: 8e410bbe)",
+      );
+    });
+
+    it("falls back when the failure never reached the server", () => {
+      expect(errorMessage(new TypeError("fetch failed"), "Check your connection.")).toBe(
+        "Check your connection.",
+      );
     });
   });
 });

@@ -19,7 +19,7 @@ import type {
   DashboardSummaryDto,
   PickupRequestDto,
 } from "@nationwide/shared-types";
-import { apiClient, ApiError } from "@/lib/api-client";
+import { apiClient, errorMessage } from "@/lib/api-client";
 import { useAuth } from "@/state/auth-context";
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { QuickActions } from "@/components/dashboard/quick-actions";
@@ -115,9 +115,7 @@ export default function AdminDashboardHomePage() {
       .catch((err) => {
         if (cancelled) return;
         setError(
-          err instanceof ApiError
-            ? "Failed to load dashboard data."
-            : "Something went wrong loading the dashboard.",
+          errorMessage(err, "Failed to load dashboard data."),
         );
       })
       .finally(() => {

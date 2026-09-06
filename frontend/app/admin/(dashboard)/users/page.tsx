@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { ShieldCheck } from "lucide-react";
 import type { AdminUserDto } from "@nationwide/shared-types";
-import { apiClient, ApiError } from "@/lib/api-client";
+import { apiClient, ApiError, errorMessage } from "@/lib/api-client";
 import {
   Table,
   TableHeader,
@@ -35,7 +35,7 @@ export default function AdminUsersPage() {
       .then(setUsers)
       .catch((err) => {
         setError(
-          err instanceof ApiError ? "Failed to load staff accounts." : "Something went wrong.",
+          errorMessage(err, "Failed to load staff accounts."),
         );
       })
       .finally(() => setIsLoading(false));

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Tag } from "lucide-react";
 import type { RateProviderDto } from "@nationwide/shared-types";
-import { apiClient, ApiError } from "@/lib/api-client";
+import { apiClient, errorMessage } from "@/lib/api-client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,7 +24,7 @@ export default function PricingProvidersPage() {
       .get<RateProviderDto[]>("/admin/rate-providers")
       .then(setProviders)
       .catch((err) => {
-        setError(err instanceof ApiError ? "Failed to load providers." : "Something went wrong.");
+        setError(errorMessage(err, "Failed to load providers."));
       })
       .finally(() => setIsLoading(false));
   }

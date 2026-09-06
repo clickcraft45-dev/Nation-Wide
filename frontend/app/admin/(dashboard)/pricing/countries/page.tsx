@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Globe } from "lucide-react";
 import type { CountryDto } from "@nationwide/shared-types";
-import { apiClient, ApiError } from "@/lib/api-client";
+import { apiClient, errorMessage } from "@/lib/api-client";
 import {
   Table,
   TableHeader,
@@ -30,7 +30,7 @@ export default function PricingCountriesPage() {
       .get<CountryDto[]>("/admin/countries")
       .then(setCountries)
       .catch((err) => {
-        setError(err instanceof ApiError ? "Failed to load countries." : "Something went wrong.");
+        setError(errorMessage(err, "Failed to load countries."));
       })
       .finally(() => setIsLoading(false));
   }

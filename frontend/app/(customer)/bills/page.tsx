@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { CheckCircle2, Download, FileText, Loader2, ReceiptIndianRupee } from "lucide-react";
 import type { InvoiceDto } from "@nationwide/shared-types";
-import { apiClient, ApiError } from "@/lib/api-client";
+import { apiClient, ApiError, errorMessage } from "@/lib/api-client";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/page-state";
@@ -29,7 +29,7 @@ export default function CustomerBillsPage() {
       .then(setInvoices)
       .catch((err) =>
         setError(
-          err instanceof ApiError ? "Failed to load your bills." : "Something went wrong.",
+          errorMessage(err, "Failed to load your bills."),
         ),
       )
       .finally(() => setIsLoading(false));

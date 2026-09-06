@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { CalendarClock, Wallet } from "lucide-react";
 import type { PickupPartnerDashboardSummaryDto, PickupRequestDto } from "@nationwide/shared-types";
-import { apiClient, ApiError } from "@/lib/api-client";
+import { apiClient, errorMessage } from "@/lib/api-client";
 import { useAuth } from "@/state/auth-context";
 import { ErrorState } from "@/components/ui/page-state";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -63,7 +63,7 @@ export default function PartnerDashboardHomePage() {
       })
       .catch((err) => {
         if (cancelled) return;
-        setError(err instanceof ApiError ? "Failed to load your dashboard." : "Something went wrong.");
+        setError(errorMessage(err, "Failed to load your dashboard."));
       })
       .finally(() => {
         if (!cancelled) setIsLoading(false);

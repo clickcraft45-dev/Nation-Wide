@@ -8,7 +8,7 @@ import type {
   RateProviderDto,
   ShipmentTypeCode,
 } from "@nationwide/shared-types";
-import { apiClient, ApiError } from "@/lib/api-client";
+import { apiClient, ApiError, errorMessage } from "@/lib/api-client";
 import { downloadBlob } from "@/lib/utils/download-blob";
 import { useToast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
@@ -181,9 +181,7 @@ export function RateCardsTab() {
       loadRecent();
     } catch (err) {
       setError(
-        err instanceof ApiError
-          ? "Couldn't generate the rate card. Check the pricing engine has active rates for this selection."
-          : "Something went wrong.",
+        errorMessage(err, "Couldn't generate the rate card. Check the pricing engine has active rates for this selection."),
       );
     } finally {
       setIsGenerating(false);

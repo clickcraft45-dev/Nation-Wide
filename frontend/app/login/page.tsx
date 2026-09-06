@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ShieldCheck, TrendingUp, Loader2 } from "lucide-react";
 import { useAuth } from "@/state/auth-context";
-import { ApiError, API_BASE_URL } from "@/lib/api-client";
+import { ApiError, API_BASE_URL, errorMessage } from "@/lib/api-client";
 import { useCurrentYear } from "@/lib/utils/use-current-year";
 import { useToast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
@@ -98,7 +98,7 @@ function LoginPageInner() {
       } else if (err instanceof ApiError && err.status === 429) {
         setApiError("Too many attempts. Please wait a minute and try again.");
       } else {
-        setApiError("Something went wrong. Please try again.");
+        setApiError(errorMessage(err, "Could not sign you in. Please try again."));
       }
     } finally {
       setIsSubmitting(false);

@@ -4,7 +4,7 @@ import { Suspense, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/state/auth-context";
-import { ApiError } from "@/lib/api-client";
+import { ApiError, errorMessage } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
 import { Input, Label, FieldError } from "@/components/ui/input";
 import { Logo } from "@/components/brand/logo";
@@ -46,7 +46,7 @@ function RegisterGooglePageInner() {
       } else if (err instanceof ApiError && err.status === 401) {
         setApiError("This sign-up link has expired. Please continue with Google again.");
       } else {
-        setApiError("Something went wrong. Please try again.");
+        setApiError(errorMessage(err, "Could not finish signing you up. Please try again."));
       }
     } finally {
       setIsSubmitting(false);

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { FileQuestion } from "lucide-react";
 import type { QuoteDto } from "@nationwide/shared-types";
-import { apiClient, ApiError } from "@/lib/api-client";
+import { apiClient, errorMessage } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/page-state";
@@ -25,7 +25,7 @@ export default function CustomerQuotesPage() {
       .get<QuoteDto[]>("/quotes/me")
       .then(setQuotes)
       .catch((err) => {
-        setError(err instanceof ApiError ? "Failed to load your quotes." : "Something went wrong.");
+        setError(errorMessage(err, "Failed to load your quotes."));
       })
       .finally(() => setIsLoading(false));
   }

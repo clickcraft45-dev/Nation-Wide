@@ -41,13 +41,65 @@ function buildHeaders(init?: RequestInit): HeadersInit {
   };
 }
 
+/**
+ * Pulls the server's own user-facing reason out of a NestJS error body. It arrives as a plain
+ * string for a thrown HttpException ("An account with this email or phone number already
+ * exists"), and as a string[] when class-validator rejects a DTO — one entry per failed rule.
+ */
+function serverMessage(body: unknown): string | undefined {
+  if (typeof body !== "object" || body === null) return undefined;
+  const message = (body as { message?: unknown }).message;
+  if (typeof message === "string" && message.trim()) return message.trim();
+  if (Array.isArray(message)) {
+    const parts = message.filter(
+      (part): part is string => typeof part === "string" && part.trim().length > 0,
+    );
+    if (parts.length > 0) return parts.join(". ");
+  }
+  return undefined;
+}
+
 async function throwIfError(res: Response, path: string): Promise<void> {
   if (res.ok) return;
   const body = await res
     .clone()
     .json()
     .catch(() => undefined);
-  throw new ApiError(res.status, `Request to ${path} failed with status ${res.status}`, body);
+  // Prefer the server's message over a developer string. Without this every caller sees only
+  // "Request to /x failed with status 409" and has no choice but to invent its own generic
+  // copy — which is exactly what every page was doing.
+  throw new ApiError(
+    res.status,
+    serverMessage(body) ?? `Request to ${path} failed with status ${res.status}`,
+    body,
+  );
+}
+
+/** The backend stamps every error response with a request id; it is also in the server logs. */
+function requestIdOf(body: unknown): string | undefined {
+  if (typeof body !== "object" || body === null) return undefined;
+  const id = (body as { requestId?: unknown }).requestId;
+  return typeof id === "string" && id.trim() ? id.trim() : undefined;
+}
+
+/**
+ * The message to show a user for a failed request.
+ *
+ * A 4xx carries a precise, already user-facing reason from the server — a duplicate account, a
+ * password below the minimum, a malformed phone — so it wins outright.
+ *
+ * A 5xx does not, and must not: the backend's exception filter masks internals deliberately,
+ * because raw exception text leaks table and column names. There is no safe specific message to
+ * show, so the caller's fallback stands — but the request id rides along, which turns an
+ * unactionable "something went wrong" into something a user can quote and support can grep for.
+ *
+ * Network failures never produce an ApiError at all, and fall back with no id.
+ */
+export function errorMessage(error: unknown, fallback: string): string {
+  if (!(error instanceof ApiError)) return fallback;
+  if (error.status < 500 && error.message) return error.message;
+  const id = requestIdOf(error.body);
+  return id ? `${fallback} (reference: ${id})` : fallback;
 }
 
 async function request<T>(path: string, init?: RequestInit, isRetry = false): Promise<T> {

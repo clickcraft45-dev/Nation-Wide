@@ -16,7 +16,7 @@ import type {
   PricingDashboardSummaryDto,
   PricingSearchResultDto,
 } from "@nationwide/shared-types";
-import { apiClient, ApiError } from "@/lib/api-client";
+import { apiClient, errorMessage } from "@/lib/api-client";
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { PricingQuickActions } from "@/components/pricing/pricing-quick-actions";
 import { Input } from "@/components/ui/input";
@@ -50,7 +50,7 @@ export default function PricingDashboardPage() {
       .get<PricingDashboardSummaryDto>("/admin/pricing/dashboard-summary")
       .then(setSummary)
       .catch((err) => {
-        setError(err instanceof ApiError ? "Failed to load the pricing summary." : "Something went wrong.");
+        setError(errorMessage(err, "Failed to load the pricing summary."));
       })
       .finally(() => setIsLoading(false));
   }

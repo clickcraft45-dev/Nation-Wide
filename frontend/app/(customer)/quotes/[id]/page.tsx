@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import type { QuoteDto, PickupRequestDto } from "@nationwide/shared-types";
-import { apiClient, ApiError } from "@/lib/api-client";
+import { apiClient, errorMessage } from "@/lib/api-client";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/ui/page-state";
@@ -50,7 +50,7 @@ export default function CustomerQuoteDetailPage() {
         }
       })
       .catch((err) => {
-        setError(err instanceof ApiError ? "Failed to load this quote." : "Something went wrong.");
+        setError(errorMessage(err, "Failed to load this quote."));
       })
       .finally(() => setIsLoading(false));
   }

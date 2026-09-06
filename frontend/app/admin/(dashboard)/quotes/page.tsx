@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { FileQuestion } from "lucide-react";
 import type { QuoteAdminDetailDto, QuoteReviewReasonCode } from "@nationwide/shared-types";
-import { apiClient, ApiError } from "@/lib/api-client";
+import { apiClient, errorMessage } from "@/lib/api-client";
 import { useDebouncedValue } from "@/lib/utils/use-debounced-value";
 import { SearchInput } from "@/components/ui/search-input";
 import { NativeSelect } from "@/components/ui/select";
@@ -61,7 +61,7 @@ export default function AdminQuotesPage() {
       })
       .catch((err) => {
         setError(
-          err instanceof ApiError ? "Failed to load quote requests." : "Something went wrong.",
+          errorMessage(err, "Failed to load quote requests."),
         );
       })
       .finally(() => setIsLoading(false));

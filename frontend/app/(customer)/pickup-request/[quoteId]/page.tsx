@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, CheckCircle2 } from "lucide-react";
 import type { QuoteDto } from "@nationwide/shared-types";
-import { apiClient, ApiError } from "@/lib/api-client";
+import { apiClient, errorMessage } from "@/lib/api-client";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input, Label, FieldError } from "@/components/ui/input";
@@ -89,7 +89,7 @@ export default function PickupRequestPage() {
       })
       .catch((err) => {
         if (cancelled) return;
-        setLoadError(err instanceof ApiError ? "Failed to load your quote." : "Something went wrong.");
+        setLoadError(errorMessage(err, "Failed to load your quote."));
       })
       .finally(() => {
         if (!cancelled) setIsLoading(false);
