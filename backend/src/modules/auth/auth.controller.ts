@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  NotFoundException,
   Get,
   HttpCode,
   HttpStatus,
@@ -21,7 +22,6 @@ import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { ForgotPasswordDto, ResetPasswordDto } from './dto/forgot-password.dto';
-import { CompleteGoogleSignupDto } from './dto/complete-google-signup.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { JwtRefreshGuard } from '../../common/guards/jwt-refresh.guard';
 import { GoogleConfiguredGuard } from '../../common/guards/google-configured.guard';
@@ -104,54 +104,25 @@ export class AuthController {
   ): Promise<void> {
     const frontendUrl = this.frontendUrl();
     try {
-      const result = await this.authService.loginOrPrepareGoogleSignup(
-        req.user,
-      );
-      if (result.status === 'needs-phone') {
-        res.redirect(
-          `${frontendUrl}/register/google?token=${encodeURIComponent(result.pendingToken)}`,
-        );
-        return;
-      }
-      const { refreshToken } = await this.authService.issueTokenPair(
-        result.account,
-      );
+      const account = await this.authService.loginWithGoogle(req.user);
+      const { refreshToken } = await this.authService.issueTokenPair(account);
       this.setRefreshTokenCookie(res, refreshToken);
       // No tokens in the URL — AuthProvider recovers the session from the httpOnly refresh
       // cookie set above the instant /login mounts (same mechanism as any other page load).
       res.redirect(`${frontendUrl}/login`);
-    } catch {
-      // Covers the staff/admin-email rejection and anything else unexpected. Deliberately one
-      // fixed error code in the query string, not a message — free-text there is an open
-      // redirect/reflection smell, and the login page already renders one fixed copy for it.
-      res.redirect(`${frontendUrl}/login?error=google_denied`);
+    } catch (error) {
+      // Two fixed codes, never a free-text message: anything reflected from here lands in a
+      // redirect URL, and the login page renders its own copy for each.
+      //
+      // "no account" is distinguished from "denied" because it is the one case the visitor can
+      // act on — Google sign-in never registers anyone, so they need to be told to sign up
+      // rather than left retrying a button that will keep failing.
+      const code =
+        error instanceof NotFoundException ? 'google_no_account' : 'google_denied';
+      res.redirect(`${frontendUrl}/login?error=${code}`);
     }
   }
 
-  // Second half of new-customer Google sign-up — exchanges the pendingToken (proof of a
-  // verified Google identity, see AuthService.loginOrPrepareGoogleSignup) plus a phone number for
-  // a real account. Throttled like login/register for the same brute-force reasons.
-  @Throttle(AUTH_THROTTLE)
-  @Post('google/complete')
-  @HttpCode(HttpStatus.CREATED)
-  async completeGoogleSignup(
-    @Body() dto: CompleteGoogleSignupDto,
-    @Res({ passthrough: true }) res: Response,
-  ): Promise<LoginResponseDto> {
-    const account = await this.authService.completeGoogleSignup(
-      dto.pendingToken,
-      dto.phone,
-    );
-    const { accessToken, refreshToken } =
-      await this.authService.issueTokenPair(account);
-
-    this.setRefreshTokenCookie(res, refreshToken);
-
-    return {
-      accessToken,
-      user: { id: account.id, email: account.email, role: account.role },
-    };
-  }
 
   @Throttle(AUTH_THROTTLE)
   @Post('login')

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-// Covers /register and /register/google — both client components, neither indexable.
+// Covers /register and /register/partner — both client components, neither indexable.
 export const metadata: Metadata = {
   title: "Create an account",
   robots: { index: false, follow: false },

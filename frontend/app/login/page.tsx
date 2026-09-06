@@ -16,6 +16,14 @@ import { TextDivider } from "@/components/ui/divider";
 import { AssetImage } from "@/components/marketing/asset-image";
 import { WORLD_MAP_IMAGE } from "@/lib/constants/assets";
 
+// Google sign-in never creates an account, so "no account" is the one outcome the visitor can
+// act on — it points at sign-up instead of leaving them retrying a button that keeps failing.
+const GOOGLE_ERRORS: Record<string, string> = {
+  google_no_account:
+    "No NationWide account uses that Google address. Create an account first, then Google sign-in will work.",
+  google_denied: "That Google account can't sign in here. Please use email and password.",
+};
+
 interface FormErrors {
   email?: string;
   password?: string;
@@ -49,9 +57,7 @@ function LoginPageInner() {
   const [password, setPassword] = useState("");
   const [fieldErrors, setFieldErrors] = useState<FormErrors>({});
   const [apiError, setApiError] = useState<string | null>(
-    searchParams.get("error") === "google_denied"
-      ? "That Google account can't sign in here. Please use email and password."
-      : null,
+    GOOGLE_ERRORS[searchParams.get("error") ?? ""] ?? null,
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const currentYear = useCurrentYear();
@@ -104,10 +110,9 @@ function LoginPageInner() {
   }
 
   // A real top-level navigation, not a fetch() — Google's consent screen can't be shown inside
-  // an XHR/fetch response. The backend redirects back to /login (existing account) or
-  // /register/google (new customer, needs a phone number) once Google's side completes. If
-  // Google isn't configured yet, the backend's GoogleConfiguredGuard returns a clear error page
-  // rather than a confusing "invalid_client" from Google itself.
+  // an XHR/fetch response. The backend redirects back to /login either signed in or with an
+  // ?error= code rendered from GOOGLE_ERRORS above. If Google isn't configured, the backend's
+  // GoogleConfiguredGuard answers 503 rather than a confusing "invalid_client" from Google.
   function handleGoogleLogin() {
     // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- API_BASE_URL is the external backend origin, not an internal Next.js route.
     window.location.href = `${API_BASE_URL}/auth/google`;

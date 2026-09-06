@@ -3,6 +3,7 @@ import {
   ConflictException,
   Injectable,
   Logger,
+  NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -17,19 +18,6 @@ import type { RegisterDto } from './dto/register.dto';
 import { MailService } from '../mail/mail.service';
 import { passwordReset } from '../mail/mail.templates';
 import type { GoogleProfile } from './strategies/google.strategy';
-
-const GOOGLE_SIGNUP_TOKEN_PURPOSE = 'google_signup';
-
-interface GoogleSignupTokenPayload {
-  purpose: typeof GOOGLE_SIGNUP_TOKEN_PURPOSE;
-  email: string;
-  name: string;
-  googleId: string;
-}
-
-export type GoogleLoginResult =
-  | { status: 'authenticated'; account: AuthAccount }
-  | { status: 'needs-phone'; pendingToken: string };
 
 export interface TokenPair {
   accessToken: string;
@@ -175,9 +163,19 @@ export class AuthService {
    * Customer accounts (product decision — those roles are internally managed, not public
    * self-service).
    */
-  async loginOrPrepareGoogleSignup(
-    profile: GoogleProfile,
-  ): Promise<GoogleLoginResult> {
+  /**
+   * Google is a SIGN-IN mechanism only — it never creates an account.
+   *
+   * An address Google verifies is proof of who someone is, not evidence that they are a customer
+   * here, and registration collects a phone number that dispatch depends on. So an unrecognised
+   * Google identity is refused and sent to sign up, rather than silently minting an account with
+   * no phone on file.
+   *
+   * STAFF/ADMIN/PICKUP_PARTNER emails are refused separately: those roles are provisioned
+   * internally, and letting Google authenticate one would put a privileged account behind an
+   * external identity provider nobody here administers.
+   */
+  async loginWithGoogle(profile: GoogleProfile): Promise<AuthAccount> {
     const adminUser = await this.prisma.adminUser.findUnique({
       where: { email: profile.email },
     });
@@ -191,33 +189,21 @@ export class AuthService {
     const customer = await this.prisma.customer.findUnique({
       where: { email: profile.email },
     });
-    if (customer) {
-      this.audit('GOOGLE_LOGIN_SUCCESS', {
-        email: profile.email,
-        accountId: customer.id,
-      });
-      return {
-        status: 'authenticated',
-        account: this.toAuthAccount(customer, 'CUSTOMER'),
-      };
+    if (!customer) {
+      this.audit('GOOGLE_LOGIN_NO_ACCOUNT', { email: profile.email });
+      throw new NotFoundException('No account exists for this Google address.');
     }
 
-    // No existing account — hand back a short-lived, signed token carrying the *verified* Google
-    // identity rather than trusting the frontend to resubmit it, so completeGoogleSignup() can't
-    // be tricked into creating an account under an email/name the caller only claims came from
-    // Google.
-    const payload: GoogleSignupTokenPayload = {
-      purpose: GOOGLE_SIGNUP_TOKEN_PURPOSE,
+    if (!customer.isActive) {
+      this.audit('GOOGLE_LOGIN_INACTIVE', { email: profile.email });
+      throw new UnauthorizedException(INVALID_CREDENTIALS);
+    }
+
+    this.audit('GOOGLE_LOGIN_SUCCESS', {
       email: profile.email,
-      name: profile.name,
-      googleId: profile.googleId,
-    };
-    const pendingToken = await this.jwtService.signAsync(payload, {
-      secret: this.configService.getOrThrow<string>('JWT_ACCESS_SECRET'),
-      expiresIn: '15m',
+      accountId: customer.id,
     });
-    this.audit('GOOGLE_SIGNUP_STARTED', { email: profile.email });
-    return { status: 'needs-phone', pendingToken };
+    return this.toAuthAccount(customer, 'CUSTOMER');
   }
 
   /**
@@ -225,73 +211,6 @@ export class AuthService {
    * Google identity) plus a phone number for a real Customer account — phone is required/unique
    * on Customer and Google doesn't reliably provide one, hence the two-step flow.
    */
-  async completeGoogleSignup(
-    pendingToken: string,
-    phone: string,
-  ): Promise<AuthAccount> {
-    let payload: GoogleSignupTokenPayload;
-    try {
-      payload = await this.jwtService.verifyAsync<GoogleSignupTokenPayload>(
-        pendingToken,
-        { secret: this.configService.getOrThrow<string>('JWT_ACCESS_SECRET') },
-      );
-    } catch {
-      throw new UnauthorizedException(
-        'This sign-up link has expired. Please try continuing with Google again.',
-      );
-    }
-    if (payload.purpose !== GOOGLE_SIGNUP_TOKEN_PURPOSE) {
-      throw new UnauthorizedException(
-        'This sign-up link has expired. Please try continuing with Google again.',
-      );
-    }
-
-    // Re-check rather than trusting the token's snapshot — someone could sit on this step for
-    // several minutes while another flow claims the same email.
-    const existingByEmail = await this.prisma.customer.findUnique({
-      where: { email: payload.email },
-    });
-    if (existingByEmail) {
-      this.audit('GOOGLE_SIGNUP_SUCCESS', {
-        email: payload.email,
-        accountId: existingByEmail.id,
-      });
-      return this.toAuthAccount(existingByEmail, 'CUSTOMER');
-    }
-
-    const existingByPhone = await this.prisma.customer.findUnique({
-      where: { phone },
-    });
-    if (existingByPhone?.passwordHash) {
-      throw new ConflictException(
-        'An account with this phone number already exists.',
-      );
-    }
-
-    // Mirrors register()'s "claim a staff-created placeholder record by phone" behavior. A
-    // Google-only account never gets a passwordHash — that's what already makes authenticate()
-    // correctly refuse email/password login for it.
-    const customer = existingByPhone
-      ? await this.prisma.customer.update({
-          where: { id: existingByPhone.id },
-          data: { name: payload.name, email: payload.email },
-        })
-      : await this.prisma.customer.create({
-          data: {
-            name: payload.name,
-            phone,
-            email: payload.email,
-            consentGivenAt: new Date(),
-            consentSource: 'google_oauth',
-          },
-        });
-
-    this.audit('GOOGLE_SIGNUP_SUCCESS', {
-      email: payload.email,
-      accountId: customer.id,
-    });
-    return this.toAuthAccount(customer, 'CUSTOMER');
-  }
 
   async issueTokenPair(
     account: Pick<AuthAccount, 'id' | 'email' | 'role'>,
