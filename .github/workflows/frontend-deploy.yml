@@ -40,7 +40,10 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: "20"
+          # 22, not 20: wrangler >=4.129 declares engines.node >=22.0.0, so the deploy step below
+          # cannot run on 20 even though `next build` itself is happy there. This is why the build
+          # passes locally (Node 22) and fails here.
+          node-version: "22"
           cache: "npm"
 
       # From the REPO ROOT, not frontend/. This is an npm workspaces monorepo and the only

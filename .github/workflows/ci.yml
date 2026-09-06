@@ -59,7 +59,10 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: "20"
+          # Matches frontend-deploy.yml. Several installed packages now declare engines.node
+          # >=22 (wrangler, miniflare, @cloudflare/kv-asset-handler, @testing-library/jest-dom),
+          # so 20 is no longer a version this dependency tree actually supports.
+          node-version: "22"
           cache: "npm"
 
       - name: Install dependencies
