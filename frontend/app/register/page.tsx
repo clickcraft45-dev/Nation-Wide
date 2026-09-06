@@ -3,13 +3,14 @@
 import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useAuth } from "@/state/auth-context";
 import { errorMessage } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
 import { Input, Label, FieldError } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Logo } from "@/components/brand/logo";
+import { PartnerApplicationForm } from "@/components/auth/partner-application-form";
 
 interface FormState {
   name: string;
@@ -36,6 +37,9 @@ export default function RegisterPage() {
   const [errors, setErrors] = useState<Partial<FormState>>({});
   const [apiError, setApiError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // Customer is the default: it is the overwhelmingly common case, and the one that
+  // actually creates an account here. Partner is an application, not a sign-up.
+  const [accountType, setAccountType] = useState<"customer" | "partner">("customer");
 
   useEffect(() => {
     if (isLoading || !user) return;
@@ -97,12 +101,52 @@ export default function RegisterPage() {
         <Logo variant="horizontal" size="md" />
 
         <div className="space-y-1">
-          <h1 className="text-2xl font-semibold text-foreground">Create your account</h1>
+          <h1 className="text-2xl font-semibold text-foreground">
+            {accountType === "customer" ? "Create your account" : "Become a pickup partner"}
+          </h1>
           <p className="text-sm text-muted-foreground">
-            Track and manage your shipments with NationWide.
+            {accountType === "customer"
+              ? "Track and manage your shipments with NationWide."
+              : "Collect parcels in your area and get paid per pickup."}
           </p>
         </div>
 
+        {/* Radio group, not tabs: this picks which kind of account you are asking for, and the
+            two are mutually exclusive. Arrow keys move between them for free. */}
+        <div
+          role="radiogroup"
+          aria-label="Account type"
+          className="grid grid-cols-2 gap-2 rounded-lg bg-muted/50 p-1"
+        >
+          {(
+            [
+              { value: "customer", label: "I want to ship" },
+              { value: "partner", label: "I want to deliver" },
+            ] as const
+          ).map((option) => {
+            const isSelected = accountType === option.value;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                role="radio"
+                aria-checked={isSelected}
+                onClick={() => setAccountType(option.value)}
+                className={`rounded-md px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${
+                  isSelected
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {accountType === "partner" && <PartnerApplicationForm />}
+
+        {accountType === "customer" && (
         <form onSubmit={handleSubmit} noValidate className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="name">Full name</Label>
@@ -179,6 +223,7 @@ export default function RegisterPage() {
             {isSubmitting ? "Creating account…" : "Create account"}
           </Button>
         </form>
+        )}
 
         <p className="text-center text-sm text-muted-foreground">
           Already have an account?{" "}
@@ -186,26 +231,6 @@ export default function RegisterPage() {
             Sign in
           </Link>
         </p>
-
-        {/* One login page serves every role, so the only thing that differs at sign-up is which
-            kind of account you are asking for. A partner cannot self-provision — this links to an
-            application our operations team reviews. */}
-        <Link
-          href="/register/partner"
-          className="block rounded-lg border border-border p-4 transition-colors hover:border-primary hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-        >
-          <span className="flex items-center justify-between gap-3">
-            <span>
-              <span className="block text-sm font-medium text-foreground">
-                Want to collect parcels instead?
-              </span>
-              <span className="mt-0.5 block text-sm text-muted-foreground">
-                Apply to become a pickup partner in your area.
-              </span>
-            </span>
-            <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-          </span>
-        </Link>
       </div>
     </div>
   );

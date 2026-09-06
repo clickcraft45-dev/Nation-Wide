@@ -83,7 +83,22 @@ async function main(): Promise<void> {
   });
 
   if (existing) {
+    // Changing ADMIN_PASSWORD in .env and re-running does NOT rotate the password — that is the
+    // whole point of update: {} above, so a redeploy can never silently reset a live account.
+    // The consequence is that a changed .env and a live account drift apart with no supported
+    // way back, so this is the explicit opt-in: ADMIN_RESET_PASSWORD=true.
+    if (process.env.ADMIN_RESET_PASSWORD === 'true') {
+      await prisma.adminUser.update({
+        where: { email },
+        data: { passwordHash: await bcrypt.hash(password, PASSWORD_HASH_ROUNDS) },
+      });
+      console.log(`Password reset for ${admin.email} (ADMIN_RESET_PASSWORD=true).`);
+      console.log('Unset ADMIN_RESET_PASSWORD now so a later run cannot rotate it again.');
+      return;
+    }
+
     console.log(`Admin already exists, left untouched: ${admin.email} (role=${existing.role}, isActive=${existing.isActive})`);
+    console.log('To change its password, re-run with ADMIN_RESET_PASSWORD=true.');
     if (existing.role !== 'ADMIN' || !existing.isActive) {
       console.warn(
         `WARNING: that account is role=${existing.role} isActive=${existing.isActive}, not an active ADMIN. This seed will not change it — promote it deliberately if that is what you want.`,
