@@ -10,6 +10,7 @@ import type {
 } from '@prisma/client';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../database/prisma.service';
+import { publicFrontendUrl } from '../../common/config/public-urls';
 import { MailService } from '../mail/mail.service';
 import { partnerApplicationReceived } from '../mail/mail.templates';
 import { PickupPartnersService } from '../admin/pickup-partners.service';
@@ -74,9 +75,7 @@ export class PartnerApplicationsService {
     // Alert ops, but never at the applicant's expense: the row is already committed, and
     // MailService.send resolves false rather than throwing, so a Brevo outage cannot turn a
     // successful application into an error page.
-    const frontendUrl = (
-      this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:3004'
-    ).replace(/\/$/, '');
+    const frontendUrl = publicFrontendUrl(this.config);
     await this.mail.send(
       partnerApplicationReceived(
         {

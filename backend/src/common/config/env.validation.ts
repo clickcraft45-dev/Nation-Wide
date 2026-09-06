@@ -35,9 +35,18 @@ class EnvironmentVariables {
   @Max(65535)
   PORT!: number;
 
+  // A comma-separated CORS allow-list, not a single address — see main.ts. Do not interpolate
+  // it into a link; use publicFrontendUrl() for that.
   @IsOptional()
   @IsString()
   FRONTEND_URL?: string;
+
+  // The one canonical public address of the frontend, used to build OAuth redirects, password
+  // reset links and the operations review link. Falls back to the first non-localhost entry of
+  // FRONTEND_URL when unset.
+  @IsOptional()
+  @IsString()
+  PUBLIC_FRONTEND_URL?: string;
 
   // The backend's own public origin, e.g. https://api.nationwidelogistics.co. Required only by
   // invoice delivery: Meta's servers fetch the attachment from a link we build, so this has to

@@ -11,6 +11,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { publicFrontendUrl } from '../../common/config/public-urls';
 import { Throttle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 import ms from 'ms';
@@ -222,10 +223,10 @@ export class AuthController {
     );
   }
 
+  // FRONTEND_URL is a CORS allow-list and may hold several origins; this resolves the single
+  // canonical one to redirect to. See publicFrontendUrl.
   private frontendUrl(): string {
-    return (
-      this.configService.get<string>('FRONTEND_URL') ?? 'http://localhost:3004'
-    );
+    return publicFrontendUrl(this.configService);
   }
 
   private setRefreshTokenCookie(res: Response, refreshToken: string): void {
