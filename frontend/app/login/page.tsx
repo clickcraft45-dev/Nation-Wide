@@ -7,7 +7,6 @@ import { ShieldCheck, TrendingUp, Loader2 } from "lucide-react";
 import { useAuth } from "@/state/auth-context";
 import { ApiError, API_BASE_URL, errorMessage } from "@/lib/api-client";
 import { useCurrentYear } from "@/lib/utils/use-current-year";
-import { useToast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
 import { Input, Label, FieldError } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
@@ -43,7 +42,6 @@ function isSafeRedirectTarget(value: string | null): value is string {
 // behind the address bar.
 function LoginPageInner() {
   const { login, user, isLoading } = useAuth();
-  const { showToast } = useToast();
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectParam = searchParams.get("redirect");
@@ -103,14 +101,6 @@ function LoginPageInner() {
     } finally {
       setIsSubmitting(false);
     }
-  }
-
-  function handleForgotPassword() {
-    showToast({
-      variant: "success",
-      title: "Contact support",
-      description: "Password resets aren't self-service yet — reach out to your administrator.",
-    });
   }
 
   // A real top-level navigation, not a fetch() — Google's consent screen can't be shown inside
@@ -220,13 +210,16 @@ function LoginPageInner() {
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <Label htmlFor="password">Password</Label>
-                <button
-                  type="button"
-                  onClick={handleForgotPassword}
+                <Link
+                  href={
+                    email.trim()
+                      ? `/forgot-password?email=${encodeURIComponent(email.trim())}`
+                      : "/forgot-password"
+                  }
                   className="text-xs font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
                 >
                   Forgot password?
-                </button>
+                </Link>
               </div>
               <PasswordInput
                 id="password"

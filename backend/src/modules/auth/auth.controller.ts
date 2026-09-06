@@ -19,6 +19,7 @@ import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { ForgotPasswordDto, ResetPasswordDto } from './dto/forgot-password.dto';
 import { CompleteGoogleSignupDto } from './dto/complete-google-signup.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { JwtRefreshGuard } from '../../common/guards/jwt-refresh.guard';
@@ -61,6 +62,30 @@ export class AuthController {
       accessToken,
       user: { id: account.id, email: account.email, role: account.role },
     };
+  }
+
+  /**
+   * Always 202, whether or not the address has an account. A different answer for a known email
+   * would make this an account-enumeration oracle, and it is unauthenticated. Throttled with the
+   * same limit as login, since it triggers an outbound email per call.
+   */
+  @Throttle(AUTH_THROTTLE)
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.ACCEPTED)
+  async forgotPassword(@Body() dto: ForgotPasswordDto): Promise<{ message: string }> {
+    await this.authService.requestPasswordReset(dto.email, this.frontendUrl());
+    return {
+      message:
+        'If an account exists for that address, a reset link is on its way. Check your inbox.',
+    };
+  }
+
+  @Throttle(AUTH_THROTTLE)
+  @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
+  async resetPassword(@Body() dto: ResetPasswordDto): Promise<{ message: string }> {
+    await this.authService.resetPassword(dto.token, dto.password);
+    return { message: 'Your password has been reset. You can sign in now.' };
   }
 
   // Initiates the OAuth handshake — GoogleOAuthGuard's canActivate() itself performs the

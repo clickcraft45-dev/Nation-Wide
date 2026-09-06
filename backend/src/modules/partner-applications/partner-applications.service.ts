@@ -8,7 +8,10 @@ import type {
   PartnerApplication,
   PartnerApplicationStatus,
 } from '@prisma/client';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../database/prisma.service';
+import { MailService } from '../mail/mail.service';
+import { partnerApplicationReceived } from '../mail/mail.templates';
 import { PickupPartnersService } from '../admin/pickup-partners.service';
 import { CreatePartnerApplicationDto } from './dto/create-partner-application.dto';
 import {
@@ -25,6 +28,8 @@ export class PartnerApplicationsService {
     // Approval mints the account through the exact same path an admin uses by hand, rather than
     // a second adminUser.create() that could drift from it on role or hash rounds.
     private readonly pickupPartners: PickupPartnersService,
+    private readonly mail: MailService,
+    private readonly config: ConfigService,
   ) {}
 
   async create(dto: CreatePartnerApplicationDto): Promise<PartnerApplication> {
@@ -56,7 +61,7 @@ export class PartnerApplicationsService {
       );
     }
 
-    return this.prisma.partnerApplication.create({
+    const application = await this.prisma.partnerApplication.create({
       data: {
         name: dto.name,
         email,
@@ -65,6 +70,28 @@ export class PartnerApplicationsService {
         note: dto.note,
       },
     });
+
+    // Alert ops, but never at the applicant's expense: the row is already committed, and
+    // MailService.send resolves false rather than throwing, so a Brevo outage cannot turn a
+    // successful application into an error page.
+    const frontendUrl = (
+      this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:3004'
+    ).replace(/\/$/, '');
+    await this.mail.send(
+      partnerApplicationReceived(
+        {
+          name: application.name,
+          email: application.email,
+          phone: application.phone,
+          serviceArea: application.serviceArea,
+          note: application.note,
+          reviewUrl: `${frontendUrl}/admin/partner-applications`,
+        },
+        this.mail.operationsInbox,
+      ),
+    );
+
+    return application;
   }
 
   findAll(status?: PartnerApplicationStatus): Promise<PartnerApplication[]> {

@@ -13,6 +13,7 @@ import { StorageModule } from './database/storage.module';
 import { validateEnv } from './common/config/env.validation';
 import { AuthModule } from './modules/auth/auth.module';
 import { AdminModule } from './modules/admin/admin.module';
+import { MailModule } from './modules/mail/mail.module';
 import { PartnerApplicationsModule } from './modules/partner-applications/partner-applications.module';
 import { CustomersModule } from './modules/customers/customers.module';
 import { OrdersModule } from './modules/orders/orders.module';
@@ -36,6 +37,7 @@ import { InvoicesModule } from './modules/invoices/invoices.module';
     RedisModule,
     StorageModule,
     AuthModule,
+    MailModule,
     AdminModule,
     PartnerApplicationsModule,
     CustomersModule,

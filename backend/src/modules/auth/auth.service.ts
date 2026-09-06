@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   Logger,
@@ -7,12 +8,14 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import type ms from 'ms';
 import type { Role } from '@nationwide/shared-types';
 import { PrismaService } from '../../database/prisma.service';
 import type { JwtPayload } from './types/jwt-payload.type';
 import type { RegisterDto } from './dto/register.dto';
+import { MailService } from '../mail/mail.service';
+import { passwordReset } from '../mail/mail.templates';
 import type { GoogleProfile } from './strategies/google.strategy';
 
 const GOOGLE_SIGNUP_TOKEN_PURPOSE = 'google_signup';
@@ -52,6 +55,16 @@ const REFRESH_TOKEN_HASH_ROUNDS = 10;
 const PASSWORD_HASH_ROUNDS = 10;
 const INVALID_CREDENTIALS = 'Invalid credentials';
 
+// Short on purpose: a reset link sits in an inbox, which is exactly where an attacker with
+// stale mailbox access looks. Long enough to act on, short enough to be useless later.
+const RESET_TOKEN_TTL_MINUTES = 60;
+
+/** Reset tokens are stored hashed; SHA-256 (not bcrypt) because the token is already 256 bits
+ *  of entropy — there is nothing to slow-hash against, and lookup must be an indexed equality. */
+function hashResetToken(token: string): string {
+  return createHash('sha256').update(token).digest('hex');
+}
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -60,6 +73,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    private readonly mail: MailService,
   ) {}
 
   /**
@@ -375,6 +389,83 @@ export class AuthService {
       hashedRefreshToken: null,
     });
     this.audit('PASSWORD_CHANGED', { accountId: userId, role });
+  }
+
+  /**
+   * Step one of "forgot password". Resolves the same way whether or not the address has an
+   * account — the caller is unauthenticated, so telling it that an email is unknown turns this
+   * into an account-enumeration oracle. Any real work happens only when a match exists.
+   */
+  async requestPasswordReset(email: string, frontendUrl: string): Promise<void> {
+    const normalized = email.trim().toLowerCase();
+    const account = await this.findAccountByEmail(normalized);
+    if (!account || !account.isActive) {
+      this.audit('PASSWORD_RESET_REQUESTED_UNKNOWN', { email: normalized });
+      return;
+    }
+
+    // Invalidate any earlier outstanding link. Two live reset links for one account widens the
+    // window an intercepted email is useful in, for no benefit.
+    await this.prisma.passwordResetToken.updateMany({
+      where: { email: normalized, usedAt: null },
+      data: { usedAt: new Date() },
+    });
+
+    const token = randomBytes(32).toString('base64url');
+    await this.prisma.passwordResetToken.create({
+      data: {
+        tokenHash: hashResetToken(token),
+        email: normalized,
+        expiresAt: new Date(Date.now() + RESET_TOKEN_TTL_MINUTES * 60_000),
+      },
+    });
+
+    const resetUrl = `${frontendUrl.replace(/\/$/, '')}/reset-password?token=${token}`;
+    await this.mail.send(
+      passwordReset(normalized, resetUrl, RESET_TOKEN_TTL_MINUTES),
+    );
+    this.audit('PASSWORD_RESET_REQUESTED', { accountId: account.id });
+  }
+
+  /**
+   * Step two. The token is looked up by its hash, so a leaked table yields nothing usable, and
+   * it is consumed on success — a reset link works exactly once.
+   */
+  async resetPassword(token: string, newPassword: string): Promise<void> {
+    const record = await this.prisma.passwordResetToken.findUnique({
+      where: { tokenHash: hashResetToken(token) },
+    });
+
+    // One message for missing, already-used and expired alike: which of the three it was tells
+    // an attacker whether a guessed token ever existed.
+    if (!record || record.usedAt || record.expiresAt < new Date()) {
+      throw new BadRequestException(
+        'This reset link is invalid or has expired. Request a new one.',
+      );
+    }
+
+    const account = await this.findAccountByEmail(record.email);
+    if (!account) {
+      throw new BadRequestException(
+        'This reset link is invalid or has expired. Request a new one.',
+      );
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, PASSWORD_HASH_ROUNDS);
+    // Same reasoning as changePassword: drop the refresh token so every existing session ends.
+    // Someone resetting a password may be locking an intruder out.
+    await this.updateAccount(account.id, account.role, {
+      passwordHash,
+      hashedRefreshToken: null,
+    });
+    await this.prisma.passwordResetToken.update({
+      where: { id: record.id },
+      data: { usedAt: new Date() },
+    });
+    this.audit('PASSWORD_RESET_COMPLETED', {
+      accountId: account.id,
+      role: account.role,
+    });
   }
 
   private async findAccountByEmail(email: string): Promise<AuthAccount | null> {

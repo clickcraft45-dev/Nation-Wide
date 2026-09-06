@@ -9,6 +9,7 @@ import {
   MapPin,
   FileQuestion,
   BarChart3,
+  Send,
   Settings,
   User,
   Tag,
@@ -96,6 +97,7 @@ export const ADMIN_NAV_GROUPS: NavGroup[] = [
       // Kept — not deleted — but relabeled and moved away from "Pickup Requests" so it reads as
       // a separate, secondary record rather than a duplicate of the active pickup workflow.
       { label: "Pickups (Legacy)", href: "/admin/pickups", icon: Truck },
+      { label: "Send Email", href: "/admin/mail", icon: Send },
       { label: "Settings", href: "/admin/settings", icon: Settings },
     ],
   },

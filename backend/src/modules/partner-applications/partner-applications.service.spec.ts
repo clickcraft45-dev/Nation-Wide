@@ -33,6 +33,8 @@ describe('PartnerApplicationsService', () => {
     adminUser: { findUnique: jest.Mock };
   };
   let pickupPartners: { create: jest.Mock };
+  let mail: { send: jest.Mock; operationsInbox: string };
+  let config: { get: jest.Mock };
   let service: PartnerApplicationsService;
 
   beforeEach(() => {
@@ -47,9 +49,13 @@ describe('PartnerApplicationsService', () => {
       adminUser: { findUnique: jest.fn().mockResolvedValue(null) },
     };
     pickupPartners = { create: jest.fn().mockResolvedValue({ id: 'admin-9' }) };
+    mail = { send: jest.fn().mockResolvedValue(true), operationsInbox: 'ops@nationwide.test' };
+    config = { get: jest.fn().mockReturnValue('https://app.nationwide.test') };
     service = new PartnerApplicationsService(
       prisma as never,
       pickupPartners as never,
+      mail as never,
+      config as never,
     );
   });
 
@@ -66,6 +72,23 @@ describe('PartnerApplicationsService', () => {
     it('never creates an account — only an application row', async () => {
       await service.create(VALID_APPLICATION);
       expect(pickupPartners.create).not.toHaveBeenCalled();
+    });
+
+    it('alerts the operations inbox with a link to review it', async () => {
+      await service.create(VALID_APPLICATION);
+      const sent = mail.send.mock.calls[0][0];
+      expect(sent.to).toBe('ops@nationwide.test');
+      expect(sent.subject).toContain('Ravi Kumar');
+      // Replying reaches the applicant, not the ops inbox itself.
+      expect(sent.replyTo).toBe('ravi@example.com');
+      expect(sent.html).toContain('https://app.nationwide.test/admin/partner-applications');
+    });
+
+    it('still records the application when the mail provider is down', async () => {
+      // send() resolves false rather than throwing — a Brevo outage must not lose an applicant.
+      mail.send.mockResolvedValue(false);
+      await expect(service.create(VALID_APPLICATION)).resolves.toBeDefined();
+      expect(prisma.partnerApplication.create).toHaveBeenCalled();
     });
 
     it('rejects a second application while one is still pending', async () => {
