@@ -26,7 +26,10 @@ describe('AuthService password reset', () => {
 
   beforeEach(() => {
     prisma = {
-      adminUser: { findUnique: jest.fn().mockResolvedValue(null), update: jest.fn() },
+      adminUser: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        update: jest.fn(),
+      },
       customer: {
         findUnique: jest.fn().mockResolvedValue(CUSTOMER),
         update: jest.fn().mockResolvedValue(CUSTOMER),
@@ -49,7 +52,10 @@ describe('AuthService password reset', () => {
 
   describe('requestPasswordReset', () => {
     it('emails a link and stores only the hash of the token', async () => {
-      await service.requestPasswordReset('ravi@example.com', 'https://app.test');
+      await service.requestPasswordReset(
+        'ravi@example.com',
+        'https://app.test',
+      );
 
       const stored = prisma.passwordResetToken.create.mock.calls[0][0].data;
       const sentUrl: string = mail.send.mock.calls[0][0].text;
@@ -59,14 +65,21 @@ describe('AuthService password reset', () => {
       // The row must never hold anything usable as a reset link.
       expect(stored.tokenHash).not.toBe(token);
       expect(stored.tokenHash).toBe(
-        createHash('sha256').update(token as string).digest('hex'),
+        createHash('sha256')
+          .update(token as string)
+          .digest('hex'),
       );
     });
 
     it('invalidates any earlier outstanding link', async () => {
-      await service.requestPasswordReset('ravi@example.com', 'https://app.test');
+      await service.requestPasswordReset(
+        'ravi@example.com',
+        'https://app.test',
+      );
       expect(prisma.passwordResetToken.updateMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { email: 'ravi@example.com', usedAt: null } }),
+        expect.objectContaining({
+          where: { email: 'ravi@example.com', usedAt: null },
+        }),
       );
     });
 
@@ -81,8 +94,14 @@ describe('AuthService password reset', () => {
     });
 
     it('does not send to a disabled account', async () => {
-      prisma.customer.findUnique.mockResolvedValue({ ...CUSTOMER, isActive: false });
-      await service.requestPasswordReset('ravi@example.com', 'https://app.test');
+      prisma.customer.findUnique.mockResolvedValue({
+        ...CUSTOMER,
+        isActive: false,
+      });
+      await service.requestPasswordReset(
+        'ravi@example.com',
+        'https://app.test',
+      );
       expect(mail.send).not.toHaveBeenCalled();
     });
   });
@@ -106,7 +125,9 @@ describe('AuthService password reset', () => {
       // Resetting may be someone locking an intruder out — stale refresh tokens must not survive.
       expect(update.data.hashedRefreshToken).toBeNull();
       expect(prisma.passwordResetToken.update).toHaveBeenCalledWith(
-        expect.objectContaining({ data: expect.objectContaining({ usedAt: expect.any(Date) }) }),
+        expect.objectContaining({
+          data: expect.objectContaining({ usedAt: expect.any(Date) }),
+        }),
       );
     });
 
@@ -117,9 +138,9 @@ describe('AuthService password reset', () => {
         expiresAt: future(),
         usedAt: new Date(),
       });
-      await expect(service.resetPassword('raw', 'BrandNewPass123')).rejects.toBeInstanceOf(
-        BadRequestException,
-      );
+      await expect(
+        service.resetPassword('raw', 'BrandNewPass123'),
+      ).rejects.toBeInstanceOf(BadRequestException);
       expect(prisma.customer.update).not.toHaveBeenCalled();
     });
 
@@ -130,14 +151,16 @@ describe('AuthService password reset', () => {
         expiresAt: past(),
         usedAt: null,
       });
-      await expect(service.resetPassword('raw', 'BrandNewPass123')).rejects.toBeInstanceOf(
-        BadRequestException,
-      );
+      await expect(
+        service.resetPassword('raw', 'BrandNewPass123'),
+      ).rejects.toBeInstanceOf(BadRequestException);
     });
 
     it('gives an unknown token the same message as an expired one', async () => {
       prisma.passwordResetToken.findUnique.mockResolvedValue(null);
-      await expect(service.resetPassword('raw', 'BrandNewPass123')).rejects.toThrow(
+      await expect(
+        service.resetPassword('raw', 'BrandNewPass123'),
+      ).rejects.toThrow(
         'This reset link is invalid or has expired. Request a new one.',
       );
     });

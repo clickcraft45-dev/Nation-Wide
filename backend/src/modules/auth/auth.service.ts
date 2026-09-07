@@ -315,7 +315,10 @@ export class AuthService {
    * account — the caller is unauthenticated, so telling it that an email is unknown turns this
    * into an account-enumeration oracle. Any real work happens only when a match exists.
    */
-  async requestPasswordReset(email: string, frontendUrl: string): Promise<void> {
+  async requestPasswordReset(
+    email: string,
+    frontendUrl: string,
+  ): Promise<void> {
     const normalized = email.trim().toLowerCase();
     const account = await this.findAccountByEmail(normalized);
     if (!account || !account.isActive) {

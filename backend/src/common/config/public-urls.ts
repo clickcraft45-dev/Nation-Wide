@@ -22,7 +22,9 @@ export function publicFrontendUrl(config: ConfigService): string {
   const explicit = config.get<string>('PUBLIC_FRONTEND_URL')?.trim();
   if (explicit) return explicit.replace(/\/+$/, '');
 
-  const candidates = (config.get<string>('FRONTEND_URL') ?? 'http://localhost:3004')
+  const candidates = (
+    config.get<string>('FRONTEND_URL') ?? 'http://localhost:3004'
+  )
     .split(',')
     .map((origin) => origin.trim())
     .filter(Boolean);
@@ -31,5 +33,8 @@ export function publicFrontendUrl(config: ConfigService): string {
     (origin) => !/^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/i.test(origin),
   );
 
-  return (remote ?? candidates[0] ?? 'http://localhost:3004').replace(/\/+$/, '');
+  return (remote ?? candidates[0] ?? 'http://localhost:3004').replace(
+    /\/+$/,
+    '',
+  );
 }

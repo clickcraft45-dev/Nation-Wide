@@ -31,20 +31,22 @@ describe('publicFrontendUrl', () => {
 
   it('skips localhost so a deployed box never mails a link to the recipient own machine', () => {
     expect(
-      publicFrontendUrl(config({ FRONTEND_URL: 'http://127.0.0.1:3004,https://live.example' })),
+      publicFrontendUrl(
+        config({ FRONTEND_URL: 'http://127.0.0.1:3004,https://live.example' }),
+      ),
     ).toBe('https://live.example');
   });
 
   it('falls back to localhost when that is genuinely all there is', () => {
-    expect(publicFrontendUrl(config({ FRONTEND_URL: 'http://localhost:3004' }))).toBe(
-      'http://localhost:3004',
-    );
+    expect(
+      publicFrontendUrl(config({ FRONTEND_URL: 'http://localhost:3004' })),
+    ).toBe('http://localhost:3004');
   });
 
   it('strips a trailing slash so callers can append a path unconditionally', () => {
-    expect(publicFrontendUrl(config({ PUBLIC_FRONTEND_URL: 'https://x.example/' }))).toBe(
-      'https://x.example',
-    );
+    expect(
+      publicFrontendUrl(config({ PUBLIC_FRONTEND_URL: 'https://x.example/' })),
+    ).toBe('https://x.example');
   });
 
   it('defaults when nothing is configured at all', () => {

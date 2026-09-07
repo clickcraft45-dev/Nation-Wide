@@ -73,7 +73,9 @@ export class AuthController {
   @Throttle(AUTH_THROTTLE)
   @Post('forgot-password')
   @HttpCode(HttpStatus.ACCEPTED)
-  async forgotPassword(@Body() dto: ForgotPasswordDto): Promise<{ message: string }> {
+  async forgotPassword(
+    @Body() dto: ForgotPasswordDto,
+  ): Promise<{ message: string }> {
     await this.authService.requestPasswordReset(dto.email, this.frontendUrl());
     return {
       message:
@@ -84,7 +86,9 @@ export class AuthController {
   @Throttle(AUTH_THROTTLE)
   @Post('reset-password')
   @HttpCode(HttpStatus.OK)
-  async resetPassword(@Body() dto: ResetPasswordDto): Promise<{ message: string }> {
+  async resetPassword(
+    @Body() dto: ResetPasswordDto,
+  ): Promise<{ message: string }> {
     await this.authService.resetPassword(dto.token, dto.password);
     return { message: 'Your password has been reset. You can sign in now.' };
   }
@@ -118,11 +122,12 @@ export class AuthController {
       // act on — Google sign-in never registers anyone, so they need to be told to sign up
       // rather than left retrying a button that will keep failing.
       const code =
-        error instanceof NotFoundException ? 'google_no_account' : 'google_denied';
+        error instanceof NotFoundException
+          ? 'google_no_account'
+          : 'google_denied';
       res.redirect(`${frontendUrl}/login?error=${code}`);
     }
   }
-
 
   @Throttle(AUTH_THROTTLE)
   @Post('login')

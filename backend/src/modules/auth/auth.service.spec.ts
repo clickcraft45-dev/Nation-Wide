@@ -352,9 +352,9 @@ describe('AuthService', () => {
     it('rejects a staff/admin email without ever consulting Customer', async () => {
       prisma.adminUser.findUnique.mockResolvedValue(adminUser);
 
-      await expect(authService.loginWithGoogle(googleProfile)).rejects.toBeInstanceOf(
-        UnauthorizedException,
-      );
+      await expect(
+        authService.loginWithGoogle(googleProfile),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
       // Those roles are provisioned internally; Google must never authenticate one.
       expect(prisma.customer.findUnique).not.toHaveBeenCalled();
     });
@@ -379,7 +379,9 @@ describe('AuthService', () => {
         passwordHash: null,
       });
 
-      await expect(authService.loginWithGoogle(googleProfile)).resolves.toMatchObject({
+      await expect(
+        authService.loginWithGoogle(googleProfile),
+      ).resolves.toMatchObject({
         role: 'CUSTOMER',
       });
     });
@@ -390,9 +392,9 @@ describe('AuthService', () => {
 
       // Google proves who someone is, not that they are a customer here — and registration
       // collects a phone number that dispatch depends on.
-      await expect(authService.loginWithGoogle(googleProfile)).rejects.toBeInstanceOf(
-        NotFoundException,
-      );
+      await expect(
+        authService.loginWithGoogle(googleProfile),
+      ).rejects.toBeInstanceOf(NotFoundException);
       expect(prisma.customer.create).not.toHaveBeenCalled();
     });
 
@@ -404,9 +406,9 @@ describe('AuthService', () => {
         isActive: false,
       });
 
-      await expect(authService.loginWithGoogle(googleProfile)).rejects.toBeInstanceOf(
-        UnauthorizedException,
-      );
+      await expect(
+        authService.loginWithGoogle(googleProfile),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
     });
   });
 });

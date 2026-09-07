@@ -42,14 +42,21 @@ describe('PartnerApplicationsService', () => {
       partnerApplication: {
         findFirst: jest.fn().mockResolvedValue(null),
         findUnique: jest.fn(),
-        create: jest.fn().mockImplementation(({ data }) => ({ id: 'app-1', ...data })),
-        update: jest.fn().mockImplementation(({ data }) => ({ id: 'app-1', ...data })),
+        create: jest
+          .fn()
+          .mockImplementation(({ data }) => ({ id: 'app-1', ...data })),
+        update: jest
+          .fn()
+          .mockImplementation(({ data }) => ({ id: 'app-1', ...data })),
         findMany: jest.fn().mockResolvedValue([]),
       },
       adminUser: { findUnique: jest.fn().mockResolvedValue(null) },
     };
     pickupPartners = { create: jest.fn().mockResolvedValue({ id: 'admin-9' }) };
-    mail = { send: jest.fn().mockResolvedValue(true), operationsInbox: 'ops@nationwide.test' };
+    mail = {
+      send: jest.fn().mockResolvedValue(true),
+      operationsInbox: 'ops@nationwide.test',
+    };
     config = { get: jest.fn().mockReturnValue('https://app.nationwide.test') };
     service = new PartnerApplicationsService(
       prisma as never,
@@ -81,7 +88,9 @@ describe('PartnerApplicationsService', () => {
       expect(sent.subject).toContain('Ravi Kumar');
       // Replying reaches the applicant, not the ops inbox itself.
       expect(sent.replyTo).toBe('ravi@example.com');
-      expect(sent.html).toContain('https://app.nationwide.test/admin/partner-applications');
+      expect(sent.html).toContain(
+        'https://app.nationwide.test/admin/partner-applications',
+      );
     });
 
     it('still records the application when the mail provider is down', async () => {
@@ -111,7 +120,11 @@ describe('PartnerApplicationsService', () => {
     it('creates the partner account and records which admin approved it', async () => {
       prisma.partnerApplication.findUnique.mockResolvedValue(makeApplication());
 
-      const result = await service.approve('app-1', { password: 'LongEnough123' }, 'admin-7');
+      const result = await service.approve(
+        'app-1',
+        { password: 'LongEnough123' },
+        'admin-7',
+      );
 
       expect(pickupPartners.create).toHaveBeenCalledWith({
         email: 'ravi@example.com',
@@ -151,7 +164,10 @@ describe('PartnerApplicationsService', () => {
       const result = await service.reject('app-1', {}, 'admin-7');
 
       expect(pickupPartners.create).not.toHaveBeenCalled();
-      expect(result).toMatchObject({ status: 'REJECTED', reviewedByAdminId: 'admin-7' });
+      expect(result).toMatchObject({
+        status: 'REJECTED',
+        reviewedByAdminId: 'admin-7',
+      });
     });
   });
 });

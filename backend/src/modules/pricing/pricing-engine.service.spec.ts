@@ -1,4 +1,7 @@
-import { PricingEngineService } from './pricing-engine.service';
+import {
+  PricingEngineService,
+  calculateFinalPrice,
+} from './pricing-engine.service';
 
 function decimal(value: number) {
   return value;
@@ -312,5 +315,74 @@ describe('PricingEngineService', () => {
         }),
       }),
     );
+  });
+
+  describe('per-kg slabs', () => {
+    // Carrier tariffs price heavy freight by the kilo — FedEx bills 21-44 kg at Rs.444/kg.
+    // Storing that as a flat rate would sell a 40 kg parcel for about 2.5% of its cost, so
+    // these tests guard the multiplication itself and everything computed from it.
+    const base = {
+      baseRate: 444,
+      fuelChargePercent: 0,
+      pssPerKg: 0,
+      gstPercent: 0,
+      nationwideCut: 0,
+    };
+
+    it('multiplies the base rate by the chargeable weight', () => {
+      const result = calculateFinalPrice({
+        ...base,
+        rateType: 'PER_KG',
+        weightKg: 40,
+      });
+      expect(result.baseRate).toBe(17760);
+      expect(result.finalPrice).toBe(17760);
+    });
+
+    it('leaves FLAT slabs alone, which is every slab that existed before', () => {
+      const result = calculateFinalPrice({
+        ...base,
+        rateType: 'FLAT',
+        weightKg: 40,
+      });
+      expect(result.baseRate).toBe(444);
+    });
+
+    it('defaults to FLAT when rateType is not supplied', () => {
+      const result = calculateFinalPrice({ ...base, weightKg: 40 });
+      expect(result.baseRate).toBe(444);
+    });
+
+    it('charges fuel on the resolved amount, not the per-kg unit rate', () => {
+      // 444 * 10 = 4440 base; fuel at 10% must be 444, not 44.4.
+      const result = calculateFinalPrice({
+        ...base,
+        rateType: 'PER_KG',
+        weightKg: 10,
+        fuelChargePercent: 10,
+      });
+      expect(result.baseRate).toBe(4440);
+      expect(result.fuelChargeAmount).toBe(444);
+      expect(result.taxableSubtotal).toBe(4884);
+    });
+
+    it('reports a breakdown that reconciles against its own final price', () => {
+      const r = calculateFinalPrice({
+        baseRate: 444,
+        rateType: 'PER_KG',
+        weightKg: 30,
+        fuelChargePercent: 10,
+        pssPerKg: 25,
+        gstPercent: 18,
+        nationwideCut: 100,
+      });
+      const expected =
+        Math.round((r.taxableSubtotal + r.gstAmount + r.nationwideCut) * 100) /
+        100;
+      expect(r.finalPrice).toBe(expected);
+      expect(r.taxableSubtotal).toBe(
+        Math.round((r.baseRate + r.pssAmount + r.fuelChargeAmount) * 100) / 100,
+      );
+    });
   });
 });

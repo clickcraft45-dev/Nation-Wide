@@ -37,8 +37,10 @@ export class MailService {
   constructor(private readonly config: ConfigService) {
     this.apiKey = this.config.get<string>('BREVO_API_KEY') ?? '';
     this.fromEmail =
-      this.config.get<string>('MAIL_FROM_EMAIL') ?? 'no-reply@nationwidelogistics.co';
-    this.fromName = this.config.get<string>('MAIL_FROM_NAME') ?? 'NationWide Logistics';
+      this.config.get<string>('MAIL_FROM_EMAIL') ??
+      'no-reply@nationwidelogistics.co';
+    this.fromName =
+      this.config.get<string>('MAIL_FROM_NAME') ?? 'NationWide Logistics';
     // Where internal alerts land. Falls back to the sender so a missing setting degrades to a
     // deliverable address rather than a silently dropped alert.
     this.opsInbox = this.config.get<string>('MAIL_OPS_INBOX') ?? this.fromEmail;
@@ -72,7 +74,12 @@ export class MailService {
         },
         body: JSON.stringify({
           sender: { email: this.fromEmail, name: this.fromName },
-          to: [{ email: email.to, ...(email.toName ? { name: email.toName } : {}) }],
+          to: [
+            {
+              email: email.to,
+              ...(email.toName ? { name: email.toName } : {}),
+            },
+          ],
           subject: email.subject,
           htmlContent: email.html,
           textContent: email.text,

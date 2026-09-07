@@ -133,7 +133,9 @@ describe('AdminUsersService', () => {
     const { prisma, service } = harness(PARTNER);
     await service.update('p-1', { role: 'STAFF' }, 'admin-1');
     expect(prisma.adminUser.update).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ role: 'STAFF' }) }),
+      expect.objectContaining({
+        data: expect.objectContaining({ role: 'STAFF' }),
+      }),
     );
   });
 
@@ -141,7 +143,9 @@ describe('AdminUsersService', () => {
     it('deletes an account that has no recorded activity', async () => {
       const { prisma, service } = harness(STAFF);
       await service.remove('staff-1', 'admin-1');
-      expect(prisma.adminUser.delete).toHaveBeenCalledWith({ where: { id: 'staff-1' } });
+      expect(prisma.adminUser.delete).toHaveBeenCalledWith({
+        where: { id: 'staff-1' },
+      });
     });
 
     it('refuses an account with history, pointing at deactivation instead', async () => {
@@ -168,9 +172,9 @@ describe('AdminUsersService', () => {
 
     it('refuses to delete the last active admin', async () => {
       const { prisma, service } = harness(ADMIN, 1);
-      await expect(service.remove('admin-1', 'someone-else')).rejects.toBeInstanceOf(
-        BadRequestException,
-      );
+      await expect(
+        service.remove('admin-1', 'someone-else'),
+      ).rejects.toBeInstanceOf(BadRequestException);
       expect(prisma.adminUser.delete).not.toHaveBeenCalled();
     });
   });

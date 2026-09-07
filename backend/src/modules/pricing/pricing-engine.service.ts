@@ -28,6 +28,8 @@ export interface ComputedRateOption {
 
 export interface PriceCalculationInput {
   baseRate: number;
+  /** FLAT when omitted, so every existing caller keeps its current behaviour. */
+  rateType?: 'FLAT' | 'PER_KG';
   fuelChargePercent: number;
   pssPerKg: number;
   weightKg: number;
@@ -53,6 +55,7 @@ export function calculateFinalPrice(
 ): PriceBreakdown {
   const {
     baseRate,
+    rateType = 'FLAT',
     fuelChargePercent,
     pssPerKg,
     weightKg,
@@ -61,10 +64,22 @@ export function calculateFinalPrice(
   } = input;
   const pssAmount = round2(pssPerKg * weightKg);
 
+  // Carrier tariffs price heavy freight per kilogram (FedEx: 21-44 kg at Rs.444/kg). Resolving
+  // that to an amount HERE, before step 3, is deliberate: every step below — fuel, GST, the
+  // taxable subtotal — is defined against the base rate for this shipment, so they must all see
+  // the resolved figure. Applying fuel to the per-kg unit rate instead would under-charge it by
+  // exactly the weight multiple.
+  const effectiveBaseRate =
+    rateType === 'PER_KG' ? round2(baseRate * weightKg) : baseRate;
+
   // Step 3: Fuel Charge applies ONLY to Base Rate — never to PSS/GST/NationWide Cut.
-  const fuelChargeAmount = round2(baseRate * (fuelChargePercent / 100));
+  const fuelChargeAmount = round2(
+    effectiveBaseRate * (fuelChargePercent / 100),
+  );
   // Step 4: Taxable Subtotal.
-  const taxableSubtotal = round2(baseRate + pssAmount + fuelChargeAmount);
+  const taxableSubtotal = round2(
+    effectiveBaseRate + pssAmount + fuelChargeAmount,
+  );
   // Step 5: GST computed on the taxable subtotal — BEFORE NationWide Cut is added.
   const gstAmount = round2(taxableSubtotal * (gstPercent / 100));
   // Step 6: Subtotal after GST.
@@ -73,7 +88,10 @@ export function calculateFinalPrice(
   const finalPrice = round2(subtotalAfterGst + nationwideCut);
 
   return {
-    baseRate,
+    // The resolved amount, not the per-kg unit rate: this is what the customer is charged and
+    // what every downstream total is built from, so a breakdown showing 444 for a 40 kg parcel
+    // would not reconcile against its own finalPrice.
+    baseRate: effectiveBaseRate,
     pssAmount,
     fuelChargePercent,
     fuelChargeAmount,
@@ -200,6 +218,7 @@ export class PricingEngineService {
     // provider's config; see RateProvider's schema doc comment.
     const breakdown = calculateFinalPrice({
       baseRate: slab.baseRate,
+      rateType: slab.rateType,
       fuelChargePercent: rateCard.zone.rateProvider.fuelChargePercent,
       pssPerKg: rateCard.zone.rateProvider.pssPerKg,
       weightKg,

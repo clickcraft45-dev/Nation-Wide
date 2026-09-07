@@ -123,6 +123,17 @@ enum PaymentStatus {
 // An invoice is a statutory document: once ISSUED its numbers are frozen and it may never be
 // edited or deleted, only CANCELLED (which keeps the number consumed, as GST requires — a gap in
 // the series is what an auditor asks about).
+/// How a WeightSlab's baseRate should be read.
+///
+/// FLAT is the original and remains the default: baseRate is the whole price for any shipment
+/// falling in the slab. PER_KG exists because carrier tariffs price heavy freight by the
+/// kilogram — FedEx quotes 21-44 kg at Rs.444/kg, and storing that as a flat 444 would sell a
+/// 40 kg parcel for about 2.5% of its cost.
+enum RateType {
+  FLAT
+  PER_KG
+}
+
 enum InvoiceStatus {
   ISSUED
   CANCELLED
@@ -540,6 +551,9 @@ model WeightSlab {
   weightFromKg     Float  @map("weight_from_kg")
   weightToKg       Float  @map("weight_to_kg")
   baseRate         Float  @map("base_rate")
+  /// FLAT (default) keeps every existing row behaving exactly as before; PER_KG multiplies
+  /// baseRate by the chargeable weight. See the RateType doc comment.
+  rateType         RateType @default(FLAT) @map("rate_type")
   gstPercent       Float  @default(0) @map("gst_percent")
   nationwideCut    Float  @default(0) @map("nationwide_cut")
   isActive         Boolean  @default(true) @map("is_active")
