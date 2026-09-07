@@ -1,4 +1,5 @@
-import { Loader2, Check } from "lucide-react";
+import { Check } from "lucide-react";
+import { Spinner } from "@/components/ui/spinner";
 
 const CHECKLIST = [
   "Checking available providers",
@@ -9,7 +10,7 @@ const CHECKLIST = [
 export function QuoteLoading() {
   return (
     <div className="mx-auto flex max-w-lg flex-col items-center gap-6 py-10 text-center">
-      <Loader2 className="h-8 w-8 animate-spin text-primary" aria-hidden />
+      <Spinner size="lg" className="text-[color:var(--brand-red)]" />
       <div>
         <p className="text-base font-medium text-foreground">
           Finding the best shipping options for you…

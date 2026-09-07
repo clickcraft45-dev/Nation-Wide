@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { CheckCircle2, Loader2, XCircle } from "lucide-react";
+import { CheckCircle2, XCircle } from "lucide-react";
 import type { PincodeLookupDto } from "@nationwide/shared-types";
 import { apiClient, ApiError } from "@/lib/api-client";
 import { Input, type InputProps } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils/cn";
 
 type VerifyState =
@@ -101,7 +102,7 @@ export function PincodeInput({ value, onChange, onResolved, className, ...props 
         />
         <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center">
           {state.kind === "checking" && (
-            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-hidden />
+            <Spinner size="sm" className="text-muted-foreground" />
           )}
           {state.kind === "valid" && <CheckCircle2 className="h-4 w-4 text-success" aria-hidden />}
           {state.kind === "invalid" && <XCircle className="h-4 w-4 text-danger" aria-hidden />}

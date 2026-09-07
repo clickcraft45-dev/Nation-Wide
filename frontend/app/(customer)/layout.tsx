@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect } from "react";
+import { Spinner } from "@/components/ui/spinner";
 import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "@/state/auth-context";
 import { CustomerMobileShell } from "@/components/customer/customer-mobile-shell";
-import { Loader2 } from "lucide-react";
+
 
 export default function CustomerLayout({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth();
@@ -25,7 +26,7 @@ export default function CustomerLayout({ children }: { children: React.ReactNode
   if (isLoading || !user || user.role !== "CUSTOMER") {
     return (
       <div className="flex flex-1 items-center justify-center">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" aria-hidden />
+        <Spinner size="md" className="text-muted-foreground" />
       </div>
     );
   }

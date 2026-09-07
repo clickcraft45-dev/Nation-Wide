@@ -3,11 +3,12 @@
 import { Suspense, useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ShieldCheck, TrendingUp, Loader2 } from "lucide-react";
+import { ShieldCheck, TrendingUp } from "lucide-react";
 import { useAuth } from "@/state/auth-context";
 import { ApiError, API_BASE_URL, errorMessage } from "@/lib/api-client";
 import { useCurrentYear } from "@/lib/utils/use-current-year";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { Input, Label, FieldError } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Logo } from "@/components/brand/logo";
@@ -122,7 +123,7 @@ function LoginPageInner() {
   if (isLoading || user) {
     return (
       <div className="flex min-h-dvh flex-1 items-center justify-center">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" aria-hidden />
+        <Spinner size="md" className="text-muted-foreground" />
       </div>
     );
   }

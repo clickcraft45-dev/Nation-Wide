@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect } from "react";
+import { Spinner } from "@/components/ui/spinner";
 import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "@/state/auth-context";
 import { PartnerMobileShell } from "@/components/partner/partner-mobile-shell";
-import { Loader2 } from "lucide-react";
+
 
 // Pickup Partner (field executive) shell — mobile-first, purpose-built for a phone in the
 // field (see PartnerMobileShell). A wholly separate route tree from /admin, not a role-filtered
@@ -29,7 +30,7 @@ export default function PartnerDashboardLayout({ children }: { children: React.R
   if (isLoading || !user || user.role !== "PICKUP_PARTNER") {
     return (
       <div className="flex flex-1 items-center justify-center">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" aria-hidden />
+        <Spinner size="md" className="text-muted-foreground" />
       </div>
     );
   }

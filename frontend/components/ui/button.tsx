@@ -1,6 +1,7 @@
 import { type ButtonHTMLAttributes, forwardRef } from "react";
+import { Spinner } from "@/components/ui/spinner";
 import { cva, type VariantProps } from "class-variance-authority";
-import { Loader2 } from "lucide-react";
+
 import { cn } from "@/lib/utils/cn";
 
 export const buttonVariants = cva(
@@ -49,7 +50,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         aria-busy={isLoading}
         {...props}
       >
-        {isLoading && <Loader2 className="h-4 w-4 animate-spin" aria-hidden />}
+        {isLoading && <Spinner size="sm" />}
         {children}
       </button>
     );

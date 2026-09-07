@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckCircle2, Download, FileText, Loader2, ReceiptIndianRupee } from "lucide-react";
+import { CheckCircle2, Download, FileText, ReceiptIndianRupee } from "lucide-react";
 import type { InvoiceDto } from "@nationwide/shared-types";
 import { apiClient, ApiError, errorMessage } from "@/lib/api-client";
 import { Badge } from "@/components/ui/badge";
+import { Spinner } from "@/components/ui/spinner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/page-state";
 import { useToast } from "@/components/ui/toast";
@@ -148,7 +149,7 @@ export default function CustomerBillsPage() {
                   className="glass-interactive inline-flex h-9 items-center gap-2 rounded-full bg-primary px-4 text-sm font-medium text-primary-foreground shadow-[inset_0_1px_0_0_rgba(255,255,255,0.22),0_8px_18px_-12px_rgba(9,9,11,0.65)] hover:!bg-primary-hover disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   {downloadingId === invoice.id ? (
-                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                    <Spinner size="sm" />
                   ) : (
                     <Download className="h-4 w-4" aria-hidden />
                   )}

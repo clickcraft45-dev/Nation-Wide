@@ -837,3 +837,82 @@ body {
     animation: none;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Loading indicators
+   --------------------------------------------------------------------------- */
+
+/* A conic sweep masked into a ring. The gradient fades from the brand red to transparent, so the
+   leading edge reads as direction — a dashed circle spinning looks identical at every angle and
+   therefore looks static in the one frame a fast response leaves on screen.
+
+   `mask` punches the centre out, which is what turns the filled cone into a ring; the two
+   -webkit- lines are for Safari, which still needs the prefix for mask-composite. */
+.nw-spinner {
+  display: inline-block;
+  border-radius: 9999px;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    color-mix(in srgb, currentColor 25%, transparent) 90deg,
+    currentColor 320deg,
+    currentColor 360deg
+  );
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2px));
+  animation: nw-spin 0.75s linear infinite;
+}
+
+/* Small sizes need a thinner ring or the hole closes up and it reads as a solid dot. */
+.nw-spinner-sm {
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1px));
+}
+
+@keyframes nw-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+/* Skeletons: a light sweep travelling across the placeholder, rather than the whole block
+   pulsing. The sweep suggests content arriving left-to-right, which is the direction the real
+   text will fill in; a pulse just blinks. */
+.nw-skeleton {
+  position: relative;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.nw-skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.85) 50%,
+    transparent 100%
+  );
+  animation: nw-shimmer 1.6s ease-in-out infinite;
+}
+
+@keyframes nw-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Both still need to read as "not real content yet", so they keep their shape and lose only
+     the movement — a spinner frozen mid-sweep still looks like a spinner. */
+  .nw-spinner {
+    animation: none;
+  }
+
+  .nw-skeleton::after {
+    animation: none;
+    opacity: 0;
+  }
+}

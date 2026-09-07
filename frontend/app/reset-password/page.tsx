@@ -3,9 +3,10 @@
 import { Suspense, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { CheckCircle2, Loader2 } from "lucide-react";
+import { CheckCircle2 } from "lucide-react";
 import { apiClient, errorMessage } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { Label, FieldError } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Logo } from "@/components/brand/logo";
@@ -147,7 +148,7 @@ export default function ResetPasswordPage() {
     <div className="flex min-h-screen flex-1 items-center justify-center px-6 py-12">
       {/* useSearchParams needs a Suspense boundary or the whole route opts out of prerendering. */}
       <Suspense
-        fallback={<Loader2 className="h-5 w-5 animate-spin text-muted-foreground" aria-hidden />}
+        fallback={<Spinner size="md" className="text-muted-foreground" />}
       >
         <ResetPasswordForm />
       </Suspense>

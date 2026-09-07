@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect } from "react";
+import { Spinner } from "@/components/ui/spinner";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
+
 import { useAuth } from "@/state/auth-context";
 import { cn } from "@/lib/utils/cn";
 
@@ -41,7 +42,7 @@ export default function PricingLayout({ children }: { children: React.ReactNode 
   if (isLoading || !user || user.role === "STAFF") {
     return (
       <div className="flex flex-1 items-center justify-center">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" aria-hidden />
+        <Spinner size="md" className="text-muted-foreground" />
       </div>
     );
   }

@@ -1,15 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import {
-  CalendarDays,
-  Download,
-  FileText,
-  Loader2,
-  MessageCircle,
-  ReceiptIndianRupee,
-  UsersRound,
-} from "lucide-react";
+import { CalendarDays, Download, FileText, MessageCircle, ReceiptIndianRupee, UsersRound } from "lucide-react";
 import type {
   CustomerDto,
   InvoiceBatchResultDto,
@@ -18,6 +10,7 @@ import type {
 } from "@nationwide/shared-types";
 import { apiClient, ApiError, errorMessage } from "@/lib/api-client";
 import { SearchInput } from "@/components/ui/search-input";
+import { Spinner } from "@/components/ui/spinner";
 import { NativeSelect } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -582,7 +575,7 @@ export default function AdminInvoicesPage() {
                         className="glass-interactive inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground hover:text-foreground disabled:opacity-50"
                       >
                         {downloadingId === inv.id ? (
-                          <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                          <Spinner size="sm" />
                         ) : (
                           <Download className="h-4 w-4" aria-hidden />
                         )}
