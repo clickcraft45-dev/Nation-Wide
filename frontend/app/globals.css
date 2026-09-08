@@ -916,3 +916,71 @@ body {
     opacity: 0;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Review marquee
+   --------------------------------------------------------------------------- */
+
+/* Full-bleed out of the page's max-width container, then faded at both edges so cards dissolve
+   into the margin instead of being sliced off by the viewport. Without the mask the belt looks
+   broken at the boundary rather than continuing past it. */
+.marquee-viewport {
+  -webkit-mask: linear-gradient(90deg, transparent, #000 6rem, #000 calc(100% - 6rem), transparent);
+  mask: linear-gradient(90deg, transparent, #000 6rem, #000 calc(100% - 6rem), transparent);
+}
+
+/* The second lane runs the other way. Reversing the same keyframes costs nothing and means one
+   animation definition serves both directions. */
+.marquee-reverse {
+  animation-direction: reverse;
+}
+
+/* Pausing on hover is the whole reason this is readable: a review long enough to be worth
+   reading is longer than the time it spends on screen. Focus-within covers keyboard users, who
+   otherwise tab into a card that is still sliding away from them. */
+.marquee-viewport:hover .animate-marquee,
+.marquee-viewport:focus-within .animate-marquee {
+  animation-play-state: paused;
+}
+
+/* Slower than the logo belt above it — this one carries text, not marks. */
+.marquee-viewport .animate-marquee {
+  animation-duration: 68s;
+}
+
+.marquee-card {
+  transition: transform 0.3s ease, border-color 0.3s ease;
+}
+
+.marquee-viewport:hover .marquee-card:hover {
+  transform: translateY(-4px);
+  border-color: color-mix(in srgb, var(--brand-red) 40%, var(--border));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* .animate-marquee is already stopped globally further up. Left moving, the duplicate lane
+     would sit frozen mid-slide with cards half out of view, so the belt becomes a plain wrapping
+     grid — every review visible, nothing clipped, no motion. */
+  .marquee-viewport {
+    -webkit-mask: none;
+    mask: none;
+  }
+
+  .marquee-viewport > div {
+    display: block;
+  }
+
+  .marquee-viewport .animate-marquee {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .marquee-viewport .animate-marquee[aria-hidden="true"] {
+    display: none;
+  }
+
+  .marquee-card {
+    transition: none;
+  }
+}
