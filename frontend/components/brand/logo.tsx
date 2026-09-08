@@ -1,26 +1,21 @@
 import { cn } from "@/lib/utils/cn";
+import { LOGO_MARK } from "@/lib/constants/assets";
 
 /**
  * NationWide Logistics logo.
  *
- * THE MARK — "Rise N". One continuous stroke draws the N (stem, diagonal, stem), and an
- * arrowhead crowns the right stem so that stem-plus-head reads as an upward arrow and as the
- * letter at the same time. Two shapes, one stroke weight: the previous placeholder stacked three
- * separate ideas (monogram + globe swoosh + a detached arrow breaking the badge edge), which
- * turned to mud at favicon size.
+ * THE MARK is the company's real artwork — the NW monogram with the globe and the aircraft —
+ * served from public/assets/logo/ via LOGO_MARK. It replaced a drawn-in-code "Rise N" placeholder
+ * that this file used to define as inline SVG paths.
  *
- * COLOUR. On the badge the arrowhead is brand red (--brand-red) — the black / white / red system.
- * The red is carried by the ONE shape that is still a complete arrow without it, so nothing is
- * lost when the mark has to be single-ink: the `mono` and `reverse` variants stay one flat ink by
- * contract (print, invoices, the black glass panels), and the favicon keeps the red because at
- * 16px the arrowhead is the only part with enough area to register as colour at all.
+ * COLOUR. The supplied art is one flat ink (black) on transparency, which is what makes `reverse`
+ * work without a second file: on the dark sidebar and hero panels the mark is inverted to white
+ * in CSS. That trick is only valid *because* the art is single-ink — if the logo ever gains a
+ * second colour, invert would produce a wrong one and a real white asset has to be supplied here.
  *
- * Constraints it is built to (docs/BRAND_BRIEF_PROMPT.md): legible at 16px, recognisable in a
- * single flat ink, no gradient and no baked-in shadow, and readable embossed on black glass.
- *
- * Every screen renders the mark through this one component, so retoning or replacing it happens
- * here and nowhere else. `app/icon.svg` and `app/apple-icon.png` carry the same geometry as
- * static files, because Next.js needs those on disk — keep the three in sync.
+ * Every screen renders the mark through this one component, so replacing or retoning it happens
+ * here and nowhere else. app/favicon.ico and app/apple-icon.png are separate files
+ * on disk because Next.js requires them there — keep them in sync with this artwork.
  */
 
 export type LogoVariant =
@@ -47,10 +42,6 @@ const SUBHEADING_TEXT: Record<LogoSize, string> = {
   lg: "text-[11px]",
 };
 
-/** The N, drawn in one unbroken stroke: up the left stem, down the diagonal, up the right stem. */
-const N_PATH = "M10.5 30V14L25.5 30V10";
-/** The arrowhead, apex landing on the right stem's top cap so stem and head fuse into one arrow. */
-const ARROW_PATH = "M21.9 13.6L25.5 10L29.1 13.6";
 
 function NwMark({
   size,
@@ -61,29 +52,23 @@ function NwMark({
   tone: "brand" | "mono" | "reverse";
   className?: string;
 }) {
-  // "brand": near-black rounded-square badge carrying a white glyph.
-  // "mono"/"reverse": the bare glyph in a single ink, no badge — for print and for the dark
-  // panels respectively, per the brief's required variants.
-  const badge = tone === "brand";
-
   return (
-    <svg
-      viewBox="0 0 40 40"
-      width={size}
-      height={size}
-      className={cn(!badge && (tone === "reverse" ? "text-white" : "text-foreground"), className)}
-      role="img"
-      aria-label="NationWide Logistics"
-    >
-      {badge && <rect x="1" y="1" width="38" height="38" rx="10" className="fill-brand-navy" />}
-      <g fill="none" strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round">
-        <path d={N_PATH} className={badge ? "stroke-white" : "stroke-current"} />
-        <path
-          d={ARROW_PATH}
-          className={badge ? "stroke-brand-red-bright" : "stroke-current"}
-        />
-      </g>
-    </svg>
+    // <picture>, not next/image: the mark renders at four fixed sizes on every page including
+    // the login split-panel and emails-adjacent print views, so there is nothing for the image
+    // optimiser to decide and a plain element avoids a layout pass per logo.
+    <picture>
+      <source srcSet={LOGO_MARK.avif} type="image/avif" />
+      <img
+        src={LOGO_MARK.png}
+        alt={LOGO_MARK.alt}
+        width={size}
+        height={size}
+        // The art is black on transparency. On dark surfaces it would otherwise disappear, so it
+        // is inverted to white — correct precisely because the mark is one flat ink.
+        className={cn("object-contain", tone === "reverse" && "invert", className)}
+        style={{ width: size, height: size }}
+      />
+    </picture>
   );
 }
 

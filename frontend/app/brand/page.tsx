@@ -138,7 +138,7 @@ const ASSETS = [
   {
     group: "Application icons",
     files: [
-      { name: "icon.svg", path: "/icon.svg", use: "Primary favicon. Vector, scales to any size." },
+      { name: "favicon.ico", path: "/favicon.ico", use: "Browser tab icon, multi-resolution." },
       { name: "favicon.ico", path: "/favicon.ico", use: "Legacy fallback for older browsers." },
       { name: "apple-icon.png", path: "/apple-icon.png", use: "iOS home-screen icon, 180×180." },
     ],

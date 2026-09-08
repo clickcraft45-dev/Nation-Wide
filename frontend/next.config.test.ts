@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import nextConfig from "./next.config";
 
@@ -46,17 +46,26 @@ describe("Content-Security-Policy", () => {
 });
 
 describe("brand mark", () => {
-  // components/brand/logo.tsx renders the mark for the app; app/icon.svg is the same geometry as
-  // a static file because Next.js needs the tab icon on disk. Nothing enforces that by
-  // construction, so this does — a mark edited in one place and not the other ships a favicon
-  // that is not the logo.
-  it("app/icon.svg carries the same two paths as <NwMark>", () => {
-    const component = readFileSync("./components/brand/logo.tsx", "utf8");
-    const icon = readFileSync("./app/icon.svg", "utf8");
-    const paths = [...component.matchAll(/^const (?:N|ARROW)_PATH = "([^"]+)";$/gm)].map(
-      (m) => m[1],
-    );
-    expect(paths).toHaveLength(2);
-    for (const d of paths) expect(icon).toContain(`d="${d}"`);
+  // The mark is now the supplied artwork rather than paths drawn in the component, so the old
+  // "do the two copies of the geometry match" check no longer applies. What can still silently
+  // break is the wiring: a renamed or missing file leaves every logo on the site as a broken
+  // image, which no type or lint error catches.
+  it("every asset the Logo component points at exists on disk", () => {
+    const assets = readFileSync("./lib/constants/assets.ts", "utf8");
+    const paths = [...assets.matchAll(/"(\/assets\/logo\/[^"]+)"/g)].map((m) => m[1]);
+
+    expect(paths.length).toBeGreaterThan(0);
+    for (const p of paths) {
+      expect(existsSync(`./public${p}`)).toBe(true);
+      // A space in a static path has to be percent-encoded by every consumer, and one of them
+      // eventually forgets. The supplied file was "logo-without bg.png" for exactly this reason.
+      expect(p).not.toContain(" ");
+    }
+  });
+
+  it("the tab icons Next.js serves from app/ are present", () => {
+    for (const f of ["./app/favicon.ico", "./app/apple-icon.png"]) {
+      expect(existsSync(f)).toBe(true);
+    }
   });
 });

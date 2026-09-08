@@ -20,6 +20,7 @@
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "NODE_OPTIONS=--experimental-vm-modules jest --config ./test/jest-e2e.json --runInBand --forceExit",
     "db:seed": "ts-node --transpile-only prisma/seed.ts",
+    "db:seed:reference": "ts-node --transpile-only prisma/seed-reference.ts",
     "db:seed:admin": "ts-node --transpile-only prisma/seed-admin.ts",
     "db:import:fedex": "ts-node --transpile-only scripts/import-fedex-tariff.ts",
     "db:seed:bulk": "ts-node --transpile-only scripts/seed-bulk.ts",

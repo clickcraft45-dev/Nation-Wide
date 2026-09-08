@@ -36,3 +36,20 @@ export const WORLD_MAP_IMAGE = {
 // authorisation, whereas naming the carriers you genuinely resell does not. The rail used to
 // show four grey placeholder SVGs, which on a live site read as logos that had failed to load.
 export const PARTNER_NETWORKS = ["DHL", "DHL Express", "FedEx", "UPS"] as const;
+
+/**
+ * The company mark — the NW monogram with the globe and aircraft.
+ *
+ * Single-ink black art on a transparent background, which is what makes the `reverse` variant
+ * possible: on the dark sidebar and hero panels the Logo component inverts it to white rather
+ * than needing a second file. Supply a real white asset here only if the mark ever stops being
+ * one flat ink.
+ *
+ * AVIF first with PNG as the fallback — the AVIF is roughly a sixth of the size, and every
+ * browser that cannot read it gets the PNG from the same <picture>.
+ */
+export const LOGO_MARK = {
+  avif: "/assets/logo/logo-mark.avif",
+  png: "/assets/logo/logo-mark.png",
+  alt: "NationWide Logistics",
+} as const;
