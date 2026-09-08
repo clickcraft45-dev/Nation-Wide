@@ -3,6 +3,8 @@
 import { Plus } from "lucide-react";
 import { LiquidButton } from "@/components/ui/liquid-glass-button";
 import { SectionHeading } from "@/components/marketing/section-heading";
+import { JsonLd } from "@/components/seo/json-ld";
+import { faqSchema } from "@/lib/seo/structured-data";
 import { CONTACT_EMAIL } from "@/lib/constants/contact";
 
 // Deliberately native <details>/<summary>: free keyboard support, free screen-reader semantics,
@@ -50,8 +52,12 @@ const FAQS = [
 ];
 
 export function MarketingFaqs() {
+  // The same array that renders below, published as FAQPage structured data. Google requires the
+  // marked-up Q&A to be visible on the page — which it is, in the accordion — and rewards it with
+  // an expandable result that takes more vertical space than a plain link.
   return (
     <section id="faqs" className="relative isolate overflow-hidden bg-background py-20">
+      <JsonLd data={faqSchema(FAQS)} />
       <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
         <div className="absolute -left-32 top-0 h-112 w-112 rounded-full bg-zinc-300/45 blur-[130px] animate-aurora-slow" />
         <div className="absolute -right-24 bottom-0 h-104 w-104 rounded-full bg-zinc-400/30 blur-[130px] animate-aurora-slower" />
