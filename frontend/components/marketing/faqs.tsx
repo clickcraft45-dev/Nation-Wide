@@ -14,6 +14,19 @@ import { CONTACT_EMAIL } from "@/lib/constants/contact";
 // Answers describe how the platform actually works and stop there — no invented delivery windows,
 // prices or refund terms. Anything specific routes to support.
 const FAQS = [
+  // The two location questions lead deliberately. They are what someone searching "international
+  // courier Hyderabad" is actually asking, and as FAQPage structured data they are the entries
+  // most likely to surface for that query — a question phrased the way it is typed.
+  {
+    question: "Do you offer international courier service in Hyderabad?",
+    answer:
+      "Yes. NationWide Logistics has been shipping internationally out of Hyderabad for more than eight years, from our office at Prakash Nagar, Begumpet, Secunderabad. We send documents, parcels and excess baggage to over 240 countries through FedEx, UPS, DHL and DPD, and we collect from anywhere in Hyderabad and Secunderabad.",
+  },
+  {
+    question: "Do you collect from my address in Hyderabad, or do I have to visit your office?",
+    answer:
+      "We collect from you. Book a pickup and one of our partners comes to your address anywhere in Hyderabad or Secunderabad, weighs and measures the parcel on the spot, and confirms the final price with you before it moves. You are welcome to drop off at our Begumpet office instead if that is easier.",
+  },
   {
     question: "How do I get a shipping quote?",
     answer:

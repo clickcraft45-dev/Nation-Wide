@@ -57,13 +57,26 @@ export function MarketingAbout() {
         </div>
 
         <div>
-          <h2 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
-            Shipping without the complexity
+          {/* The city and the years are the two things a person weighing couriers actually wants,
+              and they were the two things this section never said. They also matter to search:
+              this is the visible copy that has to agree with the LocalBusiness structured data. */}
+          <p className="text-sm font-semibold uppercase tracking-[0.16em] text-primary">
+            Hyderabad · Since 2018
+          </p>
+          <h2 className="mt-3 text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
+            Hyderabad&apos;s trusted international courier, 8+ years on
           </h2>
           <p className="mt-4 text-muted-foreground">
-            NationWide Logistics connects customers with reliable shipping solutions through a
-            network of trusted logistics and carrier partners — so you get transparent options
-            and visibility, without having to manage the complexity yourself.
+            For more than eight years NationWide Logistics has shipped documents, parcels and
+            excess baggage out of Hyderabad and Secunderabad to over 240 countries. Families
+            sending things to students abroad, businesses moving export consignments, people
+            posting what will not fit in a suitcase — we have handled all of it from our office in
+            Begumpet.
+          </p>
+          <p className="mt-3 text-muted-foreground">
+            We connect you with FedEx, UPS, DHL and DPD through one booking, so you get
+            transparent options and end-to-end visibility without having to manage the complexity
+            yourself.
           </p>
 
           <ul className="mt-8 grid gap-3 sm:grid-cols-2">
