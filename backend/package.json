@@ -22,7 +22,7 @@
     "db:seed": "ts-node --transpile-only prisma/seed.ts",
     "db:seed:reference": "ts-node --transpile-only prisma/seed-reference.ts",
     "db:seed:admin": "ts-node --transpile-only prisma/seed-admin.ts",
-    "db:import:fedex": "ts-node --transpile-only scripts/import-fedex-tariff.ts",
+    "db:import:tariffs": "ts-node --transpile-only scripts/import-tariffs.ts",
     "db:seed:bulk": "ts-node --transpile-only scripts/seed-bulk.ts",
     "db:verify:bulk": "ts-node --transpile-only scripts/verify-bulk-seed.ts",
     "db:fix-indexes": "node scripts/fix-nullable-unique-indexes.js",

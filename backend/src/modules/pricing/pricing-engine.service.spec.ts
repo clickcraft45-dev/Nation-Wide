@@ -1,6 +1,7 @@
 import {
   PricingEngineService,
   calculateFinalPrice,
+  rateCardShipmentType,
 } from './pricing-engine.service';
 
 function decimal(value: number) {
@@ -383,6 +384,23 @@ describe('PricingEngineService', () => {
       expect(r.taxableSubtotal).toBe(
         Math.round((r.baseRate + r.pssAmount + r.fuelChargeAmount) * 100) / 100,
       );
+    });
+  });
+
+  describe('rateCardShipmentType', () => {
+    // Carriers publish two categories: documents, and everything else. The app offers a third
+    // choice to customers, which every carrier prices as a non-document package.
+    it('prices a PARCEL from the PACKAGE rate card', () => {
+      expect(rateCardShipmentType('PARCEL')).toBe('PACKAGE');
+    });
+
+    it('leaves DOCUMENT and PACKAGE alone', () => {
+      expect(rateCardShipmentType('DOCUMENT')).toBe('DOCUMENT');
+      expect(rateCardShipmentType('PACKAGE')).toBe('PACKAGE');
+    });
+
+    it('does not auto-price OTHER, which means "we do not know what this is"', () => {
+      expect(rateCardShipmentType('OTHER')).toBe('OTHER');
     });
   });
 });

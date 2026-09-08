@@ -46,6 +46,22 @@ export type PriceBreakdown = Omit<
   | 'currency'
 >;
 
+/**
+ * Which rate card a shipment type is priced from.
+ *
+ * Carrier tariffs publish two commercial categories — documents, and everything else (FedEx and
+ * UPS call it "Package", DHL calls it "Non-document"). The app offers customers a third choice,
+ * PARCEL, which every carrier prices as a non-document package. Without this mapping a customer
+ * who picks "Parcel" matches no rate card at all and is told no rate exists, which is wrong
+ * rather than merely unhelpful.
+ *
+ * OTHER stays unmapped on purpose: it means "we do not know what this is", which is exactly the
+ * case that should go to manual review rather than be auto-priced as a package.
+ */
+export function rateCardShipmentType(type: ShipmentTypeCode): ShipmentTypeCode {
+  return type === 'PARCEL' ? 'PACKAGE' : type;
+}
+
 // The single authoritative implementation of the business's mandatory 7-step calculation
 // (Section: Complete quotation calculation flow) — reused by both real quote computation
 // (computeOption, below) and the admin's no-persistence rate preview (previewRate), so the
@@ -140,7 +156,7 @@ export class PricingEngineService {
 
     const rateCards = await this.prisma.rateCard.findMany({
       where: {
-        shipmentType: input.shipmentType,
+        shipmentType: rateCardShipmentType(input.shipmentType),
         zoneId: { in: zoneCountries.map((zc) => zc.zoneId) },
         weightSlabs: { some: { isActive: true } },
       },
