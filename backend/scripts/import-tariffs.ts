@@ -20,6 +20,7 @@
 import { readFileSync } from 'node:fs';
 import { PrismaClient, type RateType } from '@prisma/client';
 import { readSheet } from './xlsx-reader';
+import { buildCountryLookup, resolveCountry } from './country-matching';
 
 const prisma = new PrismaClient();
 const CURRENCY = 'INR';
@@ -243,83 +244,6 @@ function parseCarrier(file: string, config: CarrierConfig): ParsedCarrier {
  * assignment quotes a real customer the wrong price.
  */
 
-/**
- * Carrier spellings that resolve to exactly one country, keyed to its ISO code because matching
- * by name is what fails in the first place ("Türkiye" vs "Turkey", "Côte d’Ivoire" vs
- * "Cote d'Ivoire (Ivory Coast)").
- *
- * ONLY unambiguous one-to-one renames belong here. Two categories are deliberately absent:
- *
- *   Sub-territories with their own zone — "Scotland (United Kingdom)", "Azores (Portugal)",
- *   "St. Thomas (US Virgin Islands)", "Puerto Rico - Arecibo". Folding these into the parent
- *   would overwrite the parent's zone with a sub-region's, and several appear more than once
- *   with DIFFERENT zones, so whichever row landed last would silently win.
- *
- *   Split countries — "China South (Fujian & Guangdong)" and "China (Excluding China South)"
- *   carry different zones for one ISO code. The schema allows one zone per country per provider,
- *   so there is no correct answer to pick here.
- *
- * Both are reported as unmatched instead, which leaves them unpriced rather than mispriced.
- */
-const COUNTRY_ALIASES: Record<string, string> = {
-  'aland island finland': 'AX',
-  'antigua and barbuda': 'AG',
-  bahama: 'BS',
-  'belarus byelorussia': 'BY',
-  'bonaire sint eustatius and saba': 'BQ',
-  'bonaire st eustatius saba': 'BQ',
-  'bosnia and herzegovina': 'BA',
-  congo: 'CG',
-  'congo brazzaville': 'CG',
-  'congo democratic republic of': 'CD',
-  'democratic republic of the congo': 'CD',
-  'cote d ivoire ivory coast': 'CI',
-  'czech republic': 'CZ',
-  'east timor': 'TL',
-  'faeroe islands': 'FO',
-  'hong kong': 'HK',
-  'ireland republic of': 'IE',
-  'kirghizia kyrgyzstan': 'KG',
-  'korea south': 'KR',
-  'libyan arab jamahiriya': 'LY',
-  macau: 'MO',
-  'macau sar china': 'MO',
-  macedonia: 'MK',
-  'macedonia fyrom': 'MK',
-  'micronesia federated states of': 'FM',
-  monserrat: 'MS',
-  'palestinian territory': 'PS',
-  phillipines: 'PH',
-  'republic of moldova': 'MD',
-  'reunion island': 'RE',
-  'russian federation': 'RU',
-  'saint lucia': 'LC',
-  'st christopher st kitts': 'KN',
-  'st kitts and nevis': 'KN',
-  'st vincent the grenadines': 'VC',
-  swaziland: 'SZ',
-  'syrian arab republic': 'SY',
-  'tanzania united republic of': 'TZ',
-  'united republic of tanzania': 'TZ',
-  turkey: 'TR',
-  'yemen republic of': 'YE',
-  'wallis futuna islands': 'WF',
-};
-
-function normalise(name: string): string {
-  return name
-    .replace(/\([^)]*\)/g, ' ')
-    .replace(/[*†]/g, ' ')
-    .replace(/[^a-z0-9]+/gi, ' ')
-    .trim()
-    .toLowerCase();
-}
-
-function isoFrom(name: string): string | null {
-  const m = name.match(/\(([A-Z]{2})\)\s*$/);
-  return m ? m[1] : null;
-}
-
 async function main(): Promise<void> {
   const [file, ...flags] = process.argv.slice(2);
   const apply = flags.includes('--apply');
@@ -330,9 +254,7 @@ async function main(): Promise<void> {
   const carriers = CARRIERS.filter((c) => !only || c.providerCode === only);
   const parsed = carriers.map((c) => parseCarrier(file, c));
 
-  const dbCountries = await prisma.country.findMany();
-  const byIso = new Map(dbCountries.map((c) => [c.code.toUpperCase(), c]));
-  const byName = new Map(dbCountries.map((c) => [normalise(c.name), c]));
+  const lookup = buildCountryLookup(await prisma.country.findMany());
 
   for (const p of parsed) {
     const byType = new Map<string, number>();
@@ -349,7 +271,7 @@ async function main(): Promise<void> {
     console.log(`  rate points  ${points}`);
     console.log(`  ignored      ${p.ignoredRows} non-rate rows`);
 
-    const resolved: Array<{ countryId: string; zone: string; name: string }> = [];
+    const resolved: Array<{ countryId: string; zone: string }> = [];
     const unmatched: string[] = [];
     const seen = new Set<string>();
     for (const cz of p.countryZones) {
@@ -357,19 +279,16 @@ async function main(): Promise<void> {
         unmatched.push(`${cz.country} -> zone ${cz.zone} (no such zone in the rate table)`);
         continue;
       }
-      const key = normalise(cz.country);
-      // ISO printed in the sheet wins, then a curated alias, then the plain normalised name.
-      const iso = isoFrom(cz.country) ?? COUNTRY_ALIASES[key];
-      const hit = (iso && byIso.get(iso)) || byName.get(key);
+      const hit = resolveCountry(cz.country, lookup);
       if (!hit) {
         unmatched.push(cz.country);
         continue;
       }
       // One zone per country per provider — the schema enforces it, and a country listed twice
       // in the sheet must not silently flip between zones depending on row order.
-      if (seen.has(hit.id)) continue;
-      seen.add(hit.id);
-      resolved.push({ countryId: hit.id, zone: cz.zone, name: hit.name });
+      if (seen.has(hit)) continue;
+      seen.add(hit);
+      resolved.push({ countryId: hit, zone: cz.zone });
     }
 
     console.log(

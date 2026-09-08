@@ -455,6 +455,7 @@ model RateProvider {
 
   zones             Zone[]
   zoneCountries     ZoneCountry[]
+  remoteAreas       RemoteArea[]
   rateQuoteOptions  RateQuoteOption[]
   rateCardDocuments RateCardDocument[]
 
@@ -470,6 +471,7 @@ model Country {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   zoneCountries ZoneCountry[]
+  remoteAreas   RemoteArea[]
 
   @@map("countries")
 }
@@ -1098,4 +1100,59 @@ model Review {
   @@index([approved, submittedAt])
   @@index([customerId])
   @@map("reviews")
+}
+
+/// A carrier's remote / out-of-delivery-area listing: where an extra surcharge applies.
+///
+/// One row per published entry, kept close to the source rather than normalised into something
+/// tidier — the carriers publish these as flat postcode-range tables and reissue them wholesale,
+/// so the import is a replace, and a shape that mirrors the sheet is the shape that survives the
+/// next revision.
+///
+/// countryId is resolved where the printed name matches a known country and left null where it
+/// does not, while countryName always keeps what the carrier actually printed. Losing the
+/// original spelling would make a later re-match impossible.
+///
+/// postalCodeFrom/To are STRINGS, not numbers: these are postal codes, and Canadian FSAs
+/// ("L0A"), UK outcodes and leading-zero codes ("0800") are not integers. Comparing them
+/// numerically is how a leading zero silently becomes a different area.
+///
+/// NOT YET WIRED INTO PRICING. Loading the data and charging for it are separate decisions —
+/// the surcharge amounts are per-carrier commercial terms, and applying them automatically would
+/// change every quote for a remote destination without anyone choosing that.
+model RemoteArea {
+  id             String @id @default(uuid())
+  rateProviderId String @map("rate_provider_id")
+
+  /// Resolved country, where the printed name could be matched.
+  countryId   String? @map("country_id")
+  /// Exactly as the carrier printed it, always.
+  countryName String  @map("country_name")
+  city        String?
+
+  postalCodeFrom String? @map("postal_code_from")
+  postalCodeTo   String? @map("postal_code_to")
+
+  /// The carrier's own wording — "Tier B", "Extended Area Surcharge", "No". Kept verbatim
+  /// because the tiers map to different amounts per carrier and per service.
+  surchargeLabel String? @map("surcharge_label")
+  /// Set only where the source states a figure outright.
+  surchargeAmount Float? @map("surcharge_amount")
+  /// Which side the surcharge applies to, where the sheet distinguishes them.
+  originSurcharge String? @map("origin_surcharge")
+
+  /// Which sheet or document this row came from, so a bad import can be traced and replaced.
+  source String
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  rateProvider RateProvider @relation(fields: [rateProviderId], references: [id])
+  country      Country?     @relation(fields: [countryId], references: [id])
+
+  /// The lookup the pricing engine will make once this is wired in: provider + country, then a
+  /// postcode range scan within it.
+  @@index([rateProviderId, countryId])
+  @@index([rateProviderId, countryName])
+  @@index([source])
+  @@map("remote_areas")
 }
