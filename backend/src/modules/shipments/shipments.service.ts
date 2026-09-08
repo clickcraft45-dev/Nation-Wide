@@ -6,6 +6,7 @@ import {
 import { Prisma, type Shipment } from '@prisma/client';
 import type { TrackingStatusCode } from '@nationwide/shared-types';
 import { PrismaService } from '../../database/prisma.service';
+import { ReviewsService } from '../reviews/reviews.service';
 import { RedisService } from '../../database/redis.service';
 import { trackingCacheKey } from '../tracking/tracking-cache-key';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -36,6 +37,7 @@ export class ShipmentsService {
     private readonly prisma: PrismaService,
     private readonly redis: RedisService,
     private readonly notificationsService: NotificationsService,
+    private readonly reviews: ReviewsService,
   ) {}
 
   // The customer-facing number embeds a sequential counter (Section: sequential tracking
@@ -221,6 +223,13 @@ export class ShipmentsService {
       templateForTrackingStatus(input.status),
       { trackingNumber: internalTrackingNumber },
     );
+
+    // Delivery is the moment to ask, while the experience is fresh. Idempotent and non-throwing,
+    // so a status that flaps or a re-sync cannot mail the customer twice and a mail outage
+    // cannot fail the status update that already happened.
+    if (input.status === 'DELIVERED') {
+      await this.reviews.requestFeedback(shipment.id);
+    }
 
     return this.findByInternalTrackingNumber(internalTrackingNumber);
   }

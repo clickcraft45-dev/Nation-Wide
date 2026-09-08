@@ -12,6 +12,7 @@ import type {
   TrackingStatusCode,
 } from '@nationwide/shared-types';
 import { PrismaService } from '../../database/prisma.service';
+import { ReviewsService } from '../reviews/reviews.service';
 import { RedisService } from '../../database/redis.service';
 import { ProviderAdapterRegistry } from '../provider-integration/provider-adapter.registry';
 import type { NormalizedTrackingEvent } from '../provider-integration/interfaces/shipping-provider.interface';
@@ -34,6 +35,7 @@ export class TrackingService {
     private readonly providerRegistry: ProviderAdapterRegistry,
     private readonly configService: ConfigService,
     private readonly notificationsService: NotificationsService,
+    private readonly reviews: ReviewsService,
   ) {}
 
   async getStatus(reference: string): Promise<TrackingResultDto> {
@@ -259,6 +261,13 @@ export class TrackingService {
       templateForTrackingStatus(newEvents[newEvents.length - 1].status),
       { trackingNumber: internalTrackingNumber },
     );
+
+    // Delivery is the moment to ask, while the experience is fresh. Idempotent and non-throwing,
+    // so a status that flaps or a re-sync cannot mail the customer twice and a mail outage
+    // cannot fail the status update that already happened.
+    if (newEvents[newEvents.length - 1].status === 'DELIVERED') {
+      await this.reviews.requestFeedback(shipmentId);
+    }
   }
 
   private async buildDtoFromDb(

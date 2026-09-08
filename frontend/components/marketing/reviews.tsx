@@ -1,4 +1,5 @@
 import { Star } from "lucide-react";
+import { API_BASE_URL } from "@/lib/api-client";
 import { SectionHeading } from "@/components/marketing/section-heading";
 
 /**
@@ -124,15 +125,57 @@ function ReviewCard({ review }: { review: Review }) {
   );
 }
 
-export function MarketingReviews() {
+interface PublishedReview {
+  id: string;
+  rating: number | null;
+  comment: string;
+  author: string;
+  submittedAt: string | null;
+}
+
+/**
+ * Reviews left by customers after delivery and approved by an admin. Fetched server-side so the
+ * section is in the HTML for crawlers, and revalidated hourly rather than per request — a new
+ * approval showing up within the hour is fine, and a marketing page should not hit the API on
+ * every visit.
+ *
+ * A failure here returns nothing rather than throwing: the Google reviews below are already real
+ * and sufficient, and the homepage must not 500 because the API is briefly unreachable.
+ */
+async function fetchPublishedReviews(): Promise<Review[]> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/reviews`, {
+      next: { revalidate: 3600 },
+    });
+    if (!res.ok) return [];
+    const rows = (await res.json()) as PublishedReview[];
+    return rows
+      .filter((r) => r.comment?.trim())
+      .map((r) => ({
+        quote: r.comment,
+        author: r.author,
+        context: "Verified NationWide customer",
+        ...(r.rating ? { rating: r.rating } : {}),
+      }));
+  } catch {
+    return [];
+  }
+}
+
+export async function MarketingReviews() {
+  // Google reviews first: they are the older, larger body of feedback and they link back to a
+  // verifiable public profile. Customer reviews from the app follow.
+  const submitted = await fetchPublishedReviews();
+  const all = [...REVIEWS, ...submitted];
+
   // The rule this file was written under: no reviews, no section — never a fabricated one.
-  if (REVIEWS.length === 0) return null;
+  if (all.length === 0) return null;
 
   // Two lanes drifting in opposite directions, because a single belt of ten cards reads as a
   // loop you are watching rather than a body of feedback you are moving through. Split so the
   // longer reviews lead each lane and a reader meets substance first either way.
-  const half = Math.ceil(REVIEWS.length / 2);
-  const lanes = [REVIEWS.slice(0, half), REVIEWS.slice(half)];
+  const half = Math.ceil(all.length / 2);
+  const lanes = [all.slice(0, half), all.slice(half)];
 
   return (
     <section id="reviews" className="relative isolate overflow-hidden bg-background py-20">
@@ -140,7 +183,7 @@ export function MarketingReviews() {
         <SectionHeading
           eyebrow="Reviews"
           title="What our customers say"
-          description="Unedited, from our Google Business Profile."
+          description="Unedited, from our Google Business Profile and from customers who shipped with us."
         />
       </div>
 

@@ -160,3 +160,37 @@ export function manualMessage(
     text: bodyText,
   };
 }
+
+// ---------------------------------------------------------------------------
+// 4. Post-delivery feedback request
+// ---------------------------------------------------------------------------
+
+export function feedbackRequest(
+  to: string,
+  customerName: string,
+  trackingNumber: string,
+  feedbackUrl: string,
+): OutboundEmail {
+  const name = escapeHtml(customerName.split(' ')[0] || 'there');
+  const awb = escapeHtml(trackingNumber);
+  return {
+    to,
+    toName: customerName,
+    subject: `How did we do? Shipment ${trackingNumber}`,
+    html: shell(
+      'How did we do?',
+      `<p style="${P}">Hi ${name}, your shipment <strong>${awb}</strong> has been delivered.</p>
+       <p style="${P}">If you have a moment, tell us how it went. It takes about thirty seconds and it genuinely shapes how we run the service.</p>
+       ${button(feedbackUrl, 'Leave feedback')}
+       <p style="${MUTED}">This link is for your shipment only and works once.</p>`,
+    ),
+    text: `Hi ${customerName.split(' ')[0] || 'there'},
+
+Your shipment ${trackingNumber} has been delivered.
+
+If you have a moment, tell us how it went — it takes about thirty seconds:
+${feedbackUrl}
+
+This link is for your shipment only and works once.`,
+  };
+}

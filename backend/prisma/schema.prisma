@@ -172,6 +172,7 @@ model Customer {
   notifications  Notification[]
   pickupRequests PickupRequest[]
   invoices       Invoice[]
+  reviews        Review[]
 
   @@map("customers")
 }
@@ -638,6 +639,7 @@ model Shipment {
   provider                ShippingProvider         @relation(fields: [providerId], references: [id])
   externalTrackingNumbers ExternalTrackingNumber[]
   trackingEvents          TrackingEvent[]
+  review                  Review?
   apiRequestLogs          ApiRequestLog[]
 
   @@index([orderId])
@@ -746,6 +748,7 @@ model AdminUser {
   assignedPickupRequests     PickupRequest[]    @relation("PickupRequestAssignedPartner")
   issuedInvoices             Invoice[]          @relation("InvoiceIssuedBy")
   reviewedPartnerApplications PartnerApplication[] @relation("PartnerApplicationReviewedBy")
+  approvedReviews             Review[]             @relation("ReviewApprovedBy")
 
   @@map("admin_users")
 }
@@ -1045,4 +1048,54 @@ model PasswordResetToken {
 
   @@index([email])
   @@map("password_reset_tokens")
+}
+
+/// A post-delivery feedback invitation, and the review it becomes.
+///
+/// The row is created the moment a shipment reaches DELIVERED, holding only the invitation —
+/// rating and comment stay null until the customer actually writes something. That is why one
+/// model covers both: it makes "one review per shipment" a database constraint rather than
+/// application etiquette, and it records that we asked even when nobody answers.
+///
+/// The review text lives HERE, not in S3, per docs/STORAGE_POLICY.md: it is structured data that
+/// has to be queried, moderated and averaged. Only an attached photo is an S3 object, and then
+/// this row holds just its key.
+///
+/// Nothing is published until an admin approves it. An unmoderated feed straight onto the
+/// homepage is a defacement waiting to happen, and the existing reviews section already refuses
+/// to display anything that is not genuine.
+model Review {
+  id         String @id @default(uuid())
+  /// One review per shipment, enforced by the database rather than by convention.
+  shipmentId String @unique @map("shipment_id")
+  customerId String @map("customer_id")
+
+  /// SHA-256 of the single-use link token, never the token — same reasoning as
+  /// PasswordResetToken: a leak of this table must not hand anyone the ability to post as a
+  /// customer.
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+
+  /// Null until the customer submits. 1-5.
+  rating      Int?
+  comment     String?
+  /// S3 object key of an attached photo, e.g. "reviews/<id>/<uuid>.jpg". Bytes live in the
+  /// bucket; this column is only the pointer.
+  photoKey    String?   @map("photo_key")
+  submittedAt DateTime? @map("submitted_at")
+
+  approved          Boolean   @default(false)
+  approvedByAdminId String?   @map("approved_by_admin_id")
+  approvedAt        DateTime? @map("approved_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  shipment   Shipment   @relation(fields: [shipmentId], references: [id])
+  customer   Customer   @relation(fields: [customerId], references: [id])
+  approvedBy AdminUser? @relation("ReviewApprovedBy", fields: [approvedByAdminId], references: [id])
+
+  @@index([approved, submittedAt])
+  @@index([customerId])
+  @@map("reviews")
 }
