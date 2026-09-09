@@ -1,0 +1,23 @@
+# Normalise text in the repository to LF regardless of what the working copy uses.
+* text=auto
+
+# Shell scripts MUST be LF in the working copy too, not just in the repo.
+#
+# These are extracted and run on the Linux EC2 host. A CRLF shebang makes the kernel look for an
+# interpreter literally named "bash\r", and the failure is the famously unhelpful
+# "bad interpreter: No such file or directory" — which points at bash, a file that plainly exists.
+# A Windows checkout produces CRLF by default, so this is not hypothetical here.
+*.sh text eol=lf
+
+# Same reasoning: the Dockerfile's RUN lines and the compose file are consumed on Linux.
+Dockerfile text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+
+# Binary — never touch these, line-ending conversion corrupts them.
+*.png binary
+*.avif binary
+*.ico binary
+*.ttf binary
+*.pdf binary
+*.xlsx binary
