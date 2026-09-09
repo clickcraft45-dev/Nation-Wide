@@ -69,9 +69,18 @@ echo "==> Extracting and rebuilding"
 $SSH bash -s <<REMOTE
 set -euo pipefail
 mkdir -p "$REMOTE_DIR"
+cd "$REMOTE_DIR"
+
+# Untarring over the top updates and adds, but never REMOVES. A source file deleted in this
+# commit would otherwise linger on the box forever and still be compiled into the image — which
+# is how a deleted controller keeps serving a route nobody can find in the repo. These three
+# trees are pure source, fully contained in the archive, and hold nothing generated or secret
+# (backend/.env is not under src/, node_modules is not either), so clearing them first makes the
+# extraction authoritative.
+rm -rf backend/src packages/shared-types/src frontend/app frontend/components
+
 tar -xzf /tmp/nw-deploy.tar.gz -C "$REMOTE_DIR"
 rm -f /tmp/nw-deploy.tar.gz
-cd "$REMOTE_DIR"
 
 if [ ! -f backend/.env ]; then
   echo "backend/.env is missing on the host — compose will not start without it." >&2
