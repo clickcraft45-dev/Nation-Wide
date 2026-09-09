@@ -4,6 +4,18 @@ const BRAND = 'NationWide Logistics';
 // The brand maroon, same value as CompanySettings.primaryColor's default.
 const ACCENT = '#7F1020';
 
+/**
+ * The header logo, as an absolute URL on the public site.
+ *
+ * Absolute because an email client has no origin to resolve a relative path against, and served
+ * rather than attached because a CID image would turn every send into a multipart upload for one
+ * 4KB mark. The transparent-background PNG is the one that works here: it sits directly on the
+ * maroon band, and a white-boxed logo on a coloured header is the usual giveaway of a template
+ * nobody looked at. Most clients block remote images by default, so the wordmark next to it stays
+ * as live text and the alt text carries the brand when the image never loads.
+ */
+const LOGO_URL = `${process.env.PUBLIC_FRONTEND_URL?.replace(/\/+$/, '') ?? 'https://nationwidelogistics.co'}/assets/logo/logo-mark.png`;
+
 /** Email clients strip <style> blocks and ignore most CSS, so everything here is inline. */
 function shell(heading: string, bodyHtml: string): string {
   return `<!doctype html>
@@ -11,8 +23,16 @@ function shell(heading: string, bodyHtml: string): string {
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f1f0;padding:24px 12px;">
     <tr><td align="center">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:8px;overflow:hidden;">
-        <tr><td style="background:${ACCENT};padding:20px 28px;">
-          <span style="color:#ffffff;font-size:17px;font-weight:bold;letter-spacing:.02em;">${BRAND}</span>
+        <tr><td style="background:${ACCENT};padding:18px 28px;">
+          <table role="presentation" cellpadding="0" cellspacing="0"><tr>
+            <td style="padding-right:10px;vertical-align:middle;">
+              <img src="${LOGO_URL}" width="32" height="32" alt="${BRAND}"
+                   style="display:block;width:32px;height:32px;border:0;outline:none;text-decoration:none;">
+            </td>
+            <td style="vertical-align:middle;">
+              <span style="color:#ffffff;font-size:17px;font-weight:bold;letter-spacing:.02em;">${BRAND}</span>
+            </td>
+          </tr></table>
         </td></tr>
         <tr><td style="padding:28px;">
           <h1 style="margin:0 0 16px;font-size:20px;line-height:1.3;color:#1c1517;">${heading}</h1>
@@ -192,5 +212,63 @@ If you have a moment, tell us how it went — it takes about thirty seconds:
 ${feedbackUrl}
 
 This link is for your shipment only and works once.`,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// 5. A pickup-partner account created for someone — their name and first password
+// ---------------------------------------------------------------------------
+
+export interface PartnerCredentialsEmailInput {
+  name: string;
+  email: string;
+  /** Plain text, on purpose: this is the one and only time it can be shown. */
+  password: string;
+  loginUrl: string;
+}
+
+/**
+ * The account-created mail for a pickup partner.
+ *
+ * The password is sent in plain text because there is nothing else to send — the account is
+ * created for them, so there is no existing credential to authenticate a reset link against.
+ * It is stored only as a bcrypt hash, is never logged, and the mail tells them to change it.
+ */
+export function pickupPartnerCredentials(
+  input: PartnerCredentialsEmailInput,
+): OutboundEmail {
+  const name = escapeHtml(input.name);
+  const firstName = name.split(' ')[0] || 'there';
+  const details = [
+    row('Name', name),
+    row('Email', escapeHtml(input.email)),
+    row('Password', `<code style="font-family:monospace;font-size:14px;">${escapeHtml(input.password)}</code>`),
+  ].join('');
+
+  return {
+    to: input.email,
+    toName: input.name,
+    subject: 'Your NationWide pickup partner account',
+    html: shell(
+      'Your partner account is ready',
+      `<p style="${P}">Hi ${firstName}, an account has been created for you as a NationWide pickup partner. Sign in with the details below.</p>
+       <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;margin:18px 0;">${details}</table>
+       ${button(input.loginUrl, 'Sign in')}
+       <p style="${P}">Please change this password after your first sign-in.</p>
+       <p style="${MUTED}">If you were not expecting this, let us know and we will remove the account.</p>`,
+    ),
+    text: `Hi ${input.name.split(' ')[0] || 'there'},
+
+An account has been created for you as a NationWide pickup partner.
+
+Name:     ${input.name}
+Email:    ${input.email}
+Password: ${input.password}
+
+Sign in: ${input.loginUrl}
+
+Please change this password after your first sign-in.
+
+If you were not expecting this, let us know and we will remove the account.`,
   };
 }

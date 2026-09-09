@@ -7,6 +7,7 @@ import { useToast } from "@/components/ui/toast";
 import { Dialog, DialogContent, DialogClose } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input, Label, FieldError } from "@/components/ui/input";
+import { PhoneInput } from "@/components/ui/phone-input";
 
 export function EditCustomerDialog({
   trigger,
@@ -71,7 +72,7 @@ export function EditCustomerDialog({
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="edit-phone">Phone</Label>
-              <Input id="edit-phone" value={phone} onChange={(e) => setPhone(e.target.value)} />
+              <PhoneInput id="edit-phone" value={phone} onChange={setPhone} />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="edit-email">Email</Label>

@@ -45,6 +45,11 @@ export function toOrderDto(order: OrderWithShipments): OrderDto {
       providerId: s.providerId,
       currentStatus: s.currentStatus,
       createdAt: s.createdAt.toISOString(),
+      // The mapping for the shipment's own provider. A shipment can carry numbers for several
+      // providers (one per leg), but the one a customer tracks with is the current provider's.
+      externalTrackingNumber:
+        s.externalTrackingNumbers.find((e) => e.providerId === s.providerId)
+          ?.externalTrackingNumber ?? null,
     })),
   };
 }

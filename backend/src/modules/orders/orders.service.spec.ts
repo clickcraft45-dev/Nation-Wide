@@ -232,4 +232,50 @@ describe('OrdersService', () => {
       expect(whereOf().createdAt).toBeUndefined();
     });
   });
+
+  // The mapped/unmapped split is the admin's working queue for assigning AWBs, so "unmapped"
+  // has to mean *no* shipment carries a number -- `some: { none: ... }` would wrongly list an
+  // order the moment any one of its split shipments was still bare.
+  describe('findAll AWB filter', () => {
+    const whereOf = () => prisma.order.findMany.mock.calls[0][0].where;
+
+    it('matches orders that already carry an AWB', async () => {
+      prisma.order.findMany.mockResolvedValue([]);
+
+      await service.findAll({ awb: 'mapped' });
+
+      expect(whereOf().shipments).toEqual({
+        some: { externalTrackingNumbers: { some: {} } },
+      });
+    });
+
+    it('treats an order with no shipments at all as unmapped', async () => {
+      prisma.order.findMany.mockResolvedValue([]);
+
+      await service.findAll({ awb: 'unmapped' });
+
+      expect(whereOf().shipments).toEqual({
+        none: { externalTrackingNumbers: { some: {} } },
+      });
+    });
+
+    it('keeps a provider filter alongside the unmapped filter', async () => {
+      prisma.order.findMany.mockResolvedValue([]);
+
+      await service.findAll({ awb: 'unmapped', providerId: 'prov-1' });
+
+      expect(whereOf().shipments).toEqual({
+        some: { providerId: 'prov-1' },
+        none: { externalTrackingNumbers: { some: {} } },
+      });
+    });
+
+    it('leaves shipments unfiltered when no AWB filter is given', async () => {
+      prisma.order.findMany.mockResolvedValue([]);
+
+      await service.findAll({});
+
+      expect(whereOf().shipments).toBeUndefined();
+    });
+  });
 });

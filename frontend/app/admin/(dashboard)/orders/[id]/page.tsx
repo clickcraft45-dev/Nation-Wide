@@ -9,7 +9,8 @@ import { apiClient, ApiError } from "@/lib/api-client";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { ErrorState } from "@/components/ui/page-state";
 import { Skeleton } from "@/components/ui/skeleton";
-import { OrderStatusBadge, TrackingStatusBadge } from "@/components/ui/status-badge";
+import { OrderStatusBadge } from "@/components/ui/status-badge";
+import { ShipmentAwbCard } from "@/components/orders/shipment-awb-card";
 
 export default function AdminOrderDetailPage() {
   const params = useParams<{ id: string }>();
@@ -18,6 +19,10 @@ export default function AdminOrderDetailPage() {
   const [providers, setProviders] = useState<ShippingProviderDto[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Bumped after an AWB is mapped so the effect below refetches and the card redraws with the
+  // new number, rather than the page holding a stale copy until a manual reload.
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -54,9 +59,7 @@ export default function AdminOrderDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [params.id]);
-
-  const providerById = new Map(providers.map((p) => [p.id, p]));
+  }, [params.id, reloadKey]);
 
   return (
     <div className="max-w-3xl space-y-6">
@@ -123,32 +126,20 @@ export default function AdminOrderDetailPage() {
                 Shipments
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3">
+            <CardContent className="space-y-5">
               {order.shipments.length === 0 && (
                 <p className="text-sm text-muted-foreground">No shipments on this order.</p>
               )}
-              {order.shipments.map((shipment) => {
-                const provider = providerById.get(shipment.providerId);
-                return (
-                  <div
-                    key={shipment.id}
-                    className="flex items-center justify-between rounded-md border border-border p-3"
-                  >
-                    <div>
-                      <Link
-                        href={`/admin/shipments?tracking=${shipment.internalTrackingNumber}`}
-                        className="font-mono text-sm font-medium text-primary hover:underline"
-                      >
-                        {shipment.internalTrackingNumber}
-                      </Link>
-                      <p className="text-xs text-muted-foreground">
-                        {provider?.name ?? "Unknown provider"}
-                      </p>
-                    </div>
-                    <TrackingStatusBadge status={shipment.currentStatus} />
-                  </div>
-                );
-              })}
+              {order.shipments.map((shipment) => (
+                <ShipmentAwbCard
+                  key={shipment.id}
+                  shipment={shipment}
+                  providers={providers}
+                  customerName={customer?.name ?? order.customerName}
+                  destination={order.destination}
+                  onMapped={() => setReloadKey((k) => k + 1)}
+                />
+              ))}
             </CardContent>
           </Card>
         </>

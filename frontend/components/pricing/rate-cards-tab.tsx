@@ -157,8 +157,13 @@ export function RateCardsTab() {
       if (blob.size === 0) throw new ApiError(500, "Empty PDF body");
       if (previewUrl) URL.revokeObjectURL(previewUrl);
       setPreviewUrl(URL.createObjectURL(blob));
-    } catch {
-      setError("Couldn't generate a preview. Check the pricing engine has active rates for this selection.");
+    } catch (err) {
+      // errorMessage, not a bare catch: a 4xx here carries the actual reason (an unpriced
+      // country, a missing zone assignment) and a 5xx carries the request id. Swallowing it
+      // made every distinct failure look like one generic "check your rates" message.
+      setError(
+        errorMessage(err, "Couldn't generate a preview. Check the pricing engine has active rates for this selection."),
+      );
     } finally {
       setIsPreviewing(false);
     }

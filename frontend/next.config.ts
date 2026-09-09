@@ -61,6 +61,12 @@ const CSP = [
   // The beacon POSTs its measurements to cloudflareinsights.com/cdn-cgi/rum — allowing the
   // script without this just moves the CSP violation from load time to report time.
   `connect-src 'self' ${API_ORIGIN} ${CF_BEACON_REPORT}`,
+  // Both would fall back to default-src 'self' anyway; stated explicitly because the PWA breaks
+  // in a confusing way without them — a blocked worker-src makes navigator.serviceWorker.register
+  // reject with a bare SecurityError, and a blocked manifest-src silently makes the app
+  // uninstallable with no console message at all.
+  "worker-src 'self'",
+  "manifest-src 'self'",
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",

@@ -71,6 +71,7 @@ export default function AdminOrdersPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [providerFilter, setProviderFilter] = useState("");
+  const [awbFilter, setAwbFilter] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("createdAt");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [page, setPage] = useState(1);
@@ -88,6 +89,7 @@ export default function AdminOrdersPage() {
     if (debouncedSearch.trim()) params.set("search", debouncedSearch.trim());
     if (statusFilter) params.set("status", statusFilter);
     if (providerFilter) params.set("providerId", providerFilter);
+    if (awbFilter) params.set("awb", awbFilter);
     if (kpiStatus === "in-transit" || kpiStatus === "delivered") {
       params.set("trackingGroup", kpiStatus);
     }
@@ -114,7 +116,7 @@ export default function AdminOrdersPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, debouncedSearch, statusFilter, providerFilter, sortKey, sortDir, kpiStatus]);
+  }, [page, debouncedSearch, statusFilter, providerFilter, awbFilter, sortKey, sortDir, kpiStatus]);
 
   const customerById = useMemo(
     () => new Map(customers.map((c) => [c.id, c])),
@@ -199,6 +201,16 @@ export default function AdminOrdersPage() {
             </option>
           ))}
         </NativeSelect>
+        <NativeSelect
+          className="sm:w-44"
+          value={awbFilter}
+          onChange={(e) => handleFilterChange(setAwbFilter, e.target.value)}
+          aria-label="Filter by AWB mapping"
+        >
+          <option value="">All orders</option>
+          <option value="unmapped">AWB not mapped</option>
+          <option value="mapped">AWB mapped</option>
+        </NativeSelect>
       </div>
 
       {error && <ErrorState message={error} onRetry={load} />}
@@ -259,6 +271,17 @@ export default function AdminOrdersPage() {
                   <TableRow key={order.id} href={`/admin/orders/${order.id}`}>
                     <TableCell className="font-mono text-xs">
                       {shipment?.internalTrackingNumber ?? order.id.slice(0, 8)}
+                      {shipment && (
+                        <span className="mt-0.5 block text-[11px] font-normal">
+                          {shipment.externalTrackingNumber ? (
+                            <span className="text-muted-foreground">
+                              AWB {shipment.externalTrackingNumber}
+                            </span>
+                          ) : (
+                            <span className="text-warning">AWB not mapped</span>
+                          )}
+                        </span>
+                      )}
                     </TableCell>
                     <TableCell>{customer?.name ?? "—"}</TableCell>
                     <TableCell className="whitespace-nowrap">

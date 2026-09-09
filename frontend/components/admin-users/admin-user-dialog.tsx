@@ -7,6 +7,7 @@ import { useToast } from "@/components/ui/toast";
 import { Dialog, DialogContent, DialogClose } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input, Label, FieldError } from "@/components/ui/input";
+import { PhoneInput } from "@/components/ui/phone-input";
 import { PasswordInput } from "@/components/ui/password-input";
 
 // Create-only, mirroring PickupPartnerDialog: staff accounts are onboarded by an admin here and
@@ -77,7 +78,7 @@ export function AdminUserDialog({
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="user-phone">Phone</Label>
-              <Input id="user-phone" value={phone} onChange={(e) => setPhone(e.target.value)} />
+              <PhoneInput id="user-phone" value={phone} onChange={setPhone} />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="user-email">Email</Label>

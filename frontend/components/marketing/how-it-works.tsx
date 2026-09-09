@@ -4,6 +4,7 @@ import { useRef } from "react";
 import { motion, useScroll, useTransform, type MotionValue } from "motion/react";
 import { FileText, CalendarClock, PackageCheck, Truck, MapPin } from "lucide-react";
 import { SectionHeading } from "@/components/marketing/section-heading";
+import { DeliveryNetwork } from "@/components/marketing/delivery-network";
 
 const STEPS = [
   {
@@ -92,8 +93,13 @@ export function MarketingHowItWorks() {
           description="From quote to delivery — here's the complete journey."
         />
 
+        {/* The network at a glance, before the step-by-step below spells the same journey out. */}
+        <div className="mx-auto mt-12 max-w-2xl">
+          <DeliveryNetwork />
+        </div>
+
         {/* Desktop: horizontal steps with a connecting line that draws itself as you scroll. */}
-        <div ref={timelineRef} className="relative mt-14 hidden lg:grid lg:grid-cols-5 lg:gap-6">
+        <div ref={timelineRef} className="relative mt-16 hidden lg:grid lg:grid-cols-5 lg:gap-6">
           <div className="pointer-events-none absolute left-0 right-0 top-6 h-px bg-border" aria-hidden />
           <motion.div
             aria-hidden

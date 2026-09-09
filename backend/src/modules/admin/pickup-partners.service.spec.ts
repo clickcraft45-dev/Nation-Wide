@@ -28,6 +28,7 @@ describe('PickupPartnersService', () => {
     };
   };
   let service: PickupPartnersService;
+  let mail: { send: jest.Mock };
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -39,7 +40,12 @@ describe('PickupPartnersService', () => {
         update: jest.fn().mockResolvedValue(makePartner()),
       },
     };
-    service = new PickupPartnersService(prisma as never);
+    mail = { send: jest.fn().mockResolvedValue(true) };
+    service = new PickupPartnersService(
+      prisma as never,
+      mail as never,
+      { get: jest.fn().mockReturnValue('https://nationwidelogistics.co') } as never,
+    );
   });
 
   describe('findAll', () => {
@@ -64,6 +70,28 @@ describe('PickupPartnersService', () => {
         }),
       ).rejects.toThrow(BadRequestException);
       expect(prisma.adminUser.create).not.toHaveBeenCalled();
+    });
+
+    it('generates a password and emails it when the admin supplies none', async () => {
+      await service.create({ email: 'new@nationwide.dev', name: 'New Partner' });
+
+      // Whatever was generated must be the same string that was hashed and the same string that
+      // went out in the mail — a mismatch would create an account nobody can ever sign in to.
+      const hashed = (bcrypt.hash as jest.Mock).mock.calls[0][0] as string;
+      expect(hashed).toHaveLength(16);
+      const sent = mail.send.mock.calls[0][0] as { text: string; to: string };
+      expect(sent.to).toBe('new@nationwide.dev');
+      expect(sent.text).toContain(hashed);
+    });
+
+    it('still creates the account when the credentials email cannot be sent', async () => {
+      // Email is a notification channel, not a system of record. A Brevo outage must not undo
+      // an onboarding that already wrote a row.
+      mail.send.mockResolvedValue(false);
+      await expect(
+        service.create({ email: 'new@nationwide.dev', name: 'New Partner' }),
+      ).resolves.toBeDefined();
+      expect(prisma.adminUser.create).toHaveBeenCalled();
     });
 
     it('hashes the password and forces role PICKUP_PARTNER', async () => {

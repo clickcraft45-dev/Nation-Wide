@@ -9,9 +9,9 @@ import { errorMessage } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Input, Label, FieldError } from "@/components/ui/input";
+import { PhoneInput } from "@/components/ui/phone-input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Logo } from "@/components/brand/logo";
-import { PartnerApplicationForm } from "@/components/auth/partner-application-form";
 
 interface FormState {
   name: string;
@@ -40,7 +40,6 @@ export default function RegisterPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   // Customer is the default: it is the overwhelmingly common case, and the one that
   // actually creates an account here. Partner is an application, not a sign-up.
-  const [accountType, setAccountType] = useState<"customer" | "partner">("customer");
 
   useEffect(() => {
     if (isLoading || !user) return;
@@ -102,52 +101,12 @@ export default function RegisterPage() {
         <Logo variant="horizontal" size="md" />
 
         <div className="space-y-1">
-          <h1 className="text-2xl font-semibold text-foreground">
-            {accountType === "customer" ? "Create your account" : "Become a pickup partner"}
-          </h1>
+          <h1 className="text-2xl font-semibold text-foreground">Create your account</h1>
           <p className="text-sm text-muted-foreground">
-            {accountType === "customer"
-              ? "Track and manage your shipments with NationWide."
-              : "Collect parcels in your area and get paid per pickup."}
+            Track and manage your shipments with NationWide.
           </p>
         </div>
 
-        {/* Radio group, not tabs: this picks which kind of account you are asking for, and the
-            two are mutually exclusive. Arrow keys move between them for free. */}
-        <div
-          role="radiogroup"
-          aria-label="Account type"
-          className="grid grid-cols-2 gap-2 rounded-lg bg-muted/50 p-1"
-        >
-          {(
-            [
-              { value: "customer", label: "I want to ship" },
-              { value: "partner", label: "I want to deliver" },
-            ] as const
-          ).map((option) => {
-            const isSelected = accountType === option.value;
-            return (
-              <button
-                key={option.value}
-                type="button"
-                role="radio"
-                aria-checked={isSelected}
-                onClick={() => setAccountType(option.value)}
-                className={`rounded-md px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${
-                  isSelected
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {option.label}
-              </button>
-            );
-          })}
-        </div>
-
-        {accountType === "partner" && <PartnerApplicationForm />}
-
-        {accountType === "customer" && (
         <form onSubmit={handleSubmit} noValidate className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="name">Full name</Label>
@@ -163,12 +122,10 @@ export default function RegisterPage() {
 
           <div className="space-y-1.5">
             <Label htmlFor="phone">Phone</Label>
-            <Input
+            <PhoneInput
               id="phone"
-              autoComplete="tel"
-              placeholder="+919876543210"
               value={form.phone}
-              onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+              onChange={(phone) => setForm((f) => ({ ...f, phone }))}
               error={Boolean(errors.phone)}
             />
             {errors.phone && <FieldError>{errors.phone}</FieldError>}
@@ -224,7 +181,6 @@ export default function RegisterPage() {
             {isSubmitting ? "Creating account…" : "Create account"}
           </Button>
         </form>
-        )}
 
         <p className="text-center text-sm text-muted-foreground">
           Already have an account?{" "}

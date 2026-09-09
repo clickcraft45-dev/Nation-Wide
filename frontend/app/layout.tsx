@@ -4,6 +4,7 @@ import "./globals.css";
 import { AuthProvider } from "@/state/auth-context";
 import { ToastProvider } from "@/components/ui/toast";
 import { LiquidGlassFilter } from "@/components/ui/liquid-glass-button";
+import { InstallPrompt } from "@/components/pwa/install-prompt";
 import { SITE_URL } from "@/lib/constants/site";
 import { JsonLd } from "@/components/seo/json-ld";
 import {
@@ -35,6 +36,15 @@ const DESCRIPTION =
 
 const TITLE = "International Courier Service in Hyderabad | NationWide Logistics";
 
+// iOS does not read `display: "standalone"` from the manifest — these two are what let an
+// added-to-home-screen shortcut open without Safari's chrome. app/apple-icon.png already supplies
+// the home-screen icon.
+const APPLE_WEB_APP = {
+  capable: true,
+  title: "NationWide",
+  statusBarStyle: "default",
+} as const;
+
 export const metadata: Metadata = {
   // Required for the relative openGraph/twitter image URLs below to resolve to absolute ones —
   // without it Next.js warns at build time and social crawlers get a broken image.
@@ -64,6 +74,7 @@ export const metadata: Metadata = {
   // regional aggregators still use them.
   category: "Logistics",
   alternates: { canonical: "/" },
+  appleWebApp: APPLE_WEB_APP,
   // Per-area overrides live in app/admin/layout.tsx and app/partner/layout.tsx; app/robots.ts is
   // the belt-and-braces copy for crawlers that never fetch the page at all.
   robots: {
@@ -109,6 +120,8 @@ export default function RootLayout({
         <JsonLd data={servicesSchema()} />
         {/* One shared SVG filter for every <LiquidButton> on the page. */}
         <LiquidGlassFilter />
+        {/* Registers the service worker and offers the install, once, on a device that can. */}
+        <InstallPrompt />
       </body>
     </html>
   );

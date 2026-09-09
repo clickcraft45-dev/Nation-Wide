@@ -7,6 +7,7 @@ import { useToast } from "@/components/ui/toast";
 import { Dialog, DialogContent, DialogClose } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input, Label, FieldError } from "@/components/ui/input";
+import { PhoneInput } from "@/components/ui/phone-input";
 
 interface FormState {
   name: string;
@@ -92,11 +93,10 @@ export function CreateCustomerDialog({
 
             <div className="space-y-1.5">
               <Label htmlFor="phone">Phone</Label>
-              <Input
+              <PhoneInput
                 id="phone"
-                placeholder="+919876543210"
                 value={form.phone}
-                onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+                onChange={(phone) => setForm((f) => ({ ...f, phone }))}
                 error={Boolean(errors.phone)}
               />
               {errors.phone && <FieldError>{errors.phone}</FieldError>}

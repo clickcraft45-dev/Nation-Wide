@@ -5,13 +5,13 @@ import { apiClient, errorMessage } from "@/lib/api-client";
 import { useToast } from "@/components/ui/toast";
 import { Dialog, DialogContent, DialogClose } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Label, FieldError } from "@/components/ui/input";
-import { PasswordInput } from "@/components/ui/password-input";
+import { FieldError } from "@/components/ui/input";
 
 /**
  * Approving an application is the moment a public submission becomes a privileged
- * PICKUP_PARTNER account, so the admin sets its first password here by hand — the applicant
- * never chose one. Mirrors PickupPartnerDialog, which is the same act done from scratch.
+ * PICKUP_PARTNER account. The server generates the first password and emails it to the
+ * applicant, so this is now a confirmation rather than a form — nothing an admin types here
+ * could be safer than a credential that never passes through them.
  */
 export function ApproveApplicationDialog({
   trigger,
@@ -25,28 +25,19 @@ export function ApproveApplicationDialog({
   onApproved: () => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { showToast } = useToast();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    // Same minimum the server enforces — checked here so the admin is told before the round-trip.
-    if (password.length < 10) {
-      setError("Password must be at least 10 characters.");
-      return;
-    }
     setError(null);
     setIsSubmitting(true);
     try {
-      await apiClient.patch(`/admin/partner-applications/${applicationId}/approve`, {
-        password,
-      });
+      await apiClient.patch(`/admin/partner-applications/${applicationId}/approve`, {});
       showToast({ variant: "success", title: `${applicantName} is now a pickup partner` });
       onApproved();
       setOpen(false);
-      setPassword("");
     } catch (err) {
       setError(errorMessage(err, "Couldn't approve this application. Please try again."));
     } finally {
@@ -60,20 +51,10 @@ export function ApproveApplicationDialog({
       {open && (
         <DialogContent
           title={`Approve ${applicantName}`}
-          description="This creates a partner account they can sign in with straight away. Send them the password yourself — it is not shown again."
+          description="This creates a partner account and emails them their sign-in details, including a generated password."
         >
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="approve-password">Initial password</Label>
-              <PasswordInput
-                id="approve-password"
-                autoComplete="new-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                error={Boolean(error)}
-              />
-              {error && <FieldError>{error}</FieldError>}
-            </div>
+            {error && <FieldError>{error}</FieldError>}
             <div className="flex justify-end gap-2">
               <DialogClose asChild>
                 <Button type="button" variant="secondary" size="sm">

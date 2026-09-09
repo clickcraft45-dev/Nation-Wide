@@ -33,6 +33,11 @@ export class PartnerApplicationsService {
     private readonly config: ConfigService,
   ) {}
 
+  // ponytail: create() and CreatePartnerApplicationDto are now unreachable — the public
+  // controller that called them is gone. Kept, with its tests, because reviewing and approving
+  // applications submitted before the change still works and re-opening public applications is
+  // a one-file change. Delete both, and partnerApplicationReceived in mail.templates.ts, once
+  // the last PENDING row is closed out.
   async create(dto: CreatePartnerApplicationDto): Promise<PartnerApplication> {
     const email = dto.email.toLowerCase();
 
@@ -107,9 +112,10 @@ export class PartnerApplicationsService {
   ): Promise<PartnerApplication> {
     const application = await this.findPendingOrThrow(id);
 
+    // No password argument: PickupPartnersService generates one and emails it to the applicant,
+    // so approving is now a single click and the credential never passes through an admin.
     const partner = await this.pickupPartners.create({
       email: application.email,
-      password: dto.password,
       name: application.name,
       phone: application.phone,
     });

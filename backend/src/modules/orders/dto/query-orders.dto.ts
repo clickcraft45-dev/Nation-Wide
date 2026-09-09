@@ -30,6 +30,12 @@ export class QueryOrdersDto extends PaginationQueryDto {
   @IsIn(['in-transit', 'delivered'])
   trackingGroup?: 'in-transit' | 'delivered';
 
+  // Splits the Orders list by whether a carrier AWB has been mapped yet — the working queue for
+  // an admin whose job is to assign the number customers then track with.
+  @IsOptional()
+  @IsIn(['mapped', 'unmapped'])
+  awb?: 'mapped' | 'unmapped';
+
   // Inclusive UTC day bounds on createdAt, as YYYY-MM-DD. The admin dashboard reports on a
   // window (default 90 days) and previously pulled EVERY order to filter in the browser — which
   // was both slow and quietly wrong, because the unpaginated response is capped at

@@ -7,7 +7,7 @@ import { useToast } from "@/components/ui/toast";
 import { Dialog, DialogContent, DialogClose } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input, Label, FieldError } from "@/components/ui/input";
-import { PasswordInput } from "@/components/ui/password-input";
+import { PhoneInput } from "@/components/ui/phone-input";
 
 // Create-only — there is no self-service registration for field executives, matching
 // PickupPartnersService's own doc comment (accounts are onboarded here, then the partner logs
@@ -21,7 +21,6 @@ export function PickupPartnerDialog({
 }) {
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -30,16 +29,16 @@ export function PickupPartnerDialog({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!email.trim() || password.length < 10) {
-      setError("A valid email and a password of at least 10 characters are required.");
+    if (!email.trim()) {
+      setError("An email address is required — it is where their sign-in details are sent.");
       return;
     }
     setError(null);
     setIsSubmitting(true);
     try {
       const saved = await apiClient.post<PickupPartnerDto>("/admin/pickup-partners", {
+        // No password: the server generates one and emails it to the partner.
         email: email.trim(),
-        password,
         name: name.trim() || undefined,
         phone: phone.trim() || undefined,
       });
@@ -47,7 +46,6 @@ export function PickupPartnerDialog({
       onSaved(saved);
       setOpen(false);
       setEmail("");
-      setPassword("");
       setName("");
       setPhone("");
     } catch (err) {
@@ -69,7 +67,7 @@ export function PickupPartnerDialog({
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="partner-phone">Phone</Label>
-              <Input id="partner-phone" value={phone} onChange={(e) => setPhone(e.target.value)} />
+              <PhoneInput id="partner-phone" value={phone} onChange={setPhone} />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="partner-email">Email</Label>
@@ -80,14 +78,9 @@ export function PickupPartnerDialog({
                 onChange={(e) => setEmail(e.target.value)}
               />
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="partner-password">Password</Label>
-              <PasswordInput
-                id="partner-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </div>
+            <p className="text-sm text-muted-foreground">
+              A password is generated and emailed to this address with their sign-in details.
+            </p>
 
             {error && <FieldError>{error}</FieldError>}
 

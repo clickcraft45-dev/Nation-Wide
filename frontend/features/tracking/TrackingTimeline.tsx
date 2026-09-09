@@ -1,6 +1,8 @@
 import type { TrackingResultDto } from "@nationwide/shared-types";
 import { TrackingStatusBadge } from "@/components/ui/status-badge";
 import { Timeline } from "@/components/ui/timeline";
+import { ProgressTimeline } from "@/components/ui/progress-timeline";
+import { deriveMilestones } from "@/lib/tracking-milestones";
 import { TrackingSummaryCard, type TrackingDetail } from "./TrackingSummaryCard";
 
 function formatDateTime(iso: string): string {
@@ -48,6 +50,17 @@ export function TrackingTimeline({ result }: { result: TrackingResultDto }) {
         status={<TrackingStatusBadge status={result.currentStatus} />}
         details={details}
       />
+      {/* How far along, before the scan-by-scan detail below. */}
+      <div className="glass rounded-2xl p-5 sm:p-6">
+        <h2 className="mb-5 text-sm font-semibold text-foreground">Progress</h2>
+        <ProgressTimeline
+          milestones={deriveMilestones(result.events).map((milestone) => ({
+            label: milestone.label,
+            timestamp: milestone.reachedAt ? formatDateTime(milestone.reachedAt) : null,
+          }))}
+        />
+      </div>
+
       {/* Keyed on the tracking number so looking up a different parcel replays the timeline's
           entrance instead of silently swapping the text under a static list. */}
       <Timeline

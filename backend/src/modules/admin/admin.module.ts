@@ -26,6 +26,7 @@ import { OrdersModule } from '../orders/orders.module';
 import { PricingModule } from '../pricing/pricing.module';
 import { RateCardsModule } from '../rate-cards/rate-cards.module';
 import { PickupRequestsModule } from '../pickup-requests/pickup-requests.module';
+import { MailModule } from '../mail/mail.module';
 
 @Module({
   imports: [
@@ -36,6 +37,8 @@ import { PickupRequestsModule } from '../pickup-requests/pickup-requests.module'
     PricingModule,
     RateCardsModule,
     PickupRequestsModule,
+    // PickupPartnersService emails a new partner their generated credentials.
+    MailModule,
   ],
   controllers: [
     AdminController,

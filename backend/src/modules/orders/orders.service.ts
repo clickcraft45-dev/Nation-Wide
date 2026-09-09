@@ -33,7 +33,9 @@ const MAX_UNBOUNDED_ORDERS = 1000;
 
 const withShipments = {
   include: {
-    shipments: true,
+    // The AWB mappings come along with the shipment: the admin Orders list shows the number and
+    // filters on its presence, and fetching them per row afterwards would be a query per order.
+    shipments: { include: { externalTrackingNumbers: true } },
     // Just the name. A list view needs it to label the row, and joining it here is one query
     // instead of every caller fetching the whole customer table to build an id->name map.
     customer: { select: { name: true } },
@@ -147,6 +149,24 @@ export class OrdersService {
     }
     if (Object.keys(shipmentConditions).length > 0) {
       where.shipments = { some: shipmentConditions };
+    }
+
+    // Mapped means at least one shipment already carries an AWB; unmapped means not one does.
+    // `none` rather than `some: { is: null }` so an order with no shipments at all still counts
+    // as unmapped, which is what an admin chasing missing numbers expects to see.
+    if (query.awb === 'mapped') {
+      where.shipments = {
+        ...(where.shipments ?? {}),
+        some: {
+          ...(shipmentConditions ?? {}),
+          externalTrackingNumbers: { some: {} },
+        },
+      };
+    } else if (query.awb === 'unmapped') {
+      where.shipments = {
+        ...(where.shipments ?? {}),
+        none: { externalTrackingNumbers: { some: {} } },
+      };
     }
 
     if (query.search) {

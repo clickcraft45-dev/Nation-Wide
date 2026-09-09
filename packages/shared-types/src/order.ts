@@ -15,6 +15,12 @@ export interface ShipmentSummaryDto {
   providerId: string;
   currentStatus: string | null;
   createdAt: string; // ISO 8601
+  /**
+   * The carrier's AWB for this shipment, once an admin has mapped one. Null means unmapped —
+   * the order exists but has no number a customer could track with yet, which is exactly what
+   * the admin Orders list's mapped/unmapped filter splits on.
+   */
+  externalTrackingNumber: string | null;
 }
 
 export interface OrderDto {

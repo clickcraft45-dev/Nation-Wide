@@ -35,6 +35,11 @@ COPY --from=build /app/node_modules/.prisma node_modules/.prisma
 COPY --from=build /app/packages/shared-types/dist packages/shared-types/dist
 COPY --from=build /app/backend/dist backend/dist
 COPY --from=build /app/backend/prisma backend/prisma
+# The PDF templates register NotoSans from `join(process.cwd(), 'assets', 'fonts')` (cwd is
+# /app/backend below). @react-pdf/renderer reads a registered font at render time and throws
+# ENOENT if it is missing, so without this every rate card AND every GST invoice 500s in the
+# container while working fine locally. Source assets, not build output — hence not in dist.
+COPY --from=build /app/backend/assets backend/assets
 
 WORKDIR /app/backend
 

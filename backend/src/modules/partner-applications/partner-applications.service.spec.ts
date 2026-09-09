@@ -120,15 +120,12 @@ describe('PartnerApplicationsService', () => {
     it('creates the partner account and records which admin approved it', async () => {
       prisma.partnerApplication.findUnique.mockResolvedValue(makeApplication());
 
-      const result = await service.approve(
-        'app-1',
-        { password: 'LongEnough123' },
-        'admin-7',
-      );
+      const result = await service.approve('app-1', {}, 'admin-7');
 
+      // No password passed along: PickupPartnersService generates one and mails it, so an
+      // admin-supplied credential must not reappear here.
       expect(pickupPartners.create).toHaveBeenCalledWith({
         email: 'ravi@example.com',
-        password: 'LongEnough123',
         name: 'Ravi Kumar',
         phone: '+919876543210',
       });
@@ -144,7 +141,7 @@ describe('PartnerApplicationsService', () => {
         makeApplication({ status: 'APPROVED' }),
       );
       await expect(
-        service.approve('app-1', { password: 'LongEnough123' }, 'admin-7'),
+        service.approve('app-1', {}, 'admin-7'),
       ).rejects.toBeInstanceOf(ConflictException);
       expect(pickupPartners.create).not.toHaveBeenCalled();
     });
@@ -152,7 +149,7 @@ describe('PartnerApplicationsService', () => {
     it('throws when the application does not exist', async () => {
       prisma.partnerApplication.findUnique.mockResolvedValue(null);
       await expect(
-        service.approve('nope', { password: 'LongEnough123' }, 'admin-7'),
+        service.approve('nope', {}, 'admin-7'),
       ).rejects.toBeInstanceOf(NotFoundException);
     });
   });
