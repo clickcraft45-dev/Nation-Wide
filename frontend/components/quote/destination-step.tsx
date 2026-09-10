@@ -11,14 +11,17 @@ import { cn } from "@/lib/utils/cn";
 export function DestinationStep({
   countries,
   isLoading,
+  initialSelected = null,
   onContinue,
 }: {
   countries: CountryDto[];
   isLoading: boolean;
+  /** Kept when the customer comes Back to this step, so the choice isn't lost. */
+  initialSelected?: CountryDto | null;
   onContinue: (country: CountryDto) => void;
 }) {
   const [search, setSearch] = useState("");
-  const [selected, setSelected] = useState<CountryDto | null>(null);
+  const [selected, setSelected] = useState<CountryDto | null>(initialSelected);
   const [error, setError] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
@@ -46,7 +49,8 @@ export function DestinationStep({
 
       <div className="space-y-3 text-left">
         <SearchInput
-          placeholder="Search country…"
+          // The chosen country shows in the box, so the selection is visible without scrolling.
+          placeholder={selected ? `${selected.name} (${selected.code}) — search to change` : "Search country…"}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           aria-label="Search destination country"

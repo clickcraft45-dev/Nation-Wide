@@ -126,8 +126,13 @@ export default function AdminPickupRequestDetailPage() {
           <div>
             <p className="text-muted-foreground">Destination</p>
             <p className="font-medium text-foreground">
-              {pickup.destCity}, {pickup.destState}, {pickup.destCountry}
+              {[pickup.destCity, pickup.destState, pickup.destCountry].filter(Boolean).join(", ")}
             </p>
+            {!pickup.recipient && (
+              <p className="text-xs text-muted-foreground">
+                Recipient address to be taken down by the partner at pickup.
+              </p>
+            )}
           </div>
           <div>
             <p className="text-muted-foreground">Carrier</p>

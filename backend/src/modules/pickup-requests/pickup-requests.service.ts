@@ -27,13 +27,23 @@ import { VerifyPickupRequestDto } from './dto/verify-pickup-request.dto';
 import { CollectPaymentDto } from './dto/collect-payment.dto';
 import { AcceptParcelDto } from './dto/accept-parcel.dto';
 import { RejectParcelDto } from './dto/reject-parcel.dto';
+import { RecipientAddressDto } from './dto/recipient-address.dto';
 
 const withDetails = {
   include: {
     customer: { select: { name: true, phone: true } },
     assignedPartner: { select: { id: true, name: true, email: true } },
     quote: {
-      select: { destCity: true, destState: true, destCountry: true },
+      select: {
+        destName: true,
+        destPhone: true,
+        destAddressLine1: true,
+        destAddressLine2: true,
+        destCity: true,
+        destState: true,
+        destPostalCode: true,
+        destCountry: true,
+      },
     },
   },
 };
@@ -56,6 +66,19 @@ const NON_TERMINAL_STATUSES: PickupRequestStatusCode[] = [
 // the difference on a cash collection can't just under-report and walk away with it.
 const COLLECTED_AMOUNT_TOLERANCE_RATIO = 0.05;
 const COLLECTED_AMOUNT_TOLERANCE_FLOOR = 50;
+
+// The recipient lives on the quote's dest* fields, whoever entered it.
+function recipientToQuoteData(recipient: RecipientAddressDto) {
+  return {
+    destName: recipient.name,
+    destPhone: recipient.phone,
+    destAddressLine1: recipient.addressLine1,
+    destAddressLine2: recipient.addressLine2 || null,
+    destCity: recipient.city,
+    destState: recipient.state,
+    destPostalCode: recipient.postalCode,
+  };
+}
 
 // The new pre-order self-service flow (Section: Pickup Partner workflow) — bridges a customer's
 // PENDING_PICKUP_REQUEST Quote to a real Order, but only once a Pickup Partner has physically
@@ -133,6 +156,14 @@ export class PickupRequestsService {
         );
       }
 
+      // Optional here — the partner confirms (or takes down) the recipient at the door either way.
+      if (dto.recipient) {
+        await tx.quote.update({
+          where: { id: quote.id },
+          data: recipientToQuoteData(dto.recipient),
+        });
+      }
+
       return tx.pickupRequest.create({
         data: {
           quoteId: quote.id,
@@ -146,11 +177,18 @@ export class PickupRequestsService {
           dropAtWarehouse: dto.dropAtWarehouse,
           pickupContactName: dto.pickupContactName,
           pickupContactPhone: dto.pickupContactPhone,
-          pickupAddressLine1: dto.pickupAddressLine1,
-          pickupAddressLine2: dto.pickupAddressLine2 ?? null,
-          pickupCity: dto.pickupCity,
-          pickupState: dto.pickupState,
-          pickupPostalCode: dto.pickupPostalCode,
+          // Blank on a warehouse drop-off: there is no pickup address to record.
+          pickupAddressLine1: dto.dropAtWarehouse
+            ? ''
+            : (dto.pickupAddressLine1 ?? ''),
+          pickupAddressLine2: dto.dropAtWarehouse
+            ? null
+            : (dto.pickupAddressLine2 ?? null),
+          pickupCity: dto.dropAtWarehouse ? '' : (dto.pickupCity ?? ''),
+          pickupState: dto.dropAtWarehouse ? '' : (dto.pickupState ?? ''),
+          pickupPostalCode: dto.dropAtWarehouse
+            ? ''
+            : (dto.pickupPostalCode ?? ''),
           pickupDate: dto.dropAtWarehouse
             ? null
             : dto.pickupDate
@@ -440,9 +478,19 @@ export class PickupRequestsService {
       verifiedPrice = dto.verifiedPrice ?? pickupRequest.estimatedPrice;
     }
 
+    // The partner confirms (or takes down) the recipient's delivery address at the door — the
+    // customer may have skipped it when booking. Required at the HTTP boundary by the DTO.
+    if (dto.recipient) {
+      await this.prisma.quote.update({
+        where: { id: pickupRequest.quoteId },
+        data: recipientToQuoteData(dto.recipient),
+      });
+    }
+
     await this.prisma.pickupRequest.update({
       where: { id },
       data: {
+        ...(dto.recipient ? { recipientVerifiedAt: new Date() } : {}),
         verifiedWeightKg: dto.verifiedWeightKg,
         verifiedShipmentType: dto.verifiedShipmentType,
         verifiedPrice,

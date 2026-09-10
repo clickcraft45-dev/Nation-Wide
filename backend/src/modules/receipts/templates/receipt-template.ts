@@ -1,5 +1,6 @@
 import { createElement as h } from 'react';
 import type { Receipt } from '@prisma/client';
+import { brandAsset } from '../../rate-cards/brand-assets';
 
 // Plain React.createElement and a dynamic ESM import of @react-pdf/renderer at the service
 // layer — the same constraint tax-invoice-template.ts documents, followed here rather than
@@ -141,6 +142,8 @@ export async function renderReceipt(
 
   const brand = branding.primaryColor?.trim() || '#0b0b0c';
   const displayName = branding.companyName?.trim() || receipt.supplierName;
+  // An uploaded company logo wins; otherwise the bundled NationWide mark.
+  const logoImage = logoBuffer ?? brandAsset('mark-black.png');
 
   const s = StyleSheet.create({
     page: {
@@ -278,13 +281,13 @@ export async function renderReceipt(
               key: 'logo-frame',
               style: [
                 s.logoFrame,
-                !logoBuffer
+                !logoImage
                   ? { backgroundColor: brand, borderColor: brand }
                   : undefined,
               ],
             },
-            logoBuffer
-              ? h(Image, { key: 'logo', src: logoBuffer, style: s.logo })
+            logoImage
+              ? h(Image, { key: 'logo', src: logoImage, style: s.logo })
               : h(Text, { key: 'fallback', style: s.logoFallback }, 'NW'),
           ),
           h(View, { key: 'copy' }, [

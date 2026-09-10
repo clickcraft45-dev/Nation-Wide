@@ -9,6 +9,15 @@ import type { MetadataRoute } from "next";
  *
  * `display: "standalone"` is what drops the browser chrome — an installed shipment tracker that
  * still shows an address bar has no reason to be installed.
+ *
+ * APP IMAGES — replace the files, keep the names and sizes:
+ *  - public/assets/icons/icon-192.png, icon-512.png   Android/desktop icon + the install banner
+ *  - public/assets/icons/icon-maskable-512.png        Android adaptive icon; keep the logo inside
+ *                                                     the centre 80% and the background opaque
+ *  - app/apple-icon.png (180×180)                     iPhone/iPad Home Screen icon. MUST have an
+ *                                                     opaque background — iOS paints transparency
+ *                                                     black, which hid the black NW mark entirely
+ *  - app/icon.png (512×512), app/favicon.ico          browser tab icon
  */
 export default function manifest(): MetadataRoute.Manifest {
   return {

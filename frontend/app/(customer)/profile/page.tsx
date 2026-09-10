@@ -10,6 +10,7 @@ import { Input, Label } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/ui/page-state";
 import { ChangePasswordForm } from "@/components/settings/change-password-form";
+import { InstallAppButton } from "@/components/pwa/install-prompt";
 
 export default function CustomerProfilePage() {
   const [customer, setCustomer] = useState<CustomerDto | null>(null);
@@ -109,6 +110,19 @@ export default function CustomerProfilePage() {
             </CardHeader>
             <CardContent>
               <ChangePasswordForm />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Install the app</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Put NationWide on your Home Screen to book pickups and track shipments in one tap —
+                on iPhone, Android or desktop.
+              </p>
+              <InstallAppButton className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
             </CardContent>
           </Card>
         </>

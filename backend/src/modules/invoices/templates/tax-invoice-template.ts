@@ -1,6 +1,7 @@
 import { createElement as h } from 'react';
 import { join } from 'node:path';
 import type { Invoice } from '@prisma/client';
+import { brandAsset } from '../../rate-cards/brand-assets';
 
 // Plain React.createElement, not JSX, and a dynamic ESM import of @react-pdf/renderer — both for
 // exactly the reasons spelled out at the top of rate-cards/templates/classic-template.ts. This
@@ -98,6 +99,8 @@ export async function renderTaxInvoice(
   const displayName = branding.companyName?.trim() || invoice.supplierName;
   const supportEmail = branding.supportEmail ?? invoice.supplierEmail;
   const supportPhone = branding.supportPhone ?? invoice.supplierPhone;
+  // An uploaded company logo wins; otherwise the bundled NationWide mark.
+  const logoImage = logoBuffer ?? brandAsset('mark-black.png');
 
   const s = StyleSheet.create({
     page: {
@@ -296,13 +299,13 @@ export async function renderTaxInvoice(
               key: 'logo-frame',
               style: [
                 s.logoFrame,
-                !logoBuffer
+                !logoImage
                   ? { backgroundColor: brand, borderColor: brand }
                   : undefined,
               ],
             },
-            logoBuffer
-              ? h(Image, { key: 'logo', src: logoBuffer, style: s.logo })
+            logoImage
+              ? h(Image, { key: 'logo', src: logoImage, style: s.logo })
               : h(Text, { key: 'fallback', style: s.logoFallback }, 'NW'),
           ),
           h(View, { key: 'brand-copy' }, [

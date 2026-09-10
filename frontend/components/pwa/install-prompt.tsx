@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { Download, Share, SquarePlus, X } from "lucide-react";
+import { Download, EllipsisVertical, Share, Smartphone, SquarePlus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 /**
@@ -15,14 +15,18 @@ import { Button } from "@/components/ui/button";
  *  - iOS Safari fires nothing and has no programmatic install. The only route is Share → Add to
  *    Home Screen, so iOS gets instructions instead of a button that could not work.
  *
- * A dismissal is remembered, so this asks once rather than becoming a permanent banner. It is
- * also never shown to someone already running the installed app.
+ * It offers itself once (a dismissal is remembered), and can be reopened any time from an
+ * <InstallAppButton> — a one-time banner alone left no way back after "Not now". Never shown
+ * automatically to someone already running the installed app.
  */
 
 export const DISMISSED_KEY = "nw.install-prompt-dismissed";
 // Long enough that a "not now" is respected, short enough that someone who kept using the site
 // for a month is asked again.
 export const DISMISS_DAYS = 30;
+
+// Fired by <InstallAppButton>; the one mounted <InstallPrompt> listens for it.
+const OPEN_EVENT = "nw:open-install-prompt";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -50,16 +54,18 @@ function isStandalone(): boolean {
 }
 
 function isIos(): boolean {
-  return /iphone|ipad|ipod/i.test(window.navigator.userAgent);
+  return (
+    /iphone|ipad|ipod/i.test(window.navigator.userAgent) ||
+    // iPadOS 13+ reports itself as a Mac; a touch screen is what gives it away.
+    (window.navigator.platform === "MacIntel" && window.navigator.maxTouchPoints > 1)
+  );
 }
 
 /**
- * Whether this device needs the manual iOS instructions, read through useSyncExternalStore.
- *
- * It is a one-shot environment read, not a subscription, so `subscribe` registers nothing — but
- * routing it through this hook is what keeps it out of an effect. Deriving it in an effect would
- * render once without the banner and once with, and the server snapshot (`false`) is what stops
- * the markup disagreeing at hydration, since the server has no userAgent or localStorage.
+ * One-shot environment reads, routed through useSyncExternalStore rather than an effect so the
+ * first client render already has the answer. `subscribe` registers nothing, and the server
+ * snapshot (`false`) is what stops the markup disagreeing at hydration — the server has no
+ * userAgent or localStorage.
  */
 const subscribeNever = () => () => {};
 
@@ -71,10 +77,33 @@ function useNeedsIosInstructions(): boolean {
   );
 }
 
+function useIsStandalone(): boolean {
+  return useSyncExternalStore(subscribeNever, isStandalone, () => false);
+}
+
+/** Opens the install instructions on demand, whatever was dismissed before. */
+export function openInstallPrompt() {
+  window.dispatchEvent(new Event(OPEN_EVENT));
+}
+
+/** A permanent "Add to Home Screen" entry point. Renders nothing inside the installed app. */
+export function InstallAppButton({ className }: { className?: string }) {
+  const installed = useIsStandalone();
+  if (installed) return null;
+  return (
+    <button type="button" onClick={openInstallPrompt} className={className}>
+      <Smartphone className="h-4 w-4" aria-hidden />
+      Add to Home Screen
+    </button>
+  );
+}
+
 export function InstallPrompt() {
   const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(null);
   const [dismissed, setDismissed] = useState(false);
-  const showIosHint = useNeedsIosInstructions() && !dismissed;
+  // Opened from an <InstallAppButton>: shown regardless of the earlier dismissal.
+  const [openedManually, setOpenedManually] = useState(false);
+  const autoIosHint = useNeedsIosInstructions() && !dismissed;
 
   useEffect(() => {
     // Registered from the client after mount, so it never blocks first paint. Failure is fine:
@@ -85,8 +114,14 @@ export function InstallPrompt() {
   }, []);
 
   useEffect(() => {
-    // iOS never fires this event; that path is handled by useNeedsIosInstructions above.
-    if (isStandalone() || wasRecentlyDismissed() || isIos()) return;
+    const onOpen = () => setOpenedManually(true);
+    window.addEventListener(OPEN_EVENT, onOpen);
+    return () => window.removeEventListener(OPEN_EVENT, onOpen);
+  }, []);
+
+  useEffect(() => {
+    // iOS never fires this event; that path is handled by the instructions below.
+    if (isStandalone() || isIos()) return;
 
     const onBeforeInstall = (event: Event) => {
       // Without this Chrome shows its own mini-infobar and this banner would be the second ask.
@@ -96,7 +131,10 @@ export function InstallPrompt() {
     window.addEventListener("beforeinstallprompt", onBeforeInstall);
 
     // Fires when the install completes by any route, including the browser's own menu.
-    const onInstalled = () => setDeferred(null);
+    const onInstalled = () => {
+      setDeferred(null);
+      setOpenedManually(false);
+    };
     window.addEventListener("appinstalled", onInstalled);
 
     return () => {
@@ -105,14 +143,18 @@ export function InstallPrompt() {
     };
   }, []);
 
-  function dismiss() {
-    try {
-      window.localStorage.setItem(DISMISSED_KEY, String(Date.now()));
-    } catch {
-      // Nothing to do — it will ask again next visit, which is the tolerable failure.
+  function close() {
+    // Only an automatic offer records "not now" — closing one you opened yourself shouldn't
+    // silence the next automatic ask.
+    if (!openedManually) {
+      try {
+        window.localStorage.setItem(DISMISSED_KEY, String(Date.now()));
+      } catch {
+        // Nothing to do — it will ask again next visit, which is the tolerable failure.
+      }
+      setDismissed(true);
     }
-    setDeferred(null);
-    setDismissed(true);
+    setOpenedManually(false);
   }
 
   async function install() {
@@ -122,9 +164,20 @@ export function InstallPrompt() {
     // the browser will offer its own install affordance later.
     await deferred.userChoice;
     setDeferred(null);
+    setOpenedManually(false);
   }
 
-  if (!deferred && !showIosHint) return null;
+  // The automatic Chrome offer respects an earlier "not now"; a manual open always shows.
+  const autoChromeOffer = deferred !== null && !dismissed && !wasRecentlyDismissedSafe();
+  if (!openedManually && !autoChromeOffer && !autoIosHint) return null;
+
+  const mode = isStandalone()
+    ? "installed"
+    : deferred
+      ? "button"
+      : isIos()
+        ? "ios"
+        : "menu";
 
   return (
     <div
@@ -143,32 +196,55 @@ export function InstallPrompt() {
           className="h-10 w-10 shrink-0 rounded-lg"
         />
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-foreground">Install NationWide</p>
-          {showIosHint ? (
+          <p className="text-sm font-semibold text-foreground">
+            {mode === "installed" ? "You're using the app" : "Add NationWide to your Home Screen"}
+          </p>
+          {mode === "installed" && (
             <p className="mt-1 text-sm text-muted-foreground">
-              Tap <Share className="inline h-4 w-4 align-text-bottom" aria-label="Share" /> then{" "}
-              <span className="whitespace-nowrap">
-                <SquarePlus className="inline h-4 w-4 align-text-bottom" aria-hidden /> Add to Home
-                Screen
-              </span>{" "}
-              to track shipments straight from your home screen.
-            </p>
-          ) : (
-            <p className="mt-1 text-sm text-muted-foreground">
-              Add it to your home screen to book pickups and track shipments in one tap.
+              NationWide is already installed on this device.
             </p>
           )}
-          {!showIosHint && (
-            <Button size="sm" className="mt-3" onClick={install}>
-              <Download className="h-4 w-4" aria-hidden />
-              Install
-            </Button>
+          {mode === "ios" && (
+            <ol className="mt-1 space-y-1 text-sm text-muted-foreground">
+              <li>
+                1. Tap <Share className="inline h-4 w-4 align-text-bottom" aria-label="Share" />{" "}
+                Share in the browser bar.
+              </li>
+              <li>
+                2. Scroll and tap{" "}
+                <span className="whitespace-nowrap font-medium text-foreground">
+                  <SquarePlus className="inline h-4 w-4 align-text-bottom" aria-hidden /> Add to
+                  Home Screen
+                </span>
+                .
+              </li>
+              <li>3. Tap Add — the NW icon appears on your Home Screen.</li>
+            </ol>
+          )}
+          {mode === "menu" && (
+            <p className="mt-1 text-sm text-muted-foreground">
+              Open your browser menu{" "}
+              <EllipsisVertical className="inline h-4 w-4 align-text-bottom" aria-label="menu" />{" "}
+              and choose <span className="font-medium text-foreground">Install app</span> or{" "}
+              <span className="font-medium text-foreground">Add to Home screen</span>.
+            </p>
+          )}
+          {mode === "button" && (
+            <>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Book pickups and track shipments in one tap.
+              </p>
+              <Button size="sm" className="mt-3" onClick={install}>
+                <Download className="h-4 w-4" aria-hidden />
+                Install
+              </Button>
+            </>
           )}
         </div>
         <button
           type="button"
-          onClick={dismiss}
-          aria-label="Not now"
+          onClick={close}
+          aria-label="Close"
           className="-m-1 rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
         >
           <X className="h-4 w-4" aria-hidden />
@@ -176,4 +252,10 @@ export function InstallPrompt() {
       </div>
     </div>
   );
+}
+
+// Render-time read of the dismissal; safe here because the banner only ever renders client-side
+// after an event (beforeinstallprompt / a manual open), never in the server pass.
+function wasRecentlyDismissedSafe(): boolean {
+  return typeof window !== "undefined" && wasRecentlyDismissed();
 }

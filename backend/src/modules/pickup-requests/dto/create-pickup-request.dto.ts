@@ -1,3 +1,4 @@
+import { Type } from 'class-transformer';
 import {
   IsBoolean,
   IsIn,
@@ -7,14 +8,18 @@ import {
   IsUUID,
   MaxLength,
   MinLength,
+  ValidateIf,
+  ValidateNested,
 } from 'class-validator';
 import {
   PICKUP_TIME_SLOTS,
   type PickupTimeSlot,
 } from '@nationwide/shared-types';
+import { RecipientAddressDto } from './recipient-address.dto';
 
-// The "Pickup Request page" fields — deliberately no destination address, that's already known
-// from the quote (Section: Updated customer flow).
+const needsPickupAddress = (o: CreatePickupRequestDto) => !o.dropAtWarehouse;
+
+// The "Pickup Request page" fields.
 export class CreatePickupRequestDto {
   @IsUUID()
   quoteId!: string;
@@ -32,30 +37,36 @@ export class CreatePickupRequestDto {
   @MaxLength(20)
   pickupContactPhone!: string;
 
+  // The pickup address is only collected when a partner is coming to fetch the parcel — a
+  // warehouse drop-off has none, and must not be rejected for leaving it blank.
+  @ValidateIf(needsPickupAddress)
   @IsString()
   @MinLength(1)
   @MaxLength(200)
-  pickupAddressLine1!: string;
+  pickupAddressLine1?: string;
 
   @IsOptional()
   @IsString()
   @MaxLength(200)
   pickupAddressLine2?: string;
 
+  @ValidateIf(needsPickupAddress)
   @IsString()
   @MinLength(1)
   @MaxLength(100)
-  pickupCity!: string;
+  pickupCity?: string;
 
+  @ValidateIf(needsPickupAddress)
   @IsString()
   @MinLength(1)
   @MaxLength(100)
-  pickupState!: string;
+  pickupState?: string;
 
+  @ValidateIf(needsPickupAddress)
   @IsString()
   @MinLength(1)
   @MaxLength(20)
-  pickupPostalCode!: string;
+  pickupPostalCode?: string;
 
   // Required unless dropAtWarehouse is true — enforced at the service layer since it's
   // conditional on another field, matching how CreateQuoteDto's own pickupDate/Slot are handled.
@@ -71,4 +82,10 @@ export class CreatePickupRequestDto {
   @IsString()
   @MaxLength(500)
   pickupInstructions?: string;
+
+  // Optional — the customer may add the recipient here, or leave it for the partner at pickup.
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => RecipientAddressDto)
+  recipient?: RecipientAddressDto;
 }

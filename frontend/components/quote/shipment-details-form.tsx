@@ -8,6 +8,14 @@ import { Input, Label, FieldError } from "@/components/ui/input";
 import { DateField } from "@/components/ui/date-field";
 import { PincodeInput } from "@/components/ui/pincode-input";
 import { NativeSelect } from "@/components/ui/select";
+import {
+  RecipientFields,
+  emptyRecipient,
+  toRecipientPayload,
+  validateRecipient,
+  type RecipientErrors,
+  type RecipientForm,
+} from "./recipient-fields";
 
 // Configurable — fill in the real warehouse address/hours when available (same placeholder
 // pattern used for the marketing footer's contact info).
@@ -65,7 +73,8 @@ export interface ShipmentDetailsPayload {
     instructions?: string;
     country: string;
   };
-  destination: Omit<AddressForm, "addressLine2"> & { addressLine2?: string; country: string };
+  // Only the country when the customer leaves the recipient for the pickup partner.
+  destination: Partial<ReturnType<typeof toRecipientPayload>> & { country: string };
   fulfillmentMethod?: "PICKUP" | "WAREHOUSE_DROP_OFF";
   pickupDate?: string;
   pickupTimeSlot?: string;
@@ -105,7 +114,12 @@ export function ShipmentDetailsForm({
     instructions: "",
     country: "India",
   });
-  const [destination, setDestination] = useState<AddressForm>(emptyAddress);
+  const [destination, setDestination] = useState<RecipientForm>(emptyRecipient);
+  // Customer self-service: the recipient may be left for the pickup partner to take down and
+  // confirm at the door. The admin manual-quote flow still requires it upfront.
+  const recipientOptional = !collectOriginAndFulfillment;
+  const [addRecipientNow, setAddRecipientNow] = useState(false);
+  const wantsRecipient = !recipientOptional || addRecipientNow;
   const [fulfillmentMethod, setFulfillmentMethod] = useState<"PICKUP" | "WAREHOUSE_DROP_OFF">(
     "PICKUP",
   );
@@ -130,7 +144,11 @@ export function ShipmentDetailsForm({
     ];
     for (const field of requiredFields) {
       if (collectOriginAndFulfillment && !origin[field].trim()) next[`origin.${field}`] = "Required.";
-      if (!destination[field].trim()) next[`destination.${field}`] = "Required.";
+    }
+    if (wantsRecipient) {
+      for (const [field, message] of Object.entries(validateRecipient(destination))) {
+        next[`destination.${field}`] = message;
+      }
     }
 
     if (collectOriginAndFulfillment && fulfillmentMethod === "PICKUP") {
@@ -166,22 +184,21 @@ export function ShipmentDetailsForm({
             instructions: origin.instructions.trim() || undefined,
           }
         : undefined,
-      destination: {
-        name: destination.name.trim(),
-        phone: destination.phone.trim(),
-        addressLine1: destination.addressLine1.trim(),
-        addressLine2: destination.addressLine2.trim() || undefined,
-        city: destination.city.trim(),
-        state: destination.state.trim(),
-        postalCode: destination.postalCode.trim(),
-        country: destinationCountry.name,
-      },
+      destination: wantsRecipient
+        ? { ...toRecipientPayload(destination), country: destinationCountry.name }
+        : { country: destinationCountry.name },
       fulfillmentMethod: collectOriginAndFulfillment ? fulfillmentMethod : undefined,
       pickupDate: collectOriginAndFulfillment && fulfillmentMethod === "PICKUP" ? pickupDate : undefined,
       pickupTimeSlot:
         collectOriginAndFulfillment && fulfillmentMethod === "PICKUP" ? pickupTimeSlot : undefined,
     });
   }
+
+  const recipientErrors: RecipientErrors = Object.fromEntries(
+    Object.entries(errors)
+      .filter(([key]) => key.startsWith("destination."))
+      .map(([key, message]) => [key.slice("destination.".length), message]),
+  );
 
   return (
     <form onSubmit={handleSubmit} className="mx-auto max-w-3xl space-y-6">
@@ -328,92 +345,31 @@ export function ShipmentDetailsForm({
           <CardTitle>Recipient</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="dest-name">Recipient name</Label>
-              <Input
-                id="dest-name"
-                value={destination.name}
-                onChange={(e) => setDestination({ ...destination, name: e.target.value })}
-                error={Boolean(errors["destination.name"])}
+          {recipientOptional && (
+            <label className="flex items-start gap-2 text-sm text-foreground">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={addRecipientNow}
+                onChange={(e) => setAddRecipientNow(e.target.checked)}
               />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="dest-phone">Recipient phone</Label>
-              <Input
-                id="dest-phone"
-                value={destination.phone}
-                onChange={(e) => setDestination({ ...destination, phone: e.target.value })}
-                error={Boolean(errors["destination.phone"])}
-              />
-            </div>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="dest-line1">Address line 1</Label>
-            <Input
-              id="dest-line1"
-              value={destination.addressLine1}
-              onChange={(e) => setDestination({ ...destination, addressLine1: e.target.value })}
-              error={Boolean(errors["destination.addressLine1"])}
+              <span>
+                Add the recipient&apos;s delivery address now
+                <span className="block text-xs text-muted-foreground">
+                  Optional — our pickup partner will take it down and confirm it with you at pickup.
+                </span>
+              </span>
+            </label>
+          )}
+          {wantsRecipient && (
+            <RecipientFields
+              value={destination}
+              onChange={setDestination}
+              errors={recipientErrors}
+              isIndia={destinationCountry.code === "IN"}
+              idPrefix="dest"
             />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="dest-line2">Address line 2 (optional)</Label>
-            <Input
-              id="dest-line2"
-              value={destination.addressLine2}
-              onChange={(e) => setDestination({ ...destination, addressLine2: e.target.value })}
-            />
-          </div>
-          <div className="grid gap-4 sm:grid-cols-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="dest-city">City</Label>
-              <Input
-                id="dest-city"
-                value={destination.city}
-                onChange={(e) => setDestination({ ...destination, city: e.target.value })}
-                error={Boolean(errors["destination.city"])}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="dest-state">State</Label>
-              <Input
-                id="dest-state"
-                value={destination.state}
-                onChange={(e) => setDestination({ ...destination, state: e.target.value })}
-                error={Boolean(errors["destination.state"])}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="dest-postal">
-                {destinationCountry.code === "IN" ? "PIN code" : "Postal code"}
-              </Label>
-              {/* Only India's PIN codes can be verified — every other destination keeps a plain
-                  field rather than a check that would always come back "couldn't verify". */}
-              {destinationCountry.code === "IN" ? (
-                <PincodeInput
-                  id="dest-postal"
-                  value={destination.postalCode}
-                  onChange={(postalCode) => setDestination((prev) => ({ ...prev, postalCode }))}
-                  onResolved={({ city, state }) =>
-                    setDestination((prev) => ({
-                      ...prev,
-                      city: prev.city.trim() === "" ? city : prev.city,
-                      state: prev.state.trim() === "" ? state : prev.state,
-                    }))
-                  }
-                  error={Boolean(errors["destination.postalCode"])}
-                />
-              ) : (
-                <Input
-                  id="dest-postal"
-                  value={destination.postalCode}
-                  onChange={(e) => setDestination({ ...destination, postalCode: e.target.value })}
-                  error={Boolean(errors["destination.postalCode"])}
-                />
-              )}
-            </div>
-          </div>
+          )}
         </CardContent>
       </Card>
 

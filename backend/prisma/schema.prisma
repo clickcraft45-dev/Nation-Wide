@@ -253,13 +253,16 @@ model Quote {
   originCountry      String? @map("origin_country")
   originInstructions String? @map("origin_instructions")
 
-  destName         String  @map("dest_name")
-  destPhone        String  @map("dest_phone")
-  destAddressLine1 String  @map("dest_address_line1")
+  // Recipient (delivery) address. Only the country is required: the customer self-service flow
+  // may leave the rest for the pickup partner to take down and confirm at the door (see
+  // PickupRequest.recipientVerifiedAt). The admin manual-quote flow still always supplies it.
+  destName         String? @map("dest_name")
+  destPhone        String? @map("dest_phone")
+  destAddressLine1 String? @map("dest_address_line1")
   destAddressLine2 String? @map("dest_address_line2")
-  destCity         String  @map("dest_city")
-  destState        String  @map("dest_state")
-  destPostalCode   String  @map("dest_postal_code")
+  destCity         String? @map("dest_city")
+  destState        String? @map("dest_state")
+  destPostalCode   String? @map("dest_postal_code")
   destCountry      String  @map("dest_country")
 
   // Nullable — null on the new customer self-service flow (logistics live on PickupRequest
@@ -411,6 +414,8 @@ model PickupRequest {
   verifiedNationwideCut   Float? @map("verified_nationwide_cut")
   verificationNotes    String?           @map("verification_notes")
   verifiedAt           DateTime?         @map("verified_at")
+  // When the partner confirmed (or took down) the recipient's delivery address at the door.
+  recipientVerifiedAt  DateTime?         @map("recipient_verified_at")
 
   // Payment collection — reuses the existing PaymentMethod enum (Order also uses it), copied onto
   // the generated Order by acceptParcel so PATCH /admin/orders/:id/payment's fields aren't stale.

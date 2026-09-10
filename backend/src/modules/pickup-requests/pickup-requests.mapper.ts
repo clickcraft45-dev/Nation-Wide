@@ -36,6 +36,22 @@ export function toPickupRequestDto(
     destCity: pickupRequest.quote.destCity,
     destState: pickupRequest.quote.destState,
     destCountry: pickupRequest.quote.destCountry,
+    // Null until someone has entered the delivery address — the customer may leave it for the
+    // partner to take down at pickup.
+    recipient: pickupRequest.quote.destAddressLine1
+      ? {
+          name: pickupRequest.quote.destName ?? '',
+          phone: pickupRequest.quote.destPhone ?? '',
+          addressLine1: pickupRequest.quote.destAddressLine1,
+          addressLine2: pickupRequest.quote.destAddressLine2,
+          city: pickupRequest.quote.destCity ?? '',
+          state: pickupRequest.quote.destState ?? '',
+          postalCode: pickupRequest.quote.destPostalCode ?? '',
+        }
+      : null,
+    recipientVerifiedAt: pickupRequest.recipientVerifiedAt
+      ? pickupRequest.recipientVerifiedAt.toISOString()
+      : null,
 
     status: pickupRequest.status,
 

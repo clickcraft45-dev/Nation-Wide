@@ -58,6 +58,16 @@ export interface CreatePickupRequestDto {
   pickupInstructions?: string;
 }
 
+export interface PickupRecipientDto {
+  name: string;
+  phone: string;
+  addressLine1: string;
+  addressLine2: string | null;
+  city: string;
+  state: string;
+  postalCode: string;
+}
+
 export interface PickupRequestDto {
   id: string;
   quoteId: string;
@@ -87,11 +97,15 @@ export interface PickupRequestDto {
   pickupTimeSlot: PickupTimeSlot | null;
   pickupInstructions: string | null;
 
-  // Destination — read off the underlying Quote, shown for the partner's own reference (they
-  // never edit it here).
-  destCity: string;
-  destState: string;
+  // Destination — read off the underlying Quote. City/state are null until the recipient's
+  // address has been entered.
+  destCity: string | null;
+  destState: string | null;
   destCountry: string;
+  // The recipient's delivery address; null when the customer left it for the partner to take
+  // down at pickup. The partner confirms (or fills) it during verification.
+  recipient: PickupRecipientDto | null;
+  recipientVerifiedAt: string | null; // ISO 8601
 
   status: PickupRequestStatusCode;
 

@@ -1,6 +1,7 @@
 import { createElement as h } from 'react';
 import { join } from 'node:path';
 import type { RateCardData } from '../rate-card-data.service';
+import { brandAsset } from '../brand-assets';
 
 // Plain React.createElement calls, not JSX — this is a NestJS backend with no other UI code, so
 // this file deliberately avoids pulling a JSX toolchain (tsconfig "jsx" option, .tsx extension)
@@ -20,7 +21,9 @@ import type { RateCardData } from '../rate-card-data.service';
 // + transit time).
 const COUNTRIES_PER_PAGE = 4;
 
-const BRAND_FALLBACK = '#1B3A6B';
+// Black-and-white document: the brand shows through the wordmark, not a colour wash. The
+// settings' primaryColor is deliberately not used here.
+const INK = '#0b0b0c';
 
 // The PDF's base-14 fonts (Helvetica etc.) have no ₹ glyph — Noto Sans is bundled as a real asset
 // (not fetched over the network at render time) specifically because it covers the Indian Rupee
@@ -53,32 +56,38 @@ function buildStyles(
   return StyleSheet.create({
     page: {
       padding: 28,
+      // Room for the fixed page footer.
+      paddingBottom: 56,
       fontSize: 9,
       fontFamily: 'NotoSans',
       color: '#1f2937',
     },
-    headerRow: {
+    // Full-bleed black band: wordmark left, company identity right.
+    header: {
       flexDirection: 'row',
       justifyContent: 'space-between',
-      alignItems: 'flex-start',
-      marginBottom: 14,
-    },
-    logo: { width: 46, height: 46, objectFit: 'contain', marginRight: 10 },
-    companyBlock: { flexDirection: 'row', alignItems: 'center' },
-    companyName: { fontSize: 16, fontWeight: 'bold', color: brand },
-    tagline: { fontSize: 8, color: '#6b7280', marginTop: 2 },
-    banner: {
-      width: 210,
-      height: 60,
-      borderRadius: 8,
-      backgroundColor: brand,
       alignItems: 'center',
-      justifyContent: 'center',
+      backgroundColor: brand,
+      marginHorizontal: -28,
+      marginTop: -28,
+      paddingHorizontal: 28,
+      paddingVertical: 16,
+      marginBottom: 18,
     },
-    bannerDot: {
-      position: 'absolute',
-      borderRadius: 999,
-      backgroundColor: 'rgba(255,255,255,0.25)',
+    headerWordmark: { width: 132, height: 30, objectFit: 'contain' },
+    headerWordmarkText: { color: '#ffffff', fontSize: 14, fontWeight: 'bold' },
+    headerRight: { alignItems: 'flex-end', maxWidth: 300 },
+    headerName: {
+      color: '#ffffff',
+      fontSize: 9.5,
+      fontWeight: 'bold',
+      textAlign: 'right',
+    },
+    headerMeta: {
+      color: '#a1a1aa',
+      fontSize: 7.5,
+      marginTop: 2,
+      textAlign: 'right',
     },
     titleBlock: { alignItems: 'center', marginBottom: 12 },
     title: { fontSize: 22, fontWeight: 'bold', color: brand, letterSpacing: 1 },
@@ -121,7 +130,7 @@ function buildStyles(
     infoRow: { flexDirection: 'row', gap: 12, marginBottom: 14 },
     infoCard: {
       flex: 1,
-      backgroundColor: '#f3f6fb',
+      backgroundColor: '#f4f4f5',
       borderRadius: 8,
       padding: 10,
       flexDirection: 'row',
@@ -198,16 +207,18 @@ function buildStyles(
       alignItems: 'flex-start',
     },
     noticeText: { fontSize: 7, color: '#374151', flex: 1, lineHeight: 1.3 },
-    contactBar: {
-      marginTop: 14,
-      backgroundColor: brand,
-      borderRadius: 6,
-      padding: 10,
+    pageFooter: {
+      position: 'absolute',
+      left: 28,
+      right: 28,
+      bottom: 20,
+      borderTopWidth: 0.75,
+      borderTopColor: '#d4d4d8',
+      paddingTop: 6,
       flexDirection: 'row',
-      justifyContent: 'space-around',
-      alignItems: 'center',
+      justifyContent: 'space-between',
     },
-    contactText: { color: '#ffffff', fontSize: 7.5 },
+    pageFooterText: { fontSize: 7, color: '#71717a' },
   });
 }
 
@@ -295,11 +306,14 @@ export async function renderClassicTemplate(
   } = rp;
   ensureFontRegistered(Font);
 
-  const brand = data.companySettings.primaryColor || BRAND_FALLBACK;
+  const brand = INK;
   const styles = buildStyles(StyleSheet, brand);
   const scopeLabel = data.countries.map((c) => c.name).join(' & ');
   const countryChunks = chunk(data.countries, COUNTRIES_PER_PAGE);
   const settings = data.companySettings;
+  // ponytail: the header is always the bundled white wordmark on black — an uploaded company logo
+  // (logoBuffer) has no guaranteed contrast on black, so it is not placed here.
+  const wordmark = brandAsset('wordmark-white.png');
 
   const badges: {
     kind: 'safe' | 'reliable' | 'fast' | 'global';
@@ -323,46 +337,21 @@ export async function renderClassicTemplate(
         // Header
         h(
           View,
-          { style: styles.headerRow },
+          { style: styles.header },
+          wordmark
+            ? h(Image, { style: styles.headerWordmark, src: wordmark })
+            : h(
+                Text,
+                { style: styles.headerWordmarkText },
+                settings.companyName,
+              ),
           h(
             View,
-            { style: styles.companyBlock },
-            logoBuffer
-              ? h(Image, { style: styles.logo, src: logoBuffer })
+            { style: styles.headerRight },
+            h(Text, { style: styles.headerName }, settings.companyName),
+            settings.tagline
+              ? h(Text, { style: styles.headerMeta }, settings.tagline)
               : null,
-            h(
-              View,
-              null,
-              h(Text, { style: styles.companyName }, settings.companyName),
-              settings.tagline
-                ? h(Text, { style: styles.tagline }, settings.tagline)
-                : null,
-            ),
-          ),
-          h(
-            View,
-            { style: styles.banner },
-            h(View, {
-              style: [
-                styles.bannerDot,
-                { width: 70, height: 70, top: -20, right: -10 },
-              ],
-            }),
-            h(View, {
-              style: [
-                styles.bannerDot,
-                { width: 34, height: 34, bottom: -8, left: 20 },
-              ],
-            }),
-            h(
-              Svg,
-              { viewBox: '0 0 24 24', style: { width: 30, height: 30 } },
-              h(Path, {
-                fill: '#ffffff',
-                stroke: 'none',
-                d: 'M21,16 V14 L13,9 V3.5 C13,2.7 12.3,2 11.5,2 C10.7,2 10,2.7 10,3.5 V9 L2,14 V16 L10,13.5 V19 L7.5,20.5 V22 L11.5,21 L15.5,22 V20.5 L13,19 V13.5 Z',
-              }),
-            ),
           ),
         ),
         // Title
@@ -474,7 +463,7 @@ export async function renderClassicTemplate(
             {
               style: [
                 styles.tableRow,
-                { backgroundColor: rowIndex % 2 === 1 ? '#f3f6fb' : '#ffffff' },
+                { backgroundColor: rowIndex % 2 === 1 ? '#f4f4f5' : '#ffffff' },
               ],
               key: row.weightKg,
             },
@@ -569,21 +558,33 @@ export async function renderClassicTemplate(
                 ),
               )
             : null,
+        ),
+        // Fixed, so it repeats on any page the table spills onto.
+        h(
+          View,
+          { style: styles.pageFooter, fixed: true },
           h(
-            View,
-            { style: styles.contactBar },
-            h(
-              Text,
-              { style: styles.contactText },
-              [settings.supportPhone].filter(Boolean).join('  '),
-            ),
-            settings.website
-              ? h(Text, { style: styles.contactText }, settings.website)
-              : null,
-            settings.supportEmail
-              ? h(Text, { style: styles.contactText }, settings.supportEmail)
-              : null,
+            Text,
+            { style: styles.pageFooterText },
+            [
+              settings.companyName,
+              settings.supportPhone,
+              settings.supportEmail,
+              settings.website,
+            ]
+              .filter(Boolean)
+              .join('  ·  '),
           ),
+          h(Text, {
+            style: styles.pageFooterText,
+            render: ({
+              pageNumber,
+              totalPages,
+            }: {
+              pageNumber: number;
+              totalPages: number;
+            }) => `Page ${pageNumber} of ${totalPages}`,
+          }),
         ),
       );
     }),

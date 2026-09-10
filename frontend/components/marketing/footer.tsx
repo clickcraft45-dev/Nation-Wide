@@ -6,6 +6,7 @@ import { useCurrentYear } from "@/lib/utils/use-current-year";
 import { useAuthGate } from "@/lib/auth/use-auth-gate";
 import { Logo } from "@/components/brand/logo";
 import { WorldMap } from "@/components/ui/world-map";
+import { InstallAppButton } from "@/components/pwa/install-prompt";
 import { REGISTERED_COMPANY } from "@nationwide/shared-types";
 import { CONTACT_EMAIL, CONTACT_PHONE } from "@/lib/constants/contact";
 import { SHIPPING_ROUTES } from "@/lib/constants/routes";
@@ -129,6 +130,9 @@ export function MarketingFooter() {
                 <Link href="/shipping-guidelines" className={LINK}>
                   Shipping Guidelines
                 </Link>
+              </li>
+              <li>
+                <InstallAppButton className={`inline-flex items-center gap-2 ${LINK}`} />
               </li>
             </ul>
           </div>

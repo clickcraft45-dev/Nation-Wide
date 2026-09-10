@@ -21,6 +21,15 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Stepper } from "@/components/ui/stepper";
 import { useDebouncedValue } from "@/lib/utils/use-debounced-value";
 import { cn } from "@/lib/utils/cn";
+import {
+  RecipientFields,
+  emptyRecipient,
+  recipientFrom,
+  toRecipientPayload,
+  validateRecipient,
+  type RecipientErrors,
+  type RecipientForm,
+} from "@/components/quote/recipient-fields";
 
 function mapsUrl(pickup: PickupRequestDto): string {
   const address = [
@@ -92,6 +101,12 @@ export default function PartnerPickupDetailPage() {
   const [acceptanceRemarks, setAcceptanceRemarks] = useState("");
   const [isAccepting, setIsAccepting] = useState(false);
 
+  // Recipient (delivery) address — confirmed with the customer at the door, or taken down here
+  // if they skipped it when booking.
+  const [recipient, setRecipient] = useState<RecipientForm>(emptyRecipient);
+  const [recipientErrors, setRecipientErrors] = useState<RecipientErrors>({});
+  const [recipientConfirmed, setRecipientConfirmed] = useState(false);
+
   const [rejectReason, setRejectReason] = useState("");
   const [isRejecting, setIsRejecting] = useState(false);
 
@@ -107,6 +122,7 @@ export default function PartnerPickupDetailPage() {
       .get<PickupRequestDto>(`/partner/pickup-requests/${params.id}`)
       .then((res) => {
         setPickup(res);
+        setRecipient(recipientFrom(res.recipient));
         setVerifiedWeightKg(String(res.verifiedWeightKg ?? res.estimatedWeightKg));
         setVerifiedShipmentType(res.verifiedShipmentType ?? res.shipmentType);
       })
@@ -190,6 +206,12 @@ export default function PartnerPickupDetailPage() {
       setVerifyError("Enter the price you agreed with the customer.");
       return;
     }
+    const recipientProblems = validateRecipient(recipient);
+    setRecipientErrors(recipientProblems);
+    if (Object.keys(recipientProblems).length > 0) {
+      setVerifyError("Fill in the recipient's delivery address.");
+      return;
+    }
     setIsVerifying(true);
     setVerifyError(null);
     try {
@@ -201,6 +223,7 @@ export default function PartnerPickupDetailPage() {
           // Sent only on the no-rate path — the server rejects it outright anywhere else rather
           // than letting the phone name the price on a rate-carded shipment.
           ...(needsManualPrice ? { verifiedPrice: price } : {}),
+          recipient: toRecipientPayload(recipient),
           verificationNotes: verificationNotes.trim() || undefined,
         },
       );
@@ -377,6 +400,18 @@ export default function PartnerPickupDetailPage() {
                   <p className="font-medium text-foreground">{pickup.pickupInstructions}</p>
                 </div>
               )}
+              <div>
+                <p className="text-xs text-muted-foreground">Deliver To</p>
+                <p className="font-medium text-foreground">
+                  {pickup.recipient
+                    ? `${pickup.recipient.name} · ${[
+                        pickup.recipient.addressLine1,
+                        pickup.recipient.city,
+                        pickup.destCountry,
+                      ].join(", ")}`
+                    : `${pickup.destCountry} — take the address down at pickup`}
+                </p>
+              </div>
               <div className="grid grid-cols-2 gap-3 border-t border-border pt-3">
                 <div>
                   <p className="text-xs text-muted-foreground">Shipment Type</p>
@@ -553,12 +588,43 @@ export default function PartnerPickupDetailPage() {
                 </CardContent>
               </Card>
 
+              <Card>
+                <CardContent className="space-y-4 pt-5">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">
+                      Recipient (delivery address) · {pickup.destCountry}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {pickup.recipient
+                        ? "Entered by the customer — check it with them and correct anything that's wrong."
+                        : "The customer didn't add one — take it down now."}
+                    </p>
+                  </div>
+                  <RecipientFields
+                    value={recipient}
+                    onChange={setRecipient}
+                    errors={recipientErrors}
+                    isIndia={pickup.destCountry === "India"}
+                    idPrefix="recipient"
+                  />
+                  <label className="flex items-center gap-2 text-sm text-foreground">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 rounded border-border"
+                      checked={recipientConfirmed}
+                      onChange={(e) => setRecipientConfirmed(e.target.checked)}
+                    />
+                    I have confirmed this address with the customer
+                  </label>
+                </CardContent>
+              </Card>
+
               <Button
                 size="lg"
                 className="w-full"
                 onClick={handleVerify}
                 isLoading={isVerifying}
-                disabled={!parcelPhysicallyChecked}
+                disabled={!parcelPhysicallyChecked || !recipientConfirmed}
               >
                 Confirm Verification
               </Button>

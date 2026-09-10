@@ -18,7 +18,10 @@ import {
   type PickupTimeSlot,
   type ShipmentTypeCode,
 } from '@nationwide/shared-types';
-import { QuoteAddressDto, QuoteOriginAddressDto } from './quote-address.dto';
+import {
+  QuoteDestinationDto,
+  QuoteOriginAddressDto,
+} from './quote-address.dto';
 
 export class CreateQuoteDto {
   @IsIn(SHIPMENT_TYPES)
@@ -44,9 +47,10 @@ export class CreateQuoteDto {
   @Type(() => QuoteOriginAddressDto)
   origin?: QuoteOriginAddressDto;
 
+  // Only the country is required here; see QuoteDestinationDto.
   @ValidateNested()
-  @Type(() => QuoteAddressDto)
-  destination!: QuoteAddressDto;
+  @Type(() => QuoteDestinationDto)
+  destination!: QuoteDestinationDto;
 
   @IsOptional()
   @IsIn(FULFILLMENT_METHODS)

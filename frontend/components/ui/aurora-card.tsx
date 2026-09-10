@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { Check, Copy } from "lucide-react";
 import { TEXT_LOGO } from "@/lib/constants/assets";
+import { Logo } from "@/components/brand/logo";
 import { cn } from "@/lib/utils/cn";
 
 /**
@@ -107,10 +108,7 @@ export function AuroraCard({
             WebkitMaskRepeat: "no-repeat",
           }}
         />
-        <div className="flex shrink-0" aria-hidden>
-          <div className="h-11 w-11 rounded-full bg-[#FF4F38] sm:h-12 sm:w-12" />
-          <div className="-ml-5 h-11 w-11 rounded-full bg-[#FFB600]/90 sm:-ml-6 sm:h-12 sm:w-12" />
-        </div>
+        <Logo variant="icon" tone="reverse" size="lg" className="shrink-0 opacity-90" />
       </div>
 
       <div className="relative mt-4 flex flex-wrap items-center gap-x-3 gap-y-2">

@@ -93,6 +93,21 @@ export interface QuoteOriginAddressDto extends QuoteAddressDto {
   instructions: string | null;
 }
 
+/**
+ * A quote's recipient. Only the country is always known — the customer may leave the rest for
+ * the pickup partner to take down and confirm at the door.
+ */
+export interface QuoteDestinationDto {
+  name: string | null;
+  phone: string | null;
+  addressLine1: string | null;
+  addressLine2: string | null;
+  city: string | null;
+  state: string | null;
+  postalCode: string | null;
+  country: string;
+}
+
 export interface QuoteDto {
   id: string;
   customerId: string;
@@ -102,7 +117,7 @@ export interface QuoteDto {
   // Null on the new customer self-service flow — pickup logistics live on PickupRequest instead
   // (see pickup-request.ts). Still populated by the legacy admin manual-quote flow.
   origin: QuoteOriginAddressDto | null;
-  destination: QuoteAddressDto;
+  destination: QuoteDestinationDto;
   fulfillmentMethod: FulfillmentMethodCode | null;
   pickupDate: string | null; // ISO 8601 date-only
   pickupTimeSlot: PickupTimeSlot | null;
@@ -140,7 +155,8 @@ export interface CreateQuoteDto {
   shipmentType: ShipmentTypeCode;
   weightKg: number;
   description?: string;
-  destination: QuoteAddressDto;
+  // Only the country is required; the recipient may be filled in later (see QuoteDestinationDto).
+  destination: Partial<Omit<QuoteAddressDto, "country">> & { country: string };
   // Optional — omitted by the new customer self-service wizard, which collects pickup logistics
   // later via CreatePickupRequestDto (see pickup-request.ts) instead of at quote-creation time.
   // The admin manual-quote flow (CreateAdminQuoteDto) still always supplies these.

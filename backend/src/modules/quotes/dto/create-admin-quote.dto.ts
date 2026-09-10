@@ -5,7 +5,7 @@ import {
   type FulfillmentMethodCode,
 } from '@nationwide/shared-types';
 import { CreateQuoteDto } from './create-quote.dto';
-import { QuoteOriginAddressDto } from './quote-address.dto';
+import { QuoteAddressDto, QuoteOriginAddressDto } from './quote-address.dto';
 
 // Staff-initiated quote creation (Admin "Get a Quote") — identical to the customer-facing
 // CreateQuoteDto plus an explicit target customer, since there's no JWT subject to imply it
@@ -27,4 +27,9 @@ export class CreateAdminQuoteDto extends CreateQuoteDto {
 
   @IsIn(FULFILLMENT_METHODS)
   declare fulfillmentMethod: FulfillmentMethodCode;
+
+  // Staff always take the full recipient address upfront.
+  @ValidateNested()
+  @Type(() => QuoteAddressDto)
+  declare destination: QuoteAddressDto;
 }

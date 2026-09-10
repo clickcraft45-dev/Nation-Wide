@@ -15,15 +15,22 @@ const SHIPMENT_TYPES: { value: ShipmentTypeCode; label: string }[] = [
 
 export function WeightStep({
   destination,
+  initialWeightKg = null,
+  initialShipmentType = null,
   onChangeDestination,
   onSubmit,
 }: {
   destination: CountryDto;
+  /** Kept when the customer comes Back to this step. */
+  initialWeightKg?: number | null;
+  initialShipmentType?: ShipmentTypeCode | null;
   onChangeDestination: () => void;
   onSubmit: (weightKg: number, shipmentType: ShipmentTypeCode) => void;
 }) {
-  const [shipmentType, setShipmentType] = useState<ShipmentTypeCode>("PACKAGE");
-  const [weight, setWeight] = useState("");
+  const [shipmentType, setShipmentType] = useState<ShipmentTypeCode>(
+    initialShipmentType ?? "PACKAGE",
+  );
+  const [weight, setWeight] = useState(initialWeightKg ? String(initialWeightKg) : "");
   const [error, setError] = useState<string | null>(null);
 
   function handleSubmit(e: React.FormEvent) {

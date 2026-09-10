@@ -17,4 +17,13 @@ describe('PDF font assets', () => {
       expect(existsSync(join(fontsDir, file))).toBe(true);
     },
   );
+
+  // Same packaging trap for the default logos (brand-assets.ts): missing files don't throw, they
+  // silently drop every PDF back to the plain-text "NW" fallback.
+  it.each(['mark-black.png', 'wordmark-white.png'])(
+    'ships brand/%s where brand-assets.ts looks for it',
+    (file) => {
+      expect(existsSync(join(process.cwd(), 'assets', 'brand', file))).toBe(true);
+    },
+  );
 });

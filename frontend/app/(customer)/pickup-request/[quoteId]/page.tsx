@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, CheckCircle2 } from "lucide-react";
 import type { QuoteDto } from "@nationwide/shared-types";
@@ -14,6 +13,15 @@ import { PincodeInput } from "@/components/ui/pincode-input";
 import { NativeSelect } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/ui/page-state";
+import {
+  RecipientFields,
+  emptyRecipient,
+  recipientFrom,
+  toRecipientPayload,
+  validateRecipient,
+  type RecipientErrors,
+  type RecipientForm,
+} from "@/components/quote/recipient-fields";
 
 const TIME_SLOTS = [
   { value: "09:00-12:00", label: "9:00 AM – 12:00 PM" },
@@ -62,6 +70,11 @@ export default function PickupRequestPage() {
   const [pickupTimeSlot, setPickupTimeSlot] = useState(TIME_SLOTS[0].value);
   const [pickupInstructions, setPickupInstructions] = useState("");
 
+  // The recipient is optional here — the partner confirms (or takes it down) at the door.
+  const [addRecipient, setAddRecipient] = useState(false);
+  const [recipient, setRecipient] = useState<RecipientForm>(emptyRecipient);
+  const [recipientErrors, setRecipientErrors] = useState<RecipientErrors>({});
+
   const [errors, setErrors] = useState<FormErrors>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -85,6 +98,11 @@ export default function PickupRequestPage() {
           return;
         }
         setQuote(found);
+        // Already entered on the quote — show it for review instead of asking again.
+        if (found.destination.addressLine1) {
+          setRecipient(recipientFrom(found.destination));
+          setAddRecipient(true);
+        }
         if (found.status === "PICKUP_REQUESTED") setSubmitted(true);
       })
       .catch((err) => {
@@ -98,6 +116,12 @@ export default function PickupRequestPage() {
       cancelled = true;
     };
   }, [params.quoteId]);
+
+  // Back to wherever the customer came from; a direct link (no history) lands on the quote.
+  function goBack() {
+    if (window.history.length > 1) router.back();
+    else router.push(quote ? `/quotes/${quote.id}` : "/quotes");
+  }
 
   // Mirrors CreatePickupRequestDto's own limits. Checking them here is not duplication for its
   // own sake: without it the only feedback on a too-long value is a round trip that comes back
@@ -140,8 +164,10 @@ export default function PickupRequestPage() {
       }
       if (!pickupTimeSlot) next.pickupTimeSlot = "Choose a time slot.";
     }
+    const nextRecipientErrors = addRecipient ? validateRecipient(recipient) : {};
     setErrors(next);
-    return Object.keys(next).length === 0;
+    setRecipientErrors(nextRecipientErrors);
+    return Object.keys(next).length === 0 && Object.keys(nextRecipientErrors).length === 0;
   }
 
   /**
@@ -176,14 +202,21 @@ export default function PickupRequestPage() {
         dropAtWarehouse,
         pickupContactName: pickupContactName.trim(),
         pickupContactPhone: pickupContactPhone.trim(),
-        pickupAddressLine1: pickupAddressLine1.trim(),
-        pickupAddressLine2: pickupAddressLine2.trim() || undefined,
-        pickupCity: pickupCity.trim(),
-        pickupState: pickupState.trim(),
-        pickupPostalCode: pickupPostalCode.trim(),
-        pickupDate: dropAtWarehouse ? undefined : pickupDate,
-        pickupTimeSlot: dropAtWarehouse ? undefined : pickupTimeSlot,
-        pickupInstructions: pickupInstructions.trim() || undefined,
+        // A warehouse drop-off has no pickup address — sending blanks is what the server used to
+        // reject with "pickupAddressLine1 must be longer than or equal to 1 characters".
+        ...(dropAtWarehouse
+          ? {}
+          : {
+              pickupAddressLine1: pickupAddressLine1.trim(),
+              pickupAddressLine2: pickupAddressLine2.trim() || undefined,
+              pickupCity: pickupCity.trim(),
+              pickupState: pickupState.trim(),
+              pickupPostalCode: pickupPostalCode.trim(),
+              pickupDate,
+              pickupTimeSlot,
+              pickupInstructions: pickupInstructions.trim() || undefined,
+            }),
+        recipient: addRecipient ? toRecipientPayload(recipient) : undefined,
       });
       setSubmitted(true);
     } catch (err) {
@@ -240,20 +273,22 @@ export default function PickupRequestPage() {
     );
   }
 
+  const shippingTo = [quote.destination.city, quote.destination.country].filter(Boolean).join(", ");
+
   return (
     <div className="mx-auto max-w-md space-y-6 px-4 py-8">
-      <Link
-        href={`/quotes/${quote.id}`}
+      <button
+        type="button"
+        onClick={goBack}
         className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
       >
         <ArrowLeft className="h-4 w-4" aria-hidden /> Back
-      </Link>
+      </button>
 
       <div>
         <h1 className="text-xl font-semibold text-foreground">Schedule your pickup</h1>
         <p className="text-sm text-muted-foreground">
-          Shipping to {quote.destination.city}, {quote.destination.country}. We already have your
-          destination — just tell us where to collect your parcel.
+          Shipping to {shippingTo}. Tell us where to collect your parcel.
         </p>
       </div>
 
@@ -400,6 +435,37 @@ export default function PickupRequestPage() {
                   />
                 </div>
               </>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Recipient (delivery address)</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <label className="flex items-start gap-2 text-sm text-foreground">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={addRecipient}
+                onChange={(e) => setAddRecipient(e.target.checked)}
+              />
+              <span>
+                Add the recipient&apos;s address now
+                <span className="block text-xs text-muted-foreground">
+                  Optional — our pickup partner will take it down and confirm it with you at pickup.
+                </span>
+              </span>
+            </label>
+            {addRecipient && (
+              <RecipientFields
+                value={recipient}
+                onChange={setRecipient}
+                errors={recipientErrors}
+                isIndia={quote.destination.country === "India"}
+                idPrefix="recipient"
+              />
             )}
           </CardContent>
         </Card>

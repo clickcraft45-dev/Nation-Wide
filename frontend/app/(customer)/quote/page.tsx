@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { ArrowLeft } from "lucide-react";
 import type {
   CountryDto,
   CustomerDto,
@@ -68,22 +69,32 @@ export default function GetQuotePage() {
   }, []);
 
   function handleDestinationContinue(country: CountryDto) {
+    // Only a different country invalidates what was entered after it.
+    if (country.id !== destination?.id) {
+      setWeightKg(null);
+      setShipmentType(null);
+      setPreview(null);
+      setSelectedOption(null);
+    }
     setDestination(country);
-    setWeightKg(null);
-    setShipmentType(null);
-    setPreview(null);
-    setSelectedOption(null);
     setStep("weight");
   }
 
+  // Going back keeps everything entered so far; nothing is cleared until something changes.
   function handleChangeDestination() {
-    setDestination(null);
-    setWeightKg(null);
-    setShipmentType(null);
-    setPreview(null);
-    setSelectedOption(null);
     setStep("destination");
   }
+
+  const backTarget: WizardStep | null =
+    step === "compare" || step === "manual-review" || step === "priced-at-pickup"
+      ? "weight"
+      : step === "details"
+        ? selectedOption || preview?.status === "RATED"
+          ? "compare"
+          : preview?.status === "PENDING_PICKUP_REQUEST"
+            ? "priced-at-pickup"
+            : "manual-review"
+        : null;
 
   async function handleWeightSubmit(value: number, type: ShipmentTypeCode) {
     if (!destination) return;
@@ -223,6 +234,16 @@ export default function GetQuotePage() {
 
   return (
     <div className="space-y-8 pb-10">
+      {backTarget && (
+        <button
+          type="button"
+          onClick={() => setStep(backTarget)}
+          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft className="h-4 w-4" aria-hidden /> Back
+        </button>
+      )}
+
       {step !== "details" && (
         <QuoteStepper
           current={step === "destination" ? 0 : step === "weight" ? 1 : 2}
@@ -233,6 +254,7 @@ export default function GetQuotePage() {
         <DestinationStep
           countries={countries}
           isLoading={countriesLoading}
+          initialSelected={destination}
           onContinue={handleDestinationContinue}
         />
       )}
@@ -241,6 +263,8 @@ export default function GetQuotePage() {
         <div className="space-y-4">
           <WeightStep
             destination={destination}
+            initialWeightKg={weightKg}
+            initialShipmentType={shipmentType}
             onChangeDestination={handleChangeDestination}
             onSubmit={handleWeightSubmit}
           />

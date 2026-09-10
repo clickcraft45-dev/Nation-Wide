@@ -102,25 +102,24 @@ Keep it on one line in the environment; it is read and parsed at send time.
 
 ```json
 {
-  "invoice_ready":                { "id": "...", "params": ["customerName", "invoiceNumber", "amount"] },
-  "receipt_ready":                { "id": "...", "params": ["customerName", "receiptNumber", "amount"] },
-  "order_confirmation":           { "id": "...", "params": ["trackingNumber"] },
-  "tracking_number_assigned":     { "id": "...", "params": ["trackingNumber"] },
-  "pickup_confirmation":          { "id": "...", "params": ["trackingNumber"] },
-  "in_transit_update":            { "id": "...", "params": ["trackingNumber"] },
-  "out_for_delivery":             { "id": "...", "params": ["trackingNumber"] },
-  "delivered":                    { "id": "...", "params": ["trackingNumber"] },
-  "delivery_exception":           { "id": "...", "params": ["trackingNumber"] },
-  "quote_ready":                  { "id": "...", "params": ["amount"] },
-  "quote_rejected":               { "id": "...", "params": ["reason"] },
-  "pickup_or_dropoff_confirmed":  { "id": "...", "params": ["status"] },
-  "pickup_request_needed":        { "id": "...", "params": [] },
-  "pickup_request_received":      { "id": "...", "params": [] },
-  "pickup_partner_assigned":      { "id": "...", "params": [] },
-  "pickup_verification_complete": { "id": "...", "params": ["verifiedPrice"] },
-  "payment_collected":            { "id": "...", "params": ["amount"] },
-  "order_created_from_pickup":    { "id": "...", "params": ["trackingNumber"] },
-  "pickup_rejected":              { "id": "...", "params": ["reason"] }
+  "invoice_ready":                { "id": "a02c3938-4208-4060-9187-c84c785964a4", "params": ["customerName",  "invoiceNumber",  "amount"] },
+  "order_confirmation":           { "id": "fa13aeb2-cecb-4877-a08f-b7a8f8d63c61", "params": ["trackingNumber"] },
+  "tracking_number_assigned":     { "id": "f6197422-ef17-44f3-a7ef-605f2f1496fc", "params": ["trackingNumber"] },
+  "pickup_confirmation":          { "id": "63c51a36-95ff-42ca-98e0-84579d8b8720", "params": ["trackingNumber"] },
+  "in_transit_update":            { "id": "62f77a0d-44e1-4c0f-af81-a3ba5a80c7be", "params": ["trackingNumber"] },
+  "out_for_delivery":             { "id": "8ae183b2-8917-471c-8842-47845cd356b4", "params": ["trackingNumber"] },
+  "delivered":                    { "id": "5ff1c2c9-a97d-4a78-a3c5-e929fc196196", "params": ["trackingNumber"] },
+  "delivery_exception":           { "id": "22cee569-c2e2-406d-8ec6-770bb7654f96", "params": ["trackingNumber"] },
+  "quote_ready":                  { "id": "0f40bc4a-9db8-46d7-90a6-6f44d13bf55e", "params": ["amount"] },
+  "quote_rejected":               { "id": "2630b764-f2fb-4f6e-b124-f303dfb5f69f", "params": ["reason"] },
+  "pickup_or_dropoff_confirmed":  { "id": "7a2c6f2a-6a21-4083-9cf8-5689710254e1", "params": ["status"] },
+  "pickup_request_needed":        { "id": "e1f043ed-830c-48d0-b66b-cff534465f22", "params": [] },
+  "pickup_request_received":      { "id": "b9521ccd-563a-4b1d-8570-bb7d31dac121", "params": [] },
+  "pickup_partner_assigned":      { "id": "8c946c41-ebb6-424d-9bff-a0545c24baf6", "params": [] },
+  "pickup_verification_complete": { "id": "23b2e280-99c6-4810-b7f8-4a5710ef1e83", "params": ["verifiedPrice"] },
+  "payment_collected":            { "id": "28dda56d-369a-4ad7-a4e8-97541928c201", "params": ["amount"] },
+  "order_created_from_pickup":    { "id": "1cf2a5e1-5144-4420-8b1f-43d49a9fabf6", "params": ["trackingNumber"] },
+  "pickup_rejected":              { "id": "7a510a68-a615-4838-8aba-915bf67ff6f4", "params": ["reason"] }
 }
 ```
 
