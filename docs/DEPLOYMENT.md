@@ -247,11 +247,11 @@ Invoices are a statutory record, so the deployment has three hard requirements b
    this means an EFS mount (or moving the store to S3); a plain container restart otherwise
    silently loses every invoice PDF ever issued while leaving the database rows behind. Back it
    up alongside `storage/logos/`.
-3. **Cloudflare must not cache the public invoice route.** `/api/v1/public/invoices/:id/:token` is
-   deliberately unauthenticated — protected by an unguessable HMAC in the path — and the backend
-   sends `Cache-Control: private`. Confirm no Cache Rule or "Cache Everything" Page Rule overrides
-   that for `/api/*`, or Cloudflare's shared edge cache could serve one customer's invoice to
-   another.
+3. **Cloudflare must not cache the public document routes.** `/api/v1/public/invoices/:id/:token`
+   and `/api/v1/public/receipts/:id/:token` are deliberately unauthenticated — protected by an
+   unguessable HMAC in the path — and the backend sends `Cache-Control: private` on both. Confirm
+   no Cache Rule or "Cache Everything" Page Rule overrides that for `/api/*`, or Cloudflare's shared
+   edge cache could serve one customer's invoice or receipt to another.
 
 Before the first generate, set the company GST identity (GSTIN, legal name, registered state +
 state code, SAC) in Admin → Settings. `InvoicesService` refuses to issue until all are present
@@ -395,6 +395,7 @@ Invoice PDFs, company logos and rate-card PDFs are stored in the private bucket
 | What | Key prefix |
 |---|---|
 | Invoice PDFs | `invoices/<year>/<month>/<invoice-number>.pdf` |
+| Payment receipt PDFs | `receipts/<year>/<month>/<receipt-number>.pdf` |
 | Company logos | `uploads/company-logos/<settings-id>/<uuid>.<ext>` |
 | Rate-card PDFs | `rate-cards/<provider-id>/v<version>-<uuid>.pdf` |
 
@@ -412,8 +413,10 @@ users two ways, both of which authorise first:
 - the authenticated download routes stream the object through the backend after the usual guards;
 - `CompanySettingsService.logoUrl` mints a 15-minute presigned URL for the admin UI's `<img>`.
 
-The public invoice link (`/api/v1/public/invoices/:id/:token`) is unchanged: still an HMAC in the
-path, still served through the backend, because Meta's servers fetch it with no session. It is not
+The public invoice link (`/api/v1/public/invoices/:id/:token`) and its receipt counterpart
+(`/api/v1/public/receipts/:id/:token`) work the same way: an HMAC in the path, served through the
+backend, because Meta's servers fetch them with no session. The two tokens are namespaced
+(`invoice:` / `receipt:`), so a leaked invoice link cannot be replayed against a receipt. It is not
 a presigned S3 URL and the bucket is not reachable directly.
 
 Set `NEXT_PUBLIC_S3_ORIGIN` on the frontend to the bucket's origin

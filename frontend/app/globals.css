@@ -132,6 +132,14 @@
   --font-mono: var(--font-geist-mono);
 }
 
+/* The app ships one light theme, so say so. Without `color-scheme` a device set to dark lets the
+   browser force-dark the white surfaces, and black-on-white art — the single-ink logo mark most
+   of all — goes invisible against them. Declaring light opts out of that repaint; the mark is
+   inverted to white explicitly, per surface, via <Logo tone="reverse">. */
+:root {
+  color-scheme: light;
+}
+
 /* No @media (prefers-color-scheme: dark) override — the approved design is a single light
    theme (background/cards/tables always white/#F7F9FC), with Deep Navy reserved for the
    sidebar/hero brand panels above. Letting the OS's dark-mode setting repaint the whole app

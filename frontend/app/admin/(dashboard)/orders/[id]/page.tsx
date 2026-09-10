@@ -4,13 +4,18 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ArrowLeft, MapPin, User } from "lucide-react";
-import type { OrderDto, CustomerDto, ShippingProviderDto } from "@nationwide/shared-types";
+import type {
+  OrderDto,
+  CustomerDto,
+  ShippingProviderDto,
+} from "@nationwide/shared-types";
 import { apiClient, ApiError } from "@/lib/api-client";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { ErrorState } from "@/components/ui/page-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { OrderStatusBadge } from "@/components/ui/status-badge";
 import { ShipmentAwbCard } from "@/components/orders/shipment-awb-card";
+import { OrderTrackingPanel } from "@/components/orders/order-tracking-panel";
 
 export default function AdminOrderDetailPage() {
   const params = useParams<{ id: string }>();
@@ -62,7 +67,7 @@ export default function AdminOrderDetailPage() {
   }, [params.id, reloadKey]);
 
   return (
-    <div className="max-w-3xl space-y-6">
+    <div className="max-w-6xl space-y-6">
       <Link
         href="/admin/orders"
         className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
@@ -94,54 +99,75 @@ export default function AdminOrderDetailPage() {
             <OrderStatusBadge status={order.status} />
           </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <User className="h-4 w-4" aria-hidden />
-                Customer
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {customer ? (
-                <div className="space-y-1 text-sm">
-                  <Link
-                    href={`/admin/customers/${customer.id}`}
-                    className="font-medium text-primary hover:underline"
-                  >
-                    {customer.name}
-                  </Link>
-                  <p className="text-muted-foreground">{customer.phone}</p>
-                  {customer.email && <p className="text-muted-foreground">{customer.email}</p>}
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">Customer not found.</p>
-              )}
-            </CardContent>
-          </Card>
+          {/* Two columns from lg up: the order's own record on the left, where it lives now, and
+              the parcel's journey on the right. Below lg they stack and the tracking rail lands
+              under the shipments it describes. */}
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
+            <div className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <User className="h-4 w-4" aria-hidden />
+                    Customer
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {customer ? (
+                    <div className="space-y-1 text-sm">
+                      <Link
+                        href={`/admin/customers/${customer.id}`}
+                        className="font-medium text-primary hover:underline"
+                      >
+                        {customer.name}
+                      </Link>
+                      <p className="text-muted-foreground">{customer.phone}</p>
+                      {customer.email && (
+                        <p className="text-muted-foreground">
+                          {customer.email}
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      Customer not found.
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <MapPin className="h-4 w-4" aria-hidden />
-                Shipments
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-5">
-              {order.shipments.length === 0 && (
-                <p className="text-sm text-muted-foreground">No shipments on this order.</p>
-              )}
-              {order.shipments.map((shipment) => (
-                <ShipmentAwbCard
-                  key={shipment.id}
-                  shipment={shipment}
-                  providers={providers}
-                  customerName={customer?.name ?? order.customerName}
-                  destination={order.destination}
-                  onMapped={() => setReloadKey((k) => k + 1)}
-                />
-              ))}
-            </CardContent>
-          </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <MapPin className="h-4 w-4" aria-hidden />
+                    Shipments
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-5">
+                  {order.shipments.length === 0 && (
+                    <p className="text-sm text-muted-foreground">
+                      No shipments on this order.
+                    </p>
+                  )}
+                  {order.shipments.map((shipment) => (
+                    <ShipmentAwbCard
+                      key={shipment.id}
+                      shipment={shipment}
+                      providers={providers}
+                      customerName={customer?.name ?? order.customerName}
+                      destination={order.destination}
+                      onMapped={() => setReloadKey((k) => k + 1)}
+                    />
+                  ))}
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Sticky, because the left column is the long one — the journey should stay on
+                screen while an admin scrolls a multi-shipment order. */}
+            <aside className="lg:sticky lg:top-4 lg:self-start">
+              <OrderTrackingPanel shipments={order.shipments} />
+            </aside>
+          </div>
         </>
       )}
     </div>

@@ -9,6 +9,7 @@ import {
   MapPin,
   FileQuestion,
   BarChart3,
+  MessageCircle,
   Send,
   Settings,
   User,
@@ -98,6 +99,7 @@ export const ADMIN_NAV_GROUPS: NavGroup[] = [
       // a separate, secondary record rather than a duplicate of the active pickup workflow.
       { label: "Pickups (Legacy)", href: "/admin/pickups", icon: Truck },
       { label: "Send Email", href: "/admin/mail", icon: Send },
+      { label: "Send WhatsApp", href: "/admin/whatsapp", icon: MessageCircle, roles: ["ADMIN"] },
       { label: "Settings", href: "/admin/settings", icon: Settings },
     ],
   },
@@ -128,7 +130,8 @@ export const CUSTOMER_NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "My Orders", href: "/orders", icon: Package },
   { label: "My Quotes", href: "/quotes", icon: FileQuestion },
-  { label: "My Bills", href: "/bills", icon: ReceiptIndianRupee },
+  // Invoices AND payment receipts — both documents a customer files, in one place.
+  { label: "Invoices & Receipts", href: "/documents", icon: ReceiptIndianRupee },
   { label: "Track a Shipment", href: "/tracking", icon: MapPin },
   { label: "Profile", href: "/profile", icon: User },
 ];

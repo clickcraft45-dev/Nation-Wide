@@ -12,6 +12,7 @@ import { ShipmentsService } from '../shipments/shipments.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NOTIFICATION_TEMPLATES } from '../notifications/templates';
 import { InvoicesService } from '../invoices/invoices.service';
+import { ReceiptsService } from '../receipts/receipts.service';
 import type { UpdateOrderPaymentDto } from '@nationwide/shared-types';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
@@ -66,6 +67,7 @@ export class OrdersService {
     private readonly shipmentsService: ShipmentsService,
     private readonly notificationsService: NotificationsService,
     private readonly invoices: InvoicesService,
+    private readonly receipts: ReceiptsService,
   ) {}
 
   async create(dto: CreateOrderDto): Promise<OrderWithShipments> {
@@ -305,6 +307,12 @@ export class OrdersService {
           }`,
         );
       }
+      // And the receipt, which is the customer's proof the money was received. Issued AFTER the
+      // invoice so it can reference the invoice number, but not conditional on it: invoicing is
+      // blocked whenever the company's statutory settings are incomplete, and that is precisely
+      // when a customer who has paid most needs something in writing. Swallows its own failures
+      // for the same reason the invoice call above does.
+      await this.receipts.issueAndSendQuietly(id, actorId);
     }
 
     return this.findOne(id);

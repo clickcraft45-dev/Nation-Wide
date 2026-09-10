@@ -139,6 +139,15 @@ enum InvoiceStatus {
   CANCELLED
 }
 
+enum InvoiceKind {
+  /// One order, one invoice — raised automatically when the order is paid.
+  ORDER
+  /// A one-off with no order behind it: a re-delivery fee, a packaging charge, a correction.
+  CUSTOM
+  /// Many orders over a date window on a single document, detailed in InvoiceLine.
+  CONSOLIDATED
+}
+
 enum PaymentMethod {
   CASH
   UPI
@@ -172,6 +181,7 @@ model Customer {
   notifications  Notification[]
   pickupRequests PickupRequest[]
   invoices       Invoice[]
+  receipts       Receipt[]
   reviews        Review[]
 
   @@map("customers")
@@ -201,6 +211,11 @@ model Order {
   pickup          Pickup?
   pickupRequest   PickupRequest? // inverse of PickupRequest.orderId, which owns the FK
   invoice         Invoice? // inverse of Invoice.orderId — at most one issued invoice per order
+  /// The line this order occupies on a CONSOLIDATED invoice, if it was billed on one instead of
+  /// getting an invoice of its own. Mutually exclusive with `invoice` above in practice — the
+  /// consolidated path only picks up orders that have neither.
+  invoiceLine     InvoiceLine?
+  receipts        Receipt[]
   paymentMarkedBy AdminUser?     @relation("OrderPaymentMarkedBy", fields: [paymentMarkedByAdminId], references: [id])
 
   @@index([customerId])
@@ -749,6 +764,7 @@ model AdminUser {
   updatedCompanySettings     CompanySettings[]  @relation("CompanySettingsUpdatedBy")
   assignedPickupRequests     PickupRequest[]    @relation("PickupRequestAssignedPartner")
   issuedInvoices             Invoice[]          @relation("InvoiceIssuedBy")
+  recordedReceipts           Receipt[]          @relation("ReceiptRecordedBy")
   reviewedPartnerApplications PartnerApplication[] @relation("PartnerApplicationReviewedBy")
   approvedReviews             Review[]             @relation("ReviewApprovedBy")
 
@@ -913,9 +929,15 @@ model Invoice {
   /// Indian FY the invoice falls in, "2026-27". GST requires the series to restart each year.
   financialYear  String @map("financial_year")
 
+  /// What kind of document this is. ORDER is the default single-order bill; CUSTOM is a one-off
+  /// with no order behind it; CONSOLIDATED bills many orders at once and carries its detail in
+  /// `lines` rather than in a single derived line.
+  kind InvoiceKind @default(ORDER)
+
   /// Nullable so an admin can raise a one-off invoice that has no order behind it — a
-  /// re-delivery fee, a packaging charge, a correction billed separately. Still @unique, so an
-  /// order can never be invoiced twice.
+  /// re-delivery fee, a packaging charge, a correction billed separately — and null on a
+  /// CONSOLIDATED invoice, whose orders hang off `lines`. Still @unique, so an order can never
+  /// be invoiced twice through this field.
   orderId    String? @unique @map("order_id")
   customerId String  @map("customer_id")
 
@@ -981,14 +1003,118 @@ model Invoice {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  order    Order?     @relation(fields: [orderId], references: [id])
-  customer Customer   @relation(fields: [customerId], references: [id])
-  issuedBy AdminUser? @relation("InvoiceIssuedBy", fields: [issuedByAdminId], references: [id])
+  /// The window a CONSOLIDATED invoice covers, recorded so the document can state it and so the
+  /// same period cannot quietly be billed twice. Null on every other kind.
+  periodFrom DateTime? @map("period_from")
+  periodTo   DateTime? @map("period_to")
+
+  order    Order?        @relation(fields: [orderId], references: [id])
+  customer Customer      @relation(fields: [customerId], references: [id])
+  issuedBy AdminUser?    @relation("InvoiceIssuedBy", fields: [issuedByAdminId], references: [id])
+  lines    InvoiceLine[]
+  receipts Receipt[]
 
   @@unique([financialYear, sequenceNumber])
   @@index([customerId, invoiceDate])
   @@index([invoiceDate])
   @@map("invoices")
+}
+
+/// One billed order on a CONSOLIDATED invoice.
+///
+/// The amounts are stored per line rather than recomputed from the order at read time: an
+/// invoice is a statutory snapshot, and an order whose price is corrected next month must not
+/// silently change a document the customer has already filed.
+///
+/// Tax is NOT stored here. GST is charged once on the invoice total taxable value, not per line
+/// — splitting it per line and summing invites rounding drift between the lines and the total,
+/// which is exactly the discrepancy an auditor picks up on.
+model InvoiceLine {
+  id        String @id @default(uuid())
+  invoiceId String @map("invoice_id")
+  /// @unique, so one order can appear on at most one consolidated invoice, ever. This is the
+  /// double-billing guard, enforced by the database rather than by the service remembering to
+  /// check.
+  orderId   String @unique @map("order_id")
+
+  /// Snapshot of what identifies the supply on the printed line — the AWB the customer knows it
+  /// by, and where it went. Denormalised for the same snapshot reason as the amounts.
+  description String
+  supplyDate  DateTime @map("supply_date")
+
+  /// The line share of the invoice taxable value, and of anything charged outside tax.
+  taxableValue      Float @map("taxable_value")
+  nonTaxableCharges Float @default(0) @map("non_taxable_charges")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  order   Order   @relation(fields: [orderId], references: [id])
+
+  @@index([invoiceId])
+  @@map("invoice_lines")
+}
+
+/// Money actually received, as its own document.
+///
+/// Distinct from an Invoice on purpose: an invoice is a demand for payment and is a tax document
+/// the moment it is issued, while a receipt acknowledges that the money arrived. They are issued
+/// at different times by different people (an admin marking a bank transfer, a pickup partner
+/// taking cash at the door), they carry different numbers, and a customer asking for proof of
+/// payment is asking for this one.
+///
+/// Never edited after issue. A receipt raised in error is superseded by a correcting entry, the
+/// same way an invoice is cancelled rather than rewritten.
+model Receipt {
+  id             String @id @default(uuid())
+  /// Human-facing series, separate from the invoice series: "RCP/2026-27/00019".
+  receiptNumber  String @unique @map("receipt_number")
+  sequenceNumber Int    @map("sequence_number")
+  financialYear  String @map("financial_year")
+
+  customerId String  @map("customer_id")
+  /// The order whose payment this acknowledges. Null only for a receipt against a consolidated
+  /// invoice, which settles several.
+  orderId    String? @map("order_id")
+  /// The invoice this settles, when there is one. Null when payment was taken before the invoice
+  /// could be raised — which happens whenever company settings are incomplete, and must not stop
+  /// the customer getting proof of payment.
+  invoiceId  String? @map("invoice_id")
+
+  // --- Supplier + recipient snapshots, same reasoning as Invoice's ---
+  supplierName    String  @map("supplier_name")
+  supplierGstin   String? @map("supplier_gstin")
+  supplierAddress String  @map("supplier_address")
+
+  recipientName  String @map("recipient_name")
+  recipientPhone String @map("recipient_phone")
+
+  currency      String        @default("INR")
+  amount        Float
+  paymentMethod PaymentMethod @map("payment_method")
+  receivedAt    DateTime      @map("received_at")
+
+  /// Who recorded it — an admin marking payment, or the pickup partner who collected it. Both
+  /// are AdminUser rows (a pickup partner is a privileged internal account).
+  recordedByAdminId String? @map("recorded_by_admin_id")
+
+  /// S3 object key, rendered and uploaded once at issue time. Same rule as Invoice.pdfPath: the
+  /// document the customer holds is the one in the bucket, never a re-render.
+  pdfPath String? @map("pdf_path")
+
+  sentAt    DateTime? @map("sent_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  customer   Customer   @relation(fields: [customerId], references: [id])
+  order      Order?     @relation(fields: [orderId], references: [id])
+  invoice    Invoice?   @relation(fields: [invoiceId], references: [id])
+  recordedBy AdminUser? @relation("ReceiptRecordedBy", fields: [recordedByAdminId], references: [id])
+
+  @@unique([financialYear, sequenceNumber])
+  @@index([customerId, receivedAt])
+  @@index([orderId])
+  @@map("receipts")
 }
 
 // ---------------------------------------------------------------------------

@@ -29,6 +29,13 @@ export const NOTIFICATION_TEMPLATES = {
   // Carries the invoice PDF as a document attachment, so the Meta template must be submitted
   // with a DOCUMENT header — a text-header template will be rejected at send time.
   INVOICE_READY: 'invoice_ready',
+  // Same DOCUMENT-header requirement as INVOICE_READY: it carries the receipt PDF as an
+  // attachment, so a text-header template will be rejected by Meta at send time.
+  RECEIPT_READY: 'receipt_ready',
+  // A message an admin typed by hand (AdminWhatsAppController). Never configure it in
+  // GUPSHUP_TEMPLATES: it has no approved template and is ONLY ever sent free-form, which WhatsApp
+  // permits inside the 24-hour customer-service window and refuses outside it.
+  CUSTOM_TEXT: 'custom_text',
 } as const;
 
 const STATUS_TEMPLATE_MAP: Record<TrackingStatusCode, string> = {

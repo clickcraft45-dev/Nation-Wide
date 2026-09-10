@@ -3,7 +3,6 @@ import {
   ConflictException,
   Injectable,
   Logger,
-  NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -155,54 +154,38 @@ export class AuthService {
   }
 
   /**
-   * Resolves a verified Google identity to either an immediate login or a "one step left" signup.
-   * Matches purely by email (Google has already verified ownership of it) — never by googleId,
-   * so an existing password-based Customer account is transparently usable via Google too.
-   *
-   * STAFF/ADMIN/PICKUP_PARTNER emails are always rejected: Google sign-in only ever authenticates
-   * Customer accounts (product decision — those roles are internally managed, not public
-   * self-service).
-   */
-  /**
-   * Google is a SIGN-IN mechanism only — it never creates an account.
-   *
-   * An address Google verifies is proof of who someone is, not evidence that they are a customer
-   * here, and registration collects a phone number that dispatch depends on. So an unrecognised
-   * Google identity is refused and sent to sign up, rather than silently minting an account with
-   * no phone on file.
-   *
-   * STAFF/ADMIN/PICKUP_PARTNER emails are refused separately: those roles are provisioned
-   * internally, and letting Google authenticate one would put a privileged account behind an
-   * external identity provider nobody here administers.
+   * Matches a Google-verified email (GoogleStrategy rejects unverified ones) against every
+   * account table. An existing account of any role signs straight in; an unknown email becomes
+   * a new Customer.
    */
   async loginWithGoogle(profile: GoogleProfile): Promise<AuthAccount> {
-    const adminUser = await this.prisma.adminUser.findUnique({
-      where: { email: profile.email },
-    });
-    if (adminUser) {
-      this.audit('GOOGLE_LOGIN_REJECTED_STAFF_EMAIL', { email: profile.email });
-      throw new UnauthorizedException(
-        'This email belongs to a staff account. Please sign in with your password.',
-      );
+    const existing = await this.findAccountByEmail(profile.email);
+    if (existing) {
+      if (!existing.isActive) {
+        this.audit('GOOGLE_LOGIN_INACTIVE', { email: profile.email });
+        throw new UnauthorizedException(INVALID_CREDENTIALS);
+      }
+      this.audit('GOOGLE_LOGIN_SUCCESS', {
+        email: profile.email,
+        accountId: existing.id,
+        role: existing.role,
+      });
+      return existing;
     }
 
-    const customer = await this.prisma.customer.findUnique({
-      where: { email: profile.email },
+    // ponytail: phone is required + unique but Google doesn't give one, so this stores a unique
+    // non-dialable placeholder — WhatsApp sends to it fail and are marked FAILED. Collect a real
+    // phone (e.g. on the first pickup request) when those notifications matter for these users.
+    const customer = await this.prisma.customer.create({
+      data: {
+        name: profile.name,
+        email: profile.email,
+        phone: `google:${profile.googleId}`,
+        consentGivenAt: new Date(),
+        consentSource: 'google_signup',
+      },
     });
-    if (!customer) {
-      this.audit('GOOGLE_LOGIN_NO_ACCOUNT', { email: profile.email });
-      throw new NotFoundException('No account exists for this Google address.');
-    }
-
-    if (!customer.isActive) {
-      this.audit('GOOGLE_LOGIN_INACTIVE', { email: profile.email });
-      throw new UnauthorizedException(INVALID_CREDENTIALS);
-    }
-
-    this.audit('GOOGLE_LOGIN_SUCCESS', {
-      email: profile.email,
-      accountId: customer.id,
-    });
+    this.audit('GOOGLE_SIGNUP', { email: profile.email, accountId: customer.id });
     return this.toAuthAccount(customer, 'CUSTOMER');
   }
 

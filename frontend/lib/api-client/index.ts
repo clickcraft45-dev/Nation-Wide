@@ -102,6 +102,44 @@ export function errorMessage(error: unknown, fallback: string): string {
   return id ? `${fallback} (reference: ${id})` : fallback;
 }
 
+/**
+ * The server's rejection, split per field — `{ pickupContactPhone: "Must be shorter than or
+ * equal to 20 characters" }`.
+ *
+ * class-validator emits one sentence per broken rule and each one starts with the property name
+ * ("pickupContactPhone must be shorter than or equal to 20 characters"). Joined into a single
+ * banner, as `errorMessage` does, that is a wall of text at the bottom of a long form telling
+ * you something is wrong somewhere above; split per field it lands under the input that caused
+ * it. Both are worth showing, and a form usually wants this one.
+ *
+ * The leading property name is stripped, because the field's own <Label> already says it — what
+ * is left reads as a sentence about that field. Only the FIRST rule per field survives: a value
+ * that breaks two rules is still one thing for the user to fix.
+ *
+ * Returns {} for anything that is not a class-validator array — a thrown HttpException carries a
+ * single prose message with no field attached, which belongs in the banner and nowhere else.
+ */
+export function fieldErrors(error: unknown): Record<string, string> {
+  if (!(error instanceof ApiError)) return {};
+  const body = error.body;
+  if (typeof body !== "object" || body === null) return {};
+  const message = (body as { message?: unknown }).message;
+  if (!Array.isArray(message)) return {};
+
+  const result: Record<string, string> = {};
+  for (const entry of message) {
+    if (typeof entry !== "string") continue;
+    // "<property> <the rest of the sentence>" — the property is always the first token, and is
+    // always the DTO's own camelCase field name, which is what the form's state is keyed by.
+    const match = /^([A-Za-z_][A-Za-z0-9_]*)\s+(.+)$/.exec(entry.trim());
+    if (!match) continue;
+    const [, field, reason] = match;
+    if (field in result) continue;
+    result[field] = reason.charAt(0).toUpperCase() + reason.slice(1) + (reason.endsWith(".") ? "" : ".");
+  }
+  return result;
+}
+
 async function request<T>(path: string, init?: RequestInit, isRetry = false): Promise<T> {
   const res = await fetch(`${API_BASE_URL}${path}`, {
     ...init,

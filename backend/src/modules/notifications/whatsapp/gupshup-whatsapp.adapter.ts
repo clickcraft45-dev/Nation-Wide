@@ -48,9 +48,29 @@ const TEMPLATES_KEY = 'GUPSHUP_TEMPLATES';
  * One approved template: Gupshup's UUID for it, plus the order its {{n}} placeholders appear in.
  * `params: ["customerName", "invoiceNumber", "amount"]` means {{1}} is customerName, and so on.
  */
-interface TemplateConfig {
+export interface TemplateConfig {
   id: string;
   params: string[];
+}
+
+/**
+ * Every entry in GUPSHUP_TEMPLATES, parsed. Shared with AdminWhatsAppController so the admin send
+ * screen lists exactly the templates this adapter can send — two parsers of the same env var
+ * would eventually disagree about what is configured.
+ *
+ * Malformed JSON throws (see optionalTemplateConfig for why that must be loud). Individual
+ * entries are NOT validated here; each caller checks the one it is about to use.
+ */
+export function readTemplateConfigs(
+  config: ConfigService,
+): Record<string, TemplateConfig> {
+  const raw = config.get<string>(TEMPLATES_KEY);
+  if (!raw) return {};
+  try {
+    return JSON.parse(raw) as Record<string, TemplateConfig>;
+  } catch {
+    throw new Error(`${TEMPLATES_KEY} is not valid JSON`);
+  }
 }
 
 @Injectable()
@@ -196,17 +216,7 @@ export class GupshupWhatsAppAdapter implements MessagingProvider {
    * window is open — and then fails in production where it usually isn't.
    */
   private optionalTemplateConfig(template: string): TemplateConfig | null {
-    const raw = this.config.get<string>(TEMPLATES_KEY);
-    if (!raw) return null;
-
-    let parsed: Record<string, TemplateConfig>;
-    try {
-      parsed = JSON.parse(raw) as Record<string, TemplateConfig>;
-    } catch {
-      throw new Error(`${TEMPLATES_KEY} is not valid JSON`);
-    }
-
-    const config = parsed[template];
+    const config = readTemplateConfigs(this.config)[template];
     if (!config) return null;
     if (!config.id || !Array.isArray(config.params)) {
       throw new Error(

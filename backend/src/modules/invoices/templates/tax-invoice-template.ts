@@ -10,6 +10,18 @@ export interface InvoiceExtras {
   shipments: { trackingNumber: string; providerName: string }[];
   destination: string | null;
   weightKg: number | null;
+  /**
+   * One printed row per billed order, for a CONSOLIDATED invoice. Absent (or empty) on every
+   * other kind, which keeps its single derived line exactly as it was.
+   *
+   * `amount` is the row's taxable value plus its share of anything charged outside tax — what
+   * the customer reconciles against their own record of that shipment. Tax is not shown per row
+   * because it is not charged per row; it lands once, on the summed total below the table.
+   */
+  lines?: { description: string; supplyDate: Date; amount: number }[];
+  /** The window a consolidated invoice covers, printed under the invoice number. */
+  periodFrom?: Date | null;
+  periodTo?: Date | null;
 }
 
 /**
@@ -263,6 +275,14 @@ export async function renderTaxInvoice(
     ),
   ].filter((line): line is string => line !== null);
 
+  const consolidatedLines = extras.lines ?? [];
+  // Printed under the invoice number so the document says up front what period it settles —
+  // without it a consolidated bill is a list of amounts with no stated scope.
+  const periodLabel =
+    extras.periodFrom && extras.periodTo
+      ? `${formatDate(extras.periodFrom)} — ${formatDate(extras.periodTo)}`
+      : null;
+
   return h(
     Document,
     { title: invoice.invoiceNumber },
@@ -351,6 +371,7 @@ export async function renderTaxInvoice(
         h(View, { key: 'meta', style: s.invoiceMeta }, [
           field('Invoice No.', invoice.invoiceNumber),
           field('Invoice Date', formatDate(invoice.invoiceDate)),
+          periodLabel ? field('Billing period', periodLabel) : null,
           field(
             'Place of Supply',
             `${invoice.placeOfSupplyState} (${invoice.placeOfSupplyCode})`,
@@ -413,26 +434,59 @@ export async function renderTaxInvoice(
             'Taxable value',
           ),
         ]),
-        h(View, { key: 'body', style: s.row }, [
-          h(Text, { key: 'a', style: [s.td, { width: '8%' }] }, '1'),
-          h(
-            View,
-            { key: 'b', style: [s.td, { flex: 1 }] },
-            descriptionLines.map((line, i) =>
-              h(Text, { key: String(i) }, line),
-            ),
-          ),
-          h(
-            Text,
-            { key: 'c', style: [s.td, { width: '14%' }] },
-            invoice.sacCode,
-          ),
-          h(
-            Text,
-            { key: 'd', style: [s.td, s.right, { width: '22%' }] },
-            money(invoice.taxableValue),
-          ),
-        ]),
+        // A consolidated invoice prints one row per order it bills; every other kind prints the
+        // single derived line it always did. Same table either way — a customer reading two of
+        // our invoices side by side should not be reading two different documents.
+        ...(consolidatedLines.length > 0
+          ? consolidatedLines.map((line, i) =>
+              h(View, { key: `body-${i}`, style: s.row }, [
+                h(
+                  Text,
+                  { key: 'a', style: [s.td, { width: '8%' }] },
+                  String(i + 1),
+                ),
+                h(View, { key: 'b', style: [s.td, { flex: 1 }] }, [
+                  h(Text, { key: 'd' }, line.description),
+                  h(
+                    Text,
+                    { key: 's', style: s.small },
+                    `Supplied ${formatDate(line.supplyDate)}`,
+                  ),
+                ]),
+                h(
+                  Text,
+                  { key: 'c', style: [s.td, { width: '14%' }] },
+                  invoice.sacCode,
+                ),
+                h(
+                  Text,
+                  { key: 'e', style: [s.td, s.right, { width: '22%' }] },
+                  money(line.amount),
+                ),
+              ]),
+            )
+          : [
+              h(View, { key: 'body', style: s.row }, [
+                h(Text, { key: 'a', style: [s.td, { width: '8%' }] }, '1'),
+                h(
+                  View,
+                  { key: 'b', style: [s.td, { flex: 1 }] },
+                  descriptionLines.map((line, i) =>
+                    h(Text, { key: String(i) }, line),
+                  ),
+                ),
+                h(
+                  Text,
+                  { key: 'c', style: [s.td, { width: '14%' }] },
+                  invoice.sacCode,
+                ),
+                h(
+                  Text,
+                  { key: 'd', style: [s.td, s.right, { width: '22%' }] },
+                  money(invoice.taxableValue),
+                ),
+              ]),
+            ]),
       ]),
 
       // --- Totals ---

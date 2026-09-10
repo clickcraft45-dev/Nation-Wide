@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
@@ -11,6 +12,8 @@ import type {
 } from '@nationwide/shared-types';
 import { PrismaService } from '../../database/prisma.service';
 import { OrdersService } from '../orders/orders.service';
+import { InvoicesService } from '../invoices/invoices.service';
+import { ReceiptsService } from '../receipts/receipts.service';
 import {
   PricingEngineService,
   type ComputedRateOption,
@@ -61,11 +64,17 @@ const COLLECTED_AMOUNT_TOLERANCE_FLOOR = 50;
 // instead of the legacy immediate-order-creation path.
 @Injectable()
 export class PickupRequestsService {
+  private readonly logger = new Logger(PickupRequestsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly ordersService: OrdersService,
     private readonly pricingEngineService: PricingEngineService,
     private readonly notificationsService: NotificationsService,
+    // A partner-collected payment owes the customer the same bill and receipt an admin-marked
+    // one does; see acceptParcel.
+    private readonly invoicesService: InvoicesService,
+    private readonly receiptsService: ReceiptsService,
   ) {}
 
   async create(
@@ -640,6 +649,26 @@ export class PickupRequestsService {
         },
       }),
     ]);
+
+    // The partner has just taken the money at the door, so the order is created already PAID —
+    // which means this path owes the customer the same two documents the admin path raises when
+    // it marks a payment. Without this, every partner-collected order stayed permanently
+    // unbilled, which the bulk "generate invoices" screen used to paper over.
+    //
+    // After the transaction, and each swallowing its own failure: the payment and the order are
+    // committed facts, and neither may be rolled back because a PDF failed to render or the
+    // company's GSTIN is not filled in yet. Both calls are idempotent, so the admin screens
+    // remain the retry path.
+    try {
+      await this.invoicesService.generateForOrder(order.id, partnerId);
+    } catch (error) {
+      this.logger.warn(
+        `Order ${order.id} was created paid from pickup ${id} but could not be invoiced: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+    await this.receiptsService.issueAndSendQuietly(order.id, partnerId);
 
     // Enqueue after commit — BullMQ has no rollback semantics, matching PickupsService.
     // updateStatus's existing "write DB state, then enqueue" pattern.

@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { CalendarDays, Download, FileText, MessageCircle, ReceiptIndianRupee, UsersRound } from "lucide-react";
+import { useEffect, useState } from "react";
+import { CalendarDays, Download, FileText, MessageCircle, ReceiptIndianRupee } from "lucide-react";
 import type {
   CustomerDto,
   InvoiceBatchResultDto,
@@ -9,7 +9,6 @@ import type {
   InvoiceListDto,
 } from "@nationwide/shared-types";
 import { apiClient, ApiError, errorMessage } from "@/lib/api-client";
-import { SearchInput } from "@/components/ui/search-input";
 import { Spinner } from "@/components/ui/spinner";
 import { NativeSelect } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
@@ -26,7 +25,6 @@ import { TableSkeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/page-state";
 import { useToast } from "@/components/ui/toast";
 import { downloadBlob } from "@/lib/utils/download-blob";
-import { cn } from "@/lib/utils/cn";
 import { todayIso } from "@/components/ui/calendar";
 import { CompanySettingsDialog } from "@/components/pricing/company-settings-dialog";
 
@@ -47,8 +45,9 @@ export default function AdminInvoicesPage() {
   const [error, setError] = useState<string | null>(null);
   const [isWorking, setIsWorking] = useState(false);
 
-  const [customerSearch, setCustomerSearch] = useState("");
-  const [selectedCustomerIds, setSelectedCustomerIds] = useState<string[]>([]);
+  // The consolidated invoice is for ONE named account — see ConsolidateInvoiceDto for why the
+  // multi-customer bulk screen that used to live here was removed.
+  const [consolidateCustomerId, setConsolidateCustomerId] = useState("");
   const [from, setFrom] = useState(firstOfThisMonth);
   const [to, setTo] = useState(todayIso);
   const [selectedInvoiceIds, setSelectedInvoiceIds] = useState<string[]>([]);
@@ -88,95 +87,77 @@ export default function AdminInvoicesPage() {
     load();
   }, []);
 
-  const filteredCustomers = useMemo(() => {
-    const q = customerSearch.trim().toLowerCase();
-    if (!q) return customers;
-    return customers.filter(
-      (c) => c.name.toLowerCase().includes(q) || c.phone.toLowerCase().includes(q),
-    );
-  }, [customers, customerSearch]);
-
-  const allFilteredCustomersSelected =
-    filteredCustomers.length > 0 &&
-    filteredCustomers.every((customer) => selectedCustomerIds.includes(customer.id));
-
   function toggle(list: string[], id: string): string[] {
     return list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
   }
 
-  function toggleAllFilteredCustomers() {
-    const filteredIds = new Set(filteredCustomers.map((customer) => customer.id));
-    setSelectedCustomerIds((current) =>
-      allFilteredCustomersSelected
-        ? current.filter((id) => !filteredIds.has(id))
-        : [...new Set([...current, ...filteredIds])],
-    );
-  }
-
   /**
-   * Both bulk actions report partial success, because that is what the API returns and what
-   * actually happens: one unpriced order among forty should not read as "generation failed".
+   * One invoice for everything a customer paid for between two dates.
+   *
+   * This replaced "Generate from orders", which issued one invoice per order across many
+   * customers. That screen only existed because nothing invoiced automatically; every order is
+   * now billed the moment its payment is recorded, whether an admin marks it or a pickup partner
+   * collects it at the door. What it could not do — and what an account with forty parcels a
+   * month actually asks for — is one bill for the period.
    */
-  function reportBatch(result: InvoiceBatchResultDto, verb: string) {
-    // Nothing at all came back — no orders matched the customers and window. That is a filter
-    // problem, not a failure, and "0 generated" on its own sent admins hunting for a bug.
-    if (!result.created.length && !result.skipped.length && !result.failed.length) {
-      showToast({
-        variant: "error",
-        title: "No invoiceable orders in that range.",
-        description:
-          "Those customers have no non-cancelled orders created between the selected dates. Widen the range, or use Custom invoice below to bill something without an order.",
-      });
-      return;
-    }
-
-    const parts = [`${result.created.length} ${verb}`];
-    if (result.skipped.length) parts.push(`${result.skipped.length} already existed`);
-    if (result.failed.length) parts.push(`${result.failed.length} failed`);
-    showToast({
-      title: parts.join(", "),
-      variant: result.failed.length ? "error" : "success",
-      // The reasons matter more than the count — an admin needs to know WHICH order and why,
-      // and the first few are enough to recognise the pattern without burying the screen.
-      description: result.failed.length
-        ? result.failed
-            .slice(0, 3)
-            .map((f) => `Order ${f.orderId.slice(0, 8)}: ${f.reason}`)
-            .join(" · ")
-        : undefined,
-    });
-  }
-
-  async function generate() {
-    if (!selectedCustomerIds.length) {
-      showToast({ title: "Select at least one customer.", variant: "error" });
+  async function consolidate() {
+    if (!consolidateCustomerId) {
+      showToast({ title: "Choose a customer.", variant: "error" });
       return;
     }
     setIsWorking(true);
     try {
-      const result = await apiClient.post<InvoiceBatchResultDto>(
-        "/admin/invoices/generate",
-        {
-          customerIds: selectedCustomerIds,
-          // End of the chosen day, not its midnight — otherwise "to = today" silently excludes
-          // everything ordered today, which is the single most common thing to want.
-          from: new Date(`${from}T00:00:00.000`).toISOString(),
-          to: new Date(`${to}T23:59:59.999`).toISOString(),
-        },
-      );
-      reportBatch(result, "generated");
+      const result = await apiClient.post<{
+        invoice: InvoiceDto;
+        skipped: { orderId: string }[];
+      }>("/admin/invoices/consolidate", {
+        customerId: consolidateCustomerId,
+        // End of the chosen day, not its midnight — otherwise "to = today" silently excludes
+        // everything paid today, which is the single most common thing to want.
+        from: new Date(`${from}T00:00:00.000`).toISOString(),
+        to: new Date(`${to}T23:59:59.999`).toISOString(),
+      });
+      showToast({
+        variant: "success",
+        title: `${result.invoice.invoiceNumber} issued for ${money(result.invoice.totalAmount)}`,
+        description: result.skipped.length
+          ? `${result.invoice.lineCount} orders billed. ${result.skipped.length} skipped — already on another invoice, or unpriced.`
+          : `${result.invoice.lineCount} orders billed.`,
+      });
       load();
     } catch (err) {
+      // The server's reason is the useful part here: "ships from more than one state", "no
+      // unbilled paid orders in that period" — each tells the admin exactly what to change.
       showToast({
-        title:
-          err instanceof ApiError && typeof err.body === "object" && err.body !== null
-            ? String((err.body as { message?: string }).message ?? "Generation failed.")
-            : "Generation failed.",
         variant: "error",
+        title: "Couldn't issue the consolidated invoice.",
+        description: errorMessage(err, "Please try again."),
       });
     } finally {
       setIsWorking(false);
     }
+  }
+
+  /**
+   * The bulk send reports partial success, because that is what the API returns and what
+   * actually happens: one invoice with no rendered PDF among forty should not read as "sending
+   * failed".
+   */
+  function reportBatch(result: InvoiceBatchResultDto, verb: string) {
+    const parts = [`${result.created.length} ${verb}`];
+    if (result.skipped.length) parts.push(`${result.skipped.length} skipped`);
+    if (result.failed.length) parts.push(`${result.failed.length} failed`);
+    showToast({
+      title: parts.join(", "),
+      variant: result.failed.length ? "error" : "success",
+      // The reasons matter more than the count — which invoice, and why.
+      description: result.failed.length
+        ? result.failed
+            .slice(0, 3)
+            .map((f) => `${f.orderId.slice(0, 8)}: ${f.reason}`)
+            .join(" · ")
+        : undefined,
+    });
   }
 
   async function sendSelected() {
@@ -298,12 +279,29 @@ export default function AdminInvoicesPage() {
               <CalendarDays className="h-4 w-4" aria-hidden />
             </div>
             <div>
-              <CardTitle className="text-foreground">Generate from orders</CardTitle>
-              <p className="mt-0.5 text-xs text-muted-foreground">Create one invoice for every eligible order.</p>
+              <CardTitle className="text-foreground">Consolidated invoice</CardTitle>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                One invoice for everything a customer paid for in a period.
+              </p>
             </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
+          <label className="block space-y-1">
+            <span className="text-xs font-medium text-muted-foreground">Customer</span>
+            <NativeSelect
+              value={consolidateCustomerId}
+              onChange={(e) => setConsolidateCustomerId(e.target.value)}
+            >
+              <option value="">Choose a customer…</option>
+              {customers.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name} · {c.phone}
+                </option>
+              ))}
+            </NativeSelect>
+          </label>
+
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="space-y-1">
               <span className="text-xs font-medium text-muted-foreground">From</span>
@@ -329,63 +327,18 @@ export default function AdminInvoicesPage() {
             </label>
           </div>
 
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-3">
-              <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                <UsersRound className="h-3.5 w-3.5" aria-hidden />
-                Customers · {selectedCustomerIds.length} selected
-              </span>
-              <button
-                type="button"
-                onClick={toggleAllFilteredCustomers}
-                disabled={filteredCustomers.length === 0}
-                className="text-xs font-semibold text-primary underline-offset-4 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {allFilteredCustomersSelected
-                  ? "Clear all"
-                  : "Select all shown"}
-              </button>
-            </div>
-            <SearchInput
-              value={customerSearch}
-              onChange={(e) => setCustomerSearch(e.target.value)}
-              placeholder="Search customers by name or phone"
-              aria-label="Search customers"
-            />
-            <div className="glass-field max-h-56 overflow-y-auto rounded-xl p-1.5">
-              {filteredCustomers.length === 0 ? (
-                <p className="p-3 text-sm text-muted-foreground">No customers match.</p>
-              ) : (
-                filteredCustomers.map((c) => (
-                  <label
-                    key={c.id}
-                    className={cn(
-                      "flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors hover:bg-white/60",
-                      selectedCustomerIds.includes(c.id) && "bg-primary text-primary-foreground",
-                    )}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedCustomerIds.includes(c.id)}
-                      onChange={() =>
-                        setSelectedCustomerIds((prev) => toggle(prev, c.id))
-                      }
-                    />
-                    <span className={cn("font-medium", selectedCustomerIds.includes(c.id) ? "text-primary-foreground" : "text-foreground")}>{c.name}</span>
-                    <span className={selectedCustomerIds.includes(c.id) ? "text-primary-foreground/70" : "text-muted-foreground"}>{c.phone}</span>
-                  </label>
-                ))
-              )}
-            </div>
-          </div>
-
-          <Button className="w-full sm:w-auto" onClick={generate} disabled={isWorking || !selectedCustomerIds.length}>
+          <Button
+            className="w-full sm:w-auto"
+            onClick={consolidate}
+            disabled={isWorking || !consolidateCustomerId}
+          >
             <FileText className="mr-2 h-4 w-4" aria-hidden />
-            Generate invoices
+            Issue consolidated invoice
           </Button>
           <p className="text-xs text-muted-foreground">
-            One invoice per order. Orders already invoiced are skipped, and cancelled orders are
-            never invoiced.
+            Covers paid orders in the period that aren&apos;t already on an invoice. Every order is
+            invoiced automatically when it&apos;s paid — use this when a customer wants one bill
+            for the month instead.
           </p>
         </CardContent>
       </Card>

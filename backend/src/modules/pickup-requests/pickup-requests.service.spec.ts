@@ -67,6 +67,8 @@ describe('PickupRequestsService', () => {
   let ordersService: { createOrderWithShipment: jest.Mock };
   let pricingEngineService: { computeQuotesForRequest: jest.Mock };
   let notificationsService: { enqueue: jest.Mock };
+  let invoicesService: { generateForOrder: jest.Mock };
+  let receiptsService: { issueAndSendQuietly: jest.Mock };
   let service: PickupRequestsService;
 
   beforeEach(() => {
@@ -116,11 +118,19 @@ describe('PickupRequestsService', () => {
         .mockResolvedValue([{ rateProviderId: 'provider-1', finalPrice: 970 }]),
     };
     notificationsService = { enqueue: jest.fn().mockResolvedValue(undefined) };
+    invoicesService = {
+      generateForOrder: jest.fn().mockResolvedValue({ id: 'inv-1' }),
+    };
+    receiptsService = {
+      issueAndSendQuietly: jest.fn().mockResolvedValue(undefined),
+    };
     service = new PickupRequestsService(
       prisma as never,
       ordersService as never,
       pricingEngineService as never,
       notificationsService as never,
+      invoicesService as never,
+      receiptsService as never,
     );
   });
 

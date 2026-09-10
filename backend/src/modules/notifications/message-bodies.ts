@@ -53,7 +53,7 @@ function or(value: string | undefined, fallback: string): string {
 
 const BODIES: Record<string, BodyBuilder> = {
   [NOTIFICATION_TEMPLATES.ORDER_CONFIRMATION]: (v) =>
-    `Your order with NationWide Logistics has been confirmed and is now being processed. Your tracking number is ${or(v.trackingNumber, 'being generated and will follow shortly')}. We will send you an update here each time your shipment moves to its next stage.`,
+    `Hello,\n\nYour order has been confirmed successfully. \u{1F389}\n\nYour tracking number is: ${or(v.trackingNumber, '—')}\n\nYou can use this tracking number to track your order.\n\nThank you for choosing us.`,
 
   [NOTIFICATION_TEMPLATES.TRACKING_NUMBER_ASSIGNED]: (v) =>
     `Your shipment with NationWide Logistics has been assigned a tracking number: ${or(v.trackingNumber, 'available in the app')}. You can use this number to follow your parcel's progress at any time.`,
@@ -65,10 +65,10 @@ const BODIES: Record<string, BodyBuilder> = {
     `Your shipment ${or(v.trackingNumber, 'with NationWide Logistics')} is currently in transit and moving towards its destination. We will let you know as soon as it is out for delivery.`,
 
   [NOTIFICATION_TEMPLATES.OUT_FOR_DELIVERY]: (v) =>
-    `Your shipment ${or(v.trackingNumber, 'with NationWide Logistics')} is out for delivery today. Please make sure someone is available at the delivery address to receive the parcel.`,
+    `Hello,\n\nYour order is out for delivery! \u{1F69A}\n\nTracking Number: ${or(v.trackingNumber, '—')}\n\nPlease be available to receive your order.\n\nThank you for choosing us.`,
 
   [NOTIFICATION_TEMPLATES.DELIVERED]: (v) =>
-    `Your shipment ${or(v.trackingNumber, 'with NationWide Logistics')} has been delivered successfully and has reached its destination. Thank you for choosing NationWide Logistics for your shipping needs.`,
+    `Hello,\n\nYour order has been delivered successfully. \u{1F4E6}\n\nTracking Number: ${or(v.trackingNumber, '—')}\n\nThank you for choosing us. We hope you enjoy your order!`,
 
   [NOTIFICATION_TEMPLATES.EXCEPTION]: (v) =>
     `There is a delay with your shipment ${or(v.trackingNumber, 'with NationWide Logistics')}. Our operations team is looking into it and we will send you an update as soon as the situation is resolved.`,
@@ -106,7 +106,15 @@ const BODIES: Record<string, BodyBuilder> = {
   // The longest body here, and deliberately so: it is the only one carrying three variables, and
   // Meta rejected the first, terser draft for having "too many variables for its length".
   [NOTIFICATION_TEMPLATES.INVOICE_READY]: (v) =>
-    `Hi ${or(v.customerName, 'there')}, your GST tax invoice from NationWide Logistics is ready. Invoice number: ${or(v.invoiceNumber, 'see the attached document')}. Total amount payable: ${rupees(v.amount)}. The invoice PDF is attached to this message, and you can keep it for your accounting records. If you have any questions about this invoice, please reply to this message and our team will assist you.`,
+    `Hello ${or(v.customerName, 'there')},\n\nYour invoice ${or(v.invoiceNumber, 'from NationWide Logistics')} is ready.\n\nTotal Amount: ${rupees(v.amount)}\n\nThank you for choosing us.`,
+  // Same shape and length as invoice_ready on purpose — the note at the top of this file is why
+  // a short body gets the Meta template rejected. Says "payment received" up front, because that
+  // is the one thing a customer opening a receipt wants confirmed.
+  [NOTIFICATION_TEMPLATES.RECEIPT_READY]: (v) =>
+    `Hi ${or(v.customerName, 'there')}, we have received your payment to NationWide Logistics — thank you. Receipt number: ${or(v.receiptNumber, 'see the attached document')}. Amount received: ${rupees(v.amount)}. Your payment receipt PDF is attached to this message; please keep it as your proof of payment. If anything on this receipt looks wrong, reply to this message and our team will assist you.`,
+  // The admin's own words, verbatim. Nothing is added around them: the admin wrote the whole
+  // message, and wrapping it in a greeting they did not type would put words in their mouth.
+  [NOTIFICATION_TEMPLATES.CUSTOM_TEXT]: (v) => v.text ?? '',
 };
 
 /**

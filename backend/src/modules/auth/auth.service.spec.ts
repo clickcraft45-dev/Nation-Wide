@@ -1,6 +1,5 @@
 import {
   ConflictException,
-  NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
@@ -349,14 +348,12 @@ describe('AuthService', () => {
       name: 'Someone',
     };
 
-    it('rejects a staff/admin email without ever consulting Customer', async () => {
+    it('signs in an existing staff/admin account with its own role', async () => {
       prisma.adminUser.findUnique.mockResolvedValue(adminUser);
 
-      await expect(
-        authService.loginWithGoogle(googleProfile),
-      ).rejects.toBeInstanceOf(UnauthorizedException);
-      // Those roles are provisioned internally; Google must never authenticate one.
-      expect(prisma.customer.findUnique).not.toHaveBeenCalled();
+      const account = await authService.loginWithGoogle(googleProfile);
+      expect(account).toMatchObject({ id: adminUser.id, role: 'STAFF' });
+      expect(prisma.customer.create).not.toHaveBeenCalled();
     });
 
     it('signs in an existing customer', async () => {
@@ -386,16 +383,18 @@ describe('AuthService', () => {
       });
     });
 
-    it('refuses an unknown Google address instead of creating an account', async () => {
+    it('creates a customer for an unknown Google address', async () => {
       prisma.adminUser.findUnique.mockResolvedValue(null);
       prisma.customer.findUnique.mockResolvedValue(null);
 
-      // Google proves who someone is, not that they are a customer here — and registration
-      // collects a phone number that dispatch depends on.
-      await expect(
-        authService.loginWithGoogle(googleProfile),
-      ).rejects.toBeInstanceOf(NotFoundException);
-      expect(prisma.customer.create).not.toHaveBeenCalled();
+      const account = await authService.loginWithGoogle(googleProfile);
+      expect(account).toMatchObject({ id: 'customer-new', role: 'CUSTOMER' });
+      expect(prisma.customer.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          email: googleProfile.email,
+          phone: 'google:google-sub-1',
+        }) as unknown,
+      });
     });
 
     it('refuses a deactivated customer with the generic credentials message', async () => {

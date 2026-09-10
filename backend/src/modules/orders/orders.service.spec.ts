@@ -32,6 +32,7 @@ describe('OrdersService', () => {
   let shipmentsService: { createForOrder: jest.Mock };
   let notificationsService: { enqueue: jest.Mock };
   let invoices: { generateForOrder: jest.Mock };
+  let receipts: { issueAndSendQuietly: jest.Mock };
   let service: OrdersService;
 
   beforeEach(() => {
@@ -60,6 +61,7 @@ describe('OrdersService', () => {
     invoices = {
       generateForOrder: jest.fn().mockResolvedValue({ id: 'inv-1' }),
     };
+    receipts = { issueAndSendQuietly: jest.fn().mockResolvedValue(undefined) };
 
     service = new OrdersService(
       prisma as never,
@@ -67,6 +69,7 @@ describe('OrdersService', () => {
       shipmentsService as never,
       notificationsService as never,
       invoices as never,
+      receipts as never,
     );
   });
 

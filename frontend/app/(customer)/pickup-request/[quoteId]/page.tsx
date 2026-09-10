@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, CheckCircle2 } from "lucide-react";
 import type { QuoteDto } from "@nationwide/shared-types";
-import { apiClient, errorMessage } from "@/lib/api-client";
+import { apiClient, errorMessage, fieldErrors } from "@/lib/api-client";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input, Label, FieldError } from "@/components/ui/input";
@@ -99,15 +99,40 @@ export default function PickupRequestPage() {
     };
   }, [params.quoteId]);
 
+  // Mirrors CreatePickupRequestDto's own limits. Checking them here is not duplication for its
+  // own sake: without it the only feedback on a too-long value is a round trip that comes back
+  // as a banner at the bottom of a long form, which is what this page used to do.
   function validate(): boolean {
     const next: FormErrors = {};
-    if (!pickupContactName.trim()) next.pickupContactName = "Enter a contact name.";
-    if (!pickupContactPhone.trim()) next.pickupContactPhone = "Enter a contact number.";
+    if (!pickupContactName.trim()) {
+      next.pickupContactName = "Enter a contact name.";
+    } else if (pickupContactName.trim().length > 120) {
+      next.pickupContactName = "Keep the name under 120 characters.";
+    }
+
+    const phone = pickupContactPhone.trim();
+    if (!phone) {
+      next.pickupContactPhone = "Enter a contact number.";
+    } else if (!/^[+\d][\d\s-]*$/.test(phone)) {
+      next.pickupContactPhone = "Use digits only, with an optional leading +.";
+    } else if (phone.replace(/\D/g, "").length < 10 || phone.length > 20) {
+      // 20 is the DTO's own ceiling; 10 is the shortest number that can actually be dialled.
+      next.pickupContactPhone = "Enter a valid phone number of 10 to 20 digits.";
+    }
+
     if (!dropAtWarehouse) {
-      if (!pickupAddressLine1.trim()) next.pickupAddressLine1 = "Enter your pickup address.";
+      if (!pickupAddressLine1.trim()) {
+        next.pickupAddressLine1 = "Enter your pickup address.";
+      } else if (pickupAddressLine1.trim().length > 200) {
+        next.pickupAddressLine1 = "Keep the address under 200 characters.";
+      }
       if (!pickupCity.trim()) next.pickupCity = "Enter a city.";
       if (!pickupState.trim()) next.pickupState = "Enter a state.";
-      if (!pickupPostalCode.trim()) next.pickupPostalCode = "Enter a postal code.";
+      if (!pickupPostalCode.trim()) {
+        next.pickupPostalCode = "Enter a postal code.";
+      } else if (!/^\d{6}$/.test(pickupPostalCode.trim())) {
+        next.pickupPostalCode = "An Indian PIN code is 6 digits.";
+      }
       if (!pickupDate) {
         next.pickupDate = "Choose a pickup date.";
       } else if (pickupDate < todayIso() || pickupDate > maxPickupDateIso()) {
@@ -119,11 +144,30 @@ export default function PickupRequestPage() {
     return Object.keys(next).length === 0;
   }
 
+  /**
+   * Put the cursor on the first thing that is wrong.
+   *
+   * The form is taller than a phone screen, so a message rendered next to a field near the top
+   * is off-screen from the submit button — which is the whole complaint about the old behaviour.
+   * The inputs already carry aria-invalid, so the first one in document order IS the first
+   * error; no per-field refs needed. Deferred a frame so React has committed the new errors.
+   */
+  function focusFirstError() {
+    requestAnimationFrame(() => {
+      const first = document.querySelector<HTMLElement>('[aria-invalid="true"]');
+      first?.scrollIntoView({ behavior: "smooth", block: "center" });
+      first?.focus({ preventScroll: true });
+    });
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!quote) return;
     setSubmitError(null);
-    if (!validate()) return;
+    if (!validate()) {
+      focusFirstError();
+      return;
+    }
 
     setIsSubmitting(true);
     try {
@@ -142,8 +186,19 @@ export default function PickupRequestPage() {
         pickupInstructions: pickupInstructions.trim() || undefined,
       });
       setSubmitted(true);
-    } catch {
-      setSubmitError("We couldn't submit your pickup request. Please try again.");
+    } catch (err) {
+      // Say what was actually wrong. The server rejects per field ("pickupContactPhone must be
+      // shorter than or equal to 20 characters"), so those go under the inputs that caused them
+      // and the banner keeps the summary — a bare "please try again" left the user re-submitting
+      // the same bad value with nothing to change.
+      const serverFields = fieldErrors(err);
+      if (Object.keys(serverFields).length > 0) {
+        setErrors((current) => ({ ...current, ...serverFields }));
+        focusFirstError();
+      }
+      setSubmitError(
+        errorMessage(err, "We couldn't submit your pickup request. Please try again."),
+      );
     } finally {
       setIsSubmitting(false);
     }

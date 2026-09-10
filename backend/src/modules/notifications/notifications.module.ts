@@ -10,6 +10,7 @@ import { MessagingAdapterRegistry } from './messaging-adapter.registry';
 import { StubWhatsAppAdapter } from './whatsapp/stub-whatsapp.adapter';
 import { GupshupWhatsAppAdapter } from './whatsapp/gupshup-whatsapp.adapter';
 import { WhatsAppWebhookController } from './whatsapp/whatsapp-webhook.controller';
+import { AdminWhatsAppController } from './admin-whatsapp.controller';
 
 @Module({
   imports: [
@@ -33,7 +34,7 @@ import { WhatsAppWebhookController } from './whatsapp/whatsapp-webhook.controlle
     }),
     BullModule.registerQueue({ name: NOTIFICATIONS_QUEUE }),
   ],
-  controllers: [WhatsAppWebhookController],
+  controllers: [WhatsAppWebhookController, AdminWhatsAppController],
   providers: [
     NotificationsService,
     NotificationsProcessor,

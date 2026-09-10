@@ -4,7 +4,8 @@ Templates are how a message reaches a customer **outside the 24-hour window** �
 their own last message to your number. Without one, free-form sending works only for customers who
 are mid-conversation, so most invoice recipients never receive anything.
 
-You do not need all of these. Start with `invoice_ready`; add others as they matter.
+You do not need all of these. Start with `invoice_ready` and `receipt_ready`; add others as they
+matter.
 
 ## 1. Create it in Gupshup
 
@@ -15,7 +16,7 @@ You do not need all of these. Start with `invoice_ready`; add others as they mat
 | Template Name | Exactly the name in the table below (lowercase, numbers and underscores only — Meta rejects anything else) |
 | Category | **UTILITY** for every template here |
 | Language | English |
-| Header | None, except `invoice_ready` which needs **Media → Document** |
+| Header | None, except `invoice_ready` and `receipt_ready`, which need **Media → Document** |
 | Body | Copy from the table below, `{{1}}` placeholders included |
 | Sample values | Mandatory. Use the samples in the table |
 
@@ -46,24 +47,29 @@ you can migrate one at a time.
 
 ## 3. The templates
 
+**All 18 below are approved** (as of 31 Aug 2026). `receipt_ready` is new and still has to be
+created and submitted.
+
 Names match `NOTIFICATION_TEMPLATES` in `backend/src/modules/notifications/templates.ts`, and
 the wording matches `message-bodies.ts` so customers get the same message either way. This table is
 generated from that file — if you edit wording, edit it there and regenerate, don't hand-edit here.
 
 **These read long on purpose.** Meta rejects templates with *"too many variables for its length"*:
 it wants a decent amount of fixed text around each `{{n}}`. The first, terser draft of
-`invoice_ready` was rejected for exactly that. Shortening a body re-opens that rejection, so resist
+`invoice_ready` was rejected for exactly that. (The version that was finally approved is shorter again,
+but with its line breaks and a document header — that combination is what passed.) Shortening a body re-opens that rejection, so resist
 trimming them.
 
 | Template name | Body | `params` | Sample values |
 |---|---|---|---|
-| `invoice_ready` | Hi {{1}}, your GST tax invoice from NationWide Logistics is ready. Invoice number: {{2}}. Total amount payable: ₹{{3}}. The invoice PDF is attached to this message, and you can keep it for your accounting records. If you have any questions about this invoice, please reply to this message and our team will assist you. | `["customerName", "invoiceNumber", "amount"]` | Ravi Kumar / NW/2026-27/00042 / 808.00 |
-| `order_confirmation` | Your order with NationWide Logistics has been confirmed and is now being processed. Your tracking number is {{1}}. We will send you an update here each time your shipment moves to its next stage. | `["trackingNumber"]` | NW-26-000123 |
+| `invoice_ready` | Hello {{1}},<br><br>Your invoice {{2}} is ready.<br><br>Total Amount: ₹{{3}}<br><br>Thank you for choosing us. | `["customerName", "invoiceNumber", "amount"]` | Ravi Kumar / NW/2026-27/00042 / 808.00 |
+| `receipt_ready` | Hi {{1}}, we have received your payment to NationWide Logistics — thank you. Receipt number: {{2}}. Amount received: ₹{{3}}. Your payment receipt PDF is attached to this message; please keep it as your proof of payment. If anything on this receipt looks wrong, reply to this message and our team will assist you. | `["customerName", "receiptNumber", "amount"]` | Ravi Kumar / RCP/2026-27/00019 / 808.00 |
+| `order_confirmation` | Hello,<br><br>Your order has been confirmed successfully. 🎉<br><br>Your tracking number is: {{1}}<br><br>You can use this tracking number to track your order.<br><br>Thank you for choosing us. | `["trackingNumber"]` | NW-26-000123 |
 | `tracking_number_assigned` | Your shipment with NationWide Logistics has been assigned a tracking number: {{1}}. You can use this number to follow your parcel's progress at any time. | `["trackingNumber"]` | NW-26-000123 |
 | `pickup_confirmation` | Good news — your parcel has been picked up. Shipment {{1}} is now with us and on its way to its destination. We will keep you updated as it travels. | `["trackingNumber"]` | NW-26-000123 |
 | `in_transit_update` | Your shipment {{1}} is currently in transit and moving towards its destination. We will let you know as soon as it is out for delivery. | `["trackingNumber"]` | NW-26-000123 |
-| `out_for_delivery` | Your shipment {{1}} is out for delivery today. Please make sure someone is available at the delivery address to receive the parcel. | `["trackingNumber"]` | NW-26-000123 |
-| `delivered` | Your shipment {{1}} has been delivered successfully and has reached its destination. Thank you for choosing NationWide Logistics for your shipping needs. | `["trackingNumber"]` | NW-26-000123 |
+| `out_for_delivery` | Hello,<br><br>Your order is out for delivery! 🚚<br><br>Tracking Number: {{1}}<br><br>Please be available to receive your order.<br><br>Thank you for choosing us. | `["trackingNumber"]` | NW-26-000123 |
+| `delivered` | Hello,<br><br>Your order has been delivered successfully. 📦<br><br>Tracking Number: {{1}}<br><br>Thank you for choosing us. We hope you enjoy your order! | `["trackingNumber"]` | NW-26-000123 |
 | `delivery_exception` | There is a delay with your shipment {{1}}. Our operations team is looking into it and we will send you an update as soon as the situation is resolved. | `["trackingNumber"]` | NW-26-000123 |
 | `quote_ready` | Your shipping quote from NationWide Logistics is ready. The total amount for your shipment is ₹{{1}}. Please open the NationWide Logistics app to review the details and confirm your booking. | `["amount"]` | 808.00 |
 | `quote_rejected` | We are sorry — we are unable to provide a quote for your shipment at this time. Reason: {{1}}. Please reply to this message and our team will help you find an alternative. | `["reason"]` | Destination not serviceable |
@@ -76,11 +82,16 @@ trimming them.
 | `order_created_from_pickup` | Your parcel has been accepted and your order with NationWide Logistics has been created. Your tracking number is {{1}}. We will update you as your shipment moves. | `["trackingNumber"]` | NW-26-000123 |
 | `pickup_rejected` | We were unable to accept your parcel at pickup. Reason: {{1}}. Please reply to this message and our team will help you resolve this and arrange a new pickup. | `["reason"]` | Restricted item |
 
-### `invoice_ready` needs a document header
+### `invoice_ready` and `receipt_ready` need a document header
 
-It is the only one carrying an attachment. Create it with **Header → Media → Document**, and give a
-sample PDF when asked. A template approved with a text header (or none) cannot carry the invoice —
-Gupshup rejects the send at runtime, the queue retries, and the notification ends up `FAILED`.
+They are the only two carrying an attachment — the invoice PDF and the payment receipt PDF. Create
+both with **Header → Media → Document**, and give a sample PDF when asked. A template approved with
+a text header (or none) cannot carry the document — Gupshup rejects the send at runtime, the queue
+retries, and the notification ends up `FAILED`.
+
+Both are sent automatically the moment a payment is recorded, whether an admin marks it or a pickup
+partner collects it at the door, so an unapproved `receipt_ready` means every paying customer's
+receipt silently falls back to free-form text with no attachment.
 
 The three templates with no variables (`params: []`) still need an entry in `GUPSHUP_TEMPLATES` to
 be used; an empty array is correct, not a reason to leave them out.
@@ -92,6 +103,7 @@ Keep it on one line in the environment; it is read and parsed at send time.
 ```json
 {
   "invoice_ready":                { "id": "...", "params": ["customerName", "invoiceNumber", "amount"] },
+  "receipt_ready":                { "id": "...", "params": ["customerName", "receiptNumber", "amount"] },
   "order_confirmation":           { "id": "...", "params": ["trackingNumber"] },
   "tracking_number_assigned":     { "id": "...", "params": ["trackingNumber"] },
   "pickup_confirmation":          { "id": "...", "params": ["trackingNumber"] },
@@ -111,6 +123,32 @@ Keep it on one line in the environment; it is read and parsed at send time.
   "pickup_rejected":              { "id": "...", "params": ["reason"] }
 }
 ```
+
+## Sending by hand (Admin → Send WhatsApp)
+
+Two modes, because WhatsApp has two kinds of message:
+
+- **Template** — any template configured in `GUPSHUP_TEMPLATES`, to one customer or up to 500 at
+  once. Reaches customers at any time. Fill each `{{n}}`; `customerName` can be left blank and is
+  filled from each recipient's own name. `invoice_ready` and `receipt_ready` are listed but
+  disabled: they carry a PDF and only go out automatically, with it.
+- **Free text** — anything you type, one customer at a time. Needs no approval, but is delivered
+  only if that customer messaged you in the last 24 hours; otherwise it fails in the notification
+  log.
+
+### Adding a custom template
+
+1. Create and submit it in Gupshup as in section 1 — any name, UTILITY category.
+2. Once approved, add it to `GUPSHUP_TEMPLATES` with its ID and placeholder names in `{{n}}` order:
+   `"holiday_closure": { "id": "...", "params": ["date", "reopenDate"] }`
+3. Restart the backend. It appears in the Send WhatsApp template list with one field per
+   placeholder. There is no preview for it — its approved wording lives in Gupshup.
+
+Never add `custom_text` to `GUPSHUP_TEMPLATES`. It is the free-text mode, and must always be sent
+free-form.
+
+Every manual send is audit-logged (who, which template, how many recipients — never the values or
+the message text).
 
 ## Checking it worked
 

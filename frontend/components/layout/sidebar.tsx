@@ -138,7 +138,7 @@ export function Sidebar({ items, groups }: { items: NavItem[]; groups?: NavGroup
         className="mb-1 flex h-10 w-10 items-center justify-center"
         aria-label="NationWide Logistics home"
       >
-        <Logo variant="icon" size="sm" />
+        <Logo variant="icon" size="sm" tone="reverse" />
       </Link>
 
       <div className="my-1 h-px w-8 shrink-0 bg-sidebar-border" aria-hidden />

@@ -6,12 +6,23 @@ export type InvoiceStatus = "ISSUED" | "CANCELLED";
  * staff rather than kept internal: MANUAL_QUOTE_INCLUSIVE means the taxable value was
  * back-derived from a staff-typed gross amount, not computed by the pricing engine.
  */
+/**
+ * What kind of document an invoice is.
+ *
+ * ORDER is the default: one order, one invoice, raised automatically when the order is paid.
+ * CUSTOM is a one-off with nothing behind it. CONSOLIDATED bills many orders over a window on a
+ * single document and carries a `lines` array instead of a single derived description.
+ */
+export type InvoiceKind = "ORDER" | "CUSTOM" | "CONSOLIDATED";
+
 export type InvoiceBreakdownSource =
   | "PICKUP_VERIFICATION"
   | "RATE_OPTION"
   | "MANUAL_QUOTE_INCLUSIVE"
   /** A one-off invoice an admin raised by hand, with no order behind it. */
-  | "CUSTOM";
+  | "CUSTOM"
+  /** A consolidated invoice, whose lines can each come from a different source. */
+  | "CONSOLIDATED";
 
 export interface InvoiceDto {
   id: string;
@@ -23,8 +34,15 @@ export interface InvoiceDto {
   customLineDescription: string | null;
   customerId: string;
   customer: { name: string; phone: string } | null;
+  kind: InvoiceKind;
   status: InvoiceStatus;
   invoiceDate: string; // ISO 8601
+
+  /** The window a CONSOLIDATED invoice covers. Null on every other kind. */
+  periodFrom: string | null; // ISO 8601
+  periodTo: string | null; // ISO 8601
+  /** How many orders a CONSOLIDATED invoice bills. 0 on every other kind. */
+  lineCount: number;
 
   recipientName: string;
   recipientGstin: string | null;

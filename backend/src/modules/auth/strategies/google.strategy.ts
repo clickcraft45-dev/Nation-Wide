@@ -39,8 +39,10 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
     done: VerifyCallback,
   ): void {
     const email = profile.emails?.[0]?.value;
-    if (!email) {
-      done(new Error('This Google account has no email address on file.'));
+    // Email is the only link to an account (including admins), so an unverified one must never
+    // match or create anything.
+    if (!email || !profile.emails?.[0]?.verified) {
+      done(new Error('This Google account has no verified email address.'));
       return;
     }
     const googleProfile: GoogleProfile = {

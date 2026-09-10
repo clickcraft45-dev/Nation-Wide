@@ -21,7 +21,7 @@ import type {
 } from '@nationwide/shared-types';
 import { InvoicesService } from './invoices.service';
 import { toInvoiceDto } from './invoice.mapper';
-import { GenerateInvoicesDto } from './dto/generate-invoices.dto';
+import { ConsolidateInvoiceDto } from './dto/consolidate-invoice.dto';
 import { SendInvoicesDto } from './dto/send-invoices.dto';
 import { CancelInvoiceDto } from './dto/cancel-invoice.dto';
 import { QueryInvoicesDto } from './dto/query-invoices.dto';
@@ -41,18 +41,30 @@ export class AdminInvoicesController {
     return { items: items.map(toInvoiceDto), total };
   }
 
-  @Post('generate')
-  generate(@Body() dto: GenerateInvoicesDto, @CurrentUser() user: JwtPayload) {
-    return this.invoices.generateForRange(
-      dto.customerIds,
+  /**
+   * One invoice covering everything a customer paid for in a window.
+   *
+   * Replaces POST /generate, which issued one invoice per order across many customers. That
+   * existed only because nothing invoiced automatically; OrdersService now bills an order the
+   * moment its payment is recorded, so the bulk screen was a second route to documents that
+   * already exist. This is the thing it could not do.
+   */
+  @Post('consolidate')
+  async consolidate(
+    @Body() dto: ConsolidateInvoiceDto,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<{ invoice: InvoiceDto; skipped: { orderId: string }[] }> {
+    const { invoice, skipped } = await this.invoices.issueConsolidated(
+      dto.customerId,
       dto.from,
       dto.to,
       user.sub,
     );
+    return { invoice: toInvoiceDto(invoice), skipped };
   }
 
-  // Registered ahead of nothing in particular, but kept next to generate: both issue numbers in
-  // the same statutory series and the two are read together.
+  // Kept next to consolidate: both issue numbers in the same statutory series and the two are
+  // read together.
   @Post('custom')
   async createCustom(
     @Body() dto: CreateCustomInvoiceDto,

@@ -67,57 +67,275 @@ export class InvoicesService {
   // -------------------------------------------------------------------------
 
   /**
-   * Issues invoices for every invoiceable order belonging to the given customers in the given
-   * window. Partial success is the norm and is reported rather than thrown: one order missing a
-   * price must not stop the other forty from being invoiced.
+   * ONE invoice for every order a customer paid for in a window.
+   *
+   * Replaces the old "generate one invoice per order over a range" screen. That screen existed
+   * because nothing issued invoices automatically; now the order path does (OrdersService marks
+   * a payment, this service bills it), so bulk per-order generation was a second way to produce
+   * documents that already exist. What it could not do, and what customers with forty parcels a
+   * month actually ask for, is a single consolidated bill for the period — that is this.
+   *
+   * WHAT IT PICKS UP. Paid, non-cancelled orders in the window that are not already billed:
+   * neither their own invoice (Invoice.orderId) nor a line on an earlier consolidated one
+   * (InvoiceLine.orderId, which is @unique for exactly this reason). Anything already invoiced is
+   * reported as skipped rather than silently re-billed — the same order must never appear on two
+   * tax documents.
+   *
+   * Unpaid orders are deliberately excluded. A consolidated invoice is raised against a period
+   * that has settled; sweeping in an unpaid order would bill for a supply whose price can still
+   * change.
+   *
+   * TAX. Charged once on the summed taxable value, not per line — see InvoiceLine's own note.
+   * Place of supply is taken from the first order in the window and must be the same for all of
+   * them: two different places of supply are two different tax treatments (CGST+SGST vs IGST)
+   * and cannot share a document, so a mixed window is refused rather than quietly billed at
+   * whichever rate came first.
    */
-  async generateForRange(
-    customerIds: string[],
+  async issueConsolidated(
+    customerId: string,
     from: Date,
     to: Date,
     actorId: string,
-  ): Promise<GenerateSummary> {
+  ): Promise<{ invoice: Invoice; skipped: { orderId: string }[] }> {
     if (from > to) {
       throw new BadRequestException('"from" must not be after "to"');
+    }
+    const settings = await this.requireCompleteSettings();
+
+    const customer = await this.prisma.customer.findUnique({
+      where: { id: customerId },
+    });
+    if (!customer) {
+      throw new NotFoundException(`Customer ${customerId} not found`);
     }
 
     const orders = await this.prisma.order.findMany({
       where: {
-        customerId: { in: customerIds },
+        customerId,
         createdAt: { gte: from, lte: to },
-        // Cancelled orders are not supplies and must never be invoiced.
         status: { not: 'CANCELLED' },
+        paymentStatus: 'PAID',
       },
       orderBy: { createdAt: 'asc' },
       ...ORDER_FOR_INVOICE,
     });
 
-    const summary: GenerateSummary = { created: [], skipped: [], failed: [] };
+    const skipped: { orderId: string }[] = [];
+    const billable: {
+      order: OrderForInvoice;
+      breakdown: NonNullable<ReturnType<typeof resolveChargedBreakdown>>;
+    }[] = [];
 
-    // Sequential, not Promise.all: invoice numbers come from an atomic counter, and issuing in
-    // creation order keeps the series in the same order as the supplies it bills. Parallelism
-    // would interleave numbers across customers for no real gain at this volume.
     for (const order of orders) {
-      try {
-        const existing = await this.prisma.invoice.findUnique({
-          where: { orderId: order.id },
-          select: { id: true },
-        });
-        if (existing) {
-          summary.skipped.push({ orderId: order.id, invoiceId: existing.id });
-          continue;
-        }
-        const invoice = await this.issueForOrder(order, actorId);
-        summary.created.push(invoice.id);
-      } catch (error) {
-        summary.failed.push({
-          orderId: order.id,
-          reason: error instanceof Error ? error.message : String(error),
-        });
+      const alreadyBilled = await this.prisma.invoice.findUnique({
+        where: { orderId: order.id },
+        select: { id: true },
+      });
+      const alreadyOnAnInvoice = alreadyBilled
+        ? true
+        : (await this.prisma.invoiceLine.findUnique({
+            where: { orderId: order.id },
+            select: { id: true },
+          })) !== null;
+      if (alreadyOnAnInvoice) {
+        skipped.push({ orderId: order.id });
+        continue;
       }
+
+      const breakdown = resolveChargedBreakdown({
+        verified: order.pickupRequest
+          ? {
+              taxableSubtotal: order.pickupRequest.verifiedTaxableSubtotal,
+              gstAmount: order.pickupRequest.verifiedGstAmount,
+              nationwideCut: order.pickupRequest.verifiedNationwideCut,
+              price: order.pickupRequest.verifiedPrice,
+            }
+          : null,
+        rateOption: order.quote?.selectedOption ?? null,
+        manualGrossAmount:
+          order.quote?.quotedAmount ?? order.paidAmount ?? null,
+        fallbackGstPercent: DEFAULT_GST_PERCENT,
+      });
+      // An order with no priced amount cannot contribute a line. Skipped rather than fatal: one
+      // unpriced order must not block a bill covering the other thirty-nine.
+      if (!breakdown) {
+        skipped.push({ orderId: order.id });
+        continue;
+      }
+      billable.push({ order, breakdown });
     }
 
-    return summary;
+    if (billable.length === 0) {
+      throw new BadRequestException(
+        'No unbilled paid orders in that period for this customer',
+      );
+    }
+
+    const placesOfSupply = new Set(
+      billable.map(({ order }) => this.placeOfSupplyFor(order, settings)),
+    );
+    if (placesOfSupply.size > 1) {
+      throw new BadRequestException(
+        `Orders in this period ship from more than one state (${[...placesOfSupply].join(', ')}). ` +
+          'A single invoice cannot carry two places of supply — bill them separately.',
+      );
+    }
+    const placeOfSupplyState = [...placesOfSupply][0];
+    const placeOfSupplyCode =
+      gstStateCode(placeOfSupplyState) ?? settings.stateCode!;
+
+    const taxableValue = round2(
+      billable.reduce((sum, { breakdown }) => sum + breakdown.taxableValue, 0),
+    );
+    const gstAmount = round2(
+      billable.reduce((sum, { breakdown }) => sum + breakdown.gstAmount, 0),
+    );
+    const nonTaxableCharges = round2(
+      billable.reduce(
+        (sum, { breakdown }) => sum + breakdown.nonTaxableCharges,
+        0,
+      ),
+    );
+    const split = splitGst(
+      taxableValue,
+      gstAmount,
+      isIntraStateSupply(settings.stateCode, placeOfSupplyCode),
+    );
+    const totalAmount = round2(
+      taxableValue + split.totalTax + nonTaxableCharges,
+    );
+
+    const invoiceDate = new Date();
+    const financialYear = indianFinancialYear(invoiceDate);
+    const sequence = await nextSequenceNumber(
+      this.prisma,
+      `invoice:${financialYear}`,
+    );
+
+    const invoice = await this.prisma.invoice.create({
+      data: {
+        invoiceNumber: formatInvoiceNumber(sequence, financialYear),
+        sequenceNumber: sequence,
+        financialYear,
+        kind: 'CONSOLIDATED',
+        // No orderId: the orders are the lines. Leaving it null is what keeps the @unique
+        // "one invoice per order" guarantee meaningful for the single-order path.
+        customerId,
+        invoiceDate,
+        periodFrom: from,
+        periodTo: to,
+
+        supplierName: settings.legalName!,
+        supplierGstin: settings.gstin!,
+        supplierAddress: settings.address!,
+        supplierStateName: settings.stateName!,
+        supplierStateCode: settings.stateCode!,
+        supplierEmail: settings.supportEmail,
+        supplierPhone: settings.supportPhone,
+
+        recipientName: customer.name,
+        recipientPhone: customer.phone,
+        recipientGstin: customer.gstin,
+        recipientAddress: customer.address,
+
+        placeOfSupplyState,
+        placeOfSupplyCode,
+        sacCode: settings.sacCode!,
+
+        taxableValue,
+        ...split,
+        nonTaxableCharges,
+        totalAmount,
+        // Mixed sources are the norm over a month, so the invoice records that rather than
+        // claiming a precision it does not have. Each line's own source is on its order.
+        breakdownSource: 'CONSOLIDATED',
+        issuedByAdminId: actorId,
+
+        lines: {
+          create: billable.map(({ order, breakdown }) => ({
+            orderId: order.id,
+            description: this.lineDescriptionFor(order),
+            supplyDate: order.createdAt,
+            taxableValue: round2(breakdown.taxableValue),
+            nonTaxableCharges: round2(breakdown.nonTaxableCharges),
+          })),
+        },
+      },
+    });
+
+    const pdfPath = await this.storePdf(
+      invoice,
+      {
+        shipments: billable.flatMap(({ order }) =>
+          order.shipments.map((shipment) => ({
+            trackingNumber: shipment.internalTrackingNumber,
+            providerName: shipment.provider.name,
+          })),
+        ),
+        destination: null,
+        weightKg: null,
+        lines: billable.map(({ order, breakdown }) => ({
+          description: this.lineDescriptionFor(order),
+          supplyDate: order.createdAt,
+          amount: round2(breakdown.taxableValue + breakdown.nonTaxableCharges),
+        })),
+        periodFrom: from,
+        periodTo: to,
+      },
+      settings,
+    );
+
+    await this.prisma.auditLog.create({
+      data: {
+        actorId,
+        action: 'INVOICE_ISSUED',
+        entity: 'Invoice',
+        entityId: invoice.id,
+        before: {},
+        after: {
+          invoiceNumber: invoice.invoiceNumber,
+          kind: 'CONSOLIDATED',
+          orderCount: billable.length,
+          totalAmount: invoice.totalAmount,
+        },
+      },
+    });
+
+    return {
+      invoice: await this.prisma.invoice.update({
+        where: { id: invoice.id },
+        data: { pdfPath },
+      }),
+      skipped,
+    };
+  }
+
+  /**
+   * Place of supply for a courier is where the goods are handed over — the pickup address.
+   * Falls back to the quote's origin (admin manual flow), then to the supplier's own state, the
+   * last of which makes it intra-state: the conservative default when the origin genuinely is
+   * not recorded anywhere.
+   */
+  private placeOfSupplyFor(
+    order: OrderForInvoice,
+    settings: { stateName: string | null },
+  ): string {
+    return (
+      order.pickupRequest?.pickupState ??
+      order.quote?.originState ??
+      settings.stateName!
+    );
+  }
+
+  /** How one order reads as a printed line: the number the customer knows it by, and where. */
+  private lineDescriptionFor(order: OrderForInvoice): string {
+    const awb = order.shipments[0]?.internalTrackingNumber;
+    const destination = order.quote
+      ? `${order.quote.destCity}, ${order.quote.destCountry}`
+      : null;
+    if (awb && destination) return `${awb} — ${destination}`;
+    if (awb) return awb;
+    return `Order ${order.id.slice(0, 8)}`;
   }
 
   /** Single-order entry point; same idempotency guarantee as the bulk path. */

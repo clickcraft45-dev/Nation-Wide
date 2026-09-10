@@ -6,6 +6,9 @@ import type {
 
 type InvoiceWithCustomer = Invoice & {
   customer?: { name: string; phone: string } | null;
+  // Present only where the caller included them; a list view counts lines without loading them.
+  lines?: unknown[] | null;
+  _count?: { lines: number } | null;
 };
 
 /**
@@ -24,8 +27,13 @@ export function toInvoiceDto(invoice: InvoiceWithCustomer): InvoiceDto {
     customer: invoice.customer
       ? { name: invoice.customer.name, phone: invoice.customer.phone }
       : null,
+    kind: invoice.kind,
     status: invoice.status,
     invoiceDate: invoice.invoiceDate.toISOString(),
+
+    periodFrom: invoice.periodFrom?.toISOString() ?? null,
+    periodTo: invoice.periodTo?.toISOString() ?? null,
+    lineCount: invoice._count?.lines ?? invoice.lines?.length ?? 0,
 
     recipientName: invoice.recipientName,
     recipientGstin: invoice.recipientGstin,

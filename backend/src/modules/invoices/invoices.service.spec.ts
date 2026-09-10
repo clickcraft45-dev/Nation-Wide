@@ -60,6 +60,8 @@ describe('InvoicesService', () => {
       update: jest.Mock;
     };
     order: { findUnique: jest.Mock; findMany: jest.Mock };
+    invoiceLine: { findUnique: jest.Mock };
+    customer: { findUnique: jest.Mock };
     auditLog: { create: jest.Mock };
     $queryRawUnsafe: jest.Mock;
   };
@@ -90,6 +92,10 @@ describe('InvoicesService', () => {
       order: {
         findUnique: jest.fn().mockResolvedValue(makeOrder()),
         findMany: jest.fn().mockResolvedValue([]),
+      },
+      invoiceLine: { findUnique: jest.fn().mockResolvedValue(null) },
+      customer: {
+        findUnique: jest.fn().mockResolvedValue(makeOrder().customer),
       },
       auditLog: { create: jest.fn().mockResolvedValue({}) },
       // The invoice-number counter.
@@ -240,39 +246,117 @@ describe('InvoicesService', () => {
     });
   });
 
-  describe('generateForRange', () => {
-    it('reports per-order failures instead of abandoning the whole batch', async () => {
+  describe('issueConsolidated', () => {
+    const FROM = new Date('2026-09-01');
+    const TO = new Date('2026-09-30');
+
+    it('bills every unbilled paid order in the window on ONE invoice, taxed once on the total', async () => {
       prisma.order.findMany.mockResolvedValue([
-        makeOrder({ id: 'order-ok' }),
-        // No quote, no pickup request and no payment: nothing to price an invoice from.
-        makeOrder({
-          id: 'order-unpriced',
-          quote: null,
-          pickupRequest: null,
-          paidAmount: null,
-        }),
+        makeOrder({ id: 'order-a' }),
+        makeOrder({ id: 'order-b' }),
       ]);
 
-      const summary = await service.generateForRange(
-        ['cust-1'],
-        new Date('2026-08-01'),
-        new Date('2026-08-31'),
+      const { invoice, skipped } = await service.issueConsolidated(
+        'cust-1',
+        FROM,
+        TO,
         'admin-1',
       );
 
-      expect(summary.created).toHaveLength(1);
-      expect(summary.failed).toHaveLength(1);
-      expect(summary.failed[0].orderId).toBe('order-unpriced');
+      expect(skipped).toEqual([]);
+      // One number consumed for the whole period, not one per order.
+      expect(prisma.$queryRawUnsafe).toHaveBeenCalledTimes(1);
+      const data = prisma.invoice.create.mock.calls[0][0].data;
+      expect(data.kind).toBe('CONSOLIDATED');
+      // No orderId: the orders are the lines, which keeps Invoice.orderId's @unique meaningful.
+      expect(data.orderId).toBeUndefined();
+      expect(data.lines.create).toHaveLength(2);
+      // Each order is 600 taxable + 108 GST + 100 outside tax; the sums land on the invoice.
+      expect(data.taxableValue).toBe(1200);
+      expect(data.totalTax).toBe(216);
+      expect(data.nonTaxableCharges).toBe(200);
+      expect(data.totalAmount).toBe(1616);
+      expect(invoice.pdfPath).toBeDefined();
+    });
+
+    it('skips orders already billed on their own invoice or an earlier consolidated one', async () => {
+      prisma.order.findMany.mockResolvedValue([
+        makeOrder({ id: 'order-own-invoice' }),
+        makeOrder({ id: 'order-on-a-line' }),
+        makeOrder({ id: 'order-fresh' }),
+      ]);
+      prisma.invoice.findUnique.mockImplementation(
+        ({ where }: { where: { orderId?: string } }) =>
+          Promise.resolve(
+            where.orderId === 'order-own-invoice' ? { id: 'inv-old' } : null,
+          ),
+      );
+      prisma.invoiceLine.findUnique.mockImplementation(
+        ({ where }: { where: { orderId: string } }) =>
+          Promise.resolve(
+            where.orderId === 'order-on-a-line' ? { id: 'line-old' } : null,
+          ),
+      );
+
+      const { skipped } = await service.issueConsolidated(
+        'cust-1',
+        FROM,
+        TO,
+        'admin-1',
+      );
+
+      expect(skipped.map((s) => s.orderId)).toEqual([
+        'order-own-invoice',
+        'order-on-a-line',
+      ]);
+      const data = prisma.invoice.create.mock.calls[0][0].data;
+      expect(
+        data.lines.create.map((l: { orderId: string }) => l.orderId),
+      ).toEqual(['order-fresh']);
+    });
+
+    it('only considers PAID orders — an unpaid supply can still change price', async () => {
+      prisma.order.findMany.mockResolvedValue([makeOrder()]);
+
+      await service.issueConsolidated('cust-1', FROM, TO, 'admin-1');
+
+      expect(prisma.order.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            paymentStatus: 'PAID',
+            status: { not: 'CANCELLED' },
+          }),
+        }),
+      );
+    });
+
+    it('refuses a window whose orders ship from two states, which cannot share a tax treatment', async () => {
+      prisma.order.findMany.mockResolvedValue([
+        makeOrder({ id: 'order-ts' }),
+        makeOrder({
+          id: 'order-ka',
+          quote: { ...makeOrder().quote, originState: 'Karnataka' },
+        }),
+      ]);
+
+      await expect(
+        service.issueConsolidated('cust-1', FROM, TO, 'admin-1'),
+      ).rejects.toThrow(/more than one state/);
+      // Refused before a number was consumed.
+      expect(prisma.$queryRawUnsafe).not.toHaveBeenCalled();
+    });
+
+    it('refuses when nothing in the window is billable, rather than issuing an empty invoice', async () => {
+      prisma.order.findMany.mockResolvedValue([]);
+      await expect(
+        service.issueConsolidated('cust-1', FROM, TO, 'admin-1'),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.invoice.create).not.toHaveBeenCalled();
     });
 
     it('rejects an inverted date range rather than silently returning nothing', async () => {
       await expect(
-        service.generateForRange(
-          ['cust-1'],
-          new Date('2026-08-31'),
-          new Date('2026-08-01'),
-          'admin-1',
-        ),
+        service.issueConsolidated('cust-1', TO, FROM, 'admin-1'),
       ).rejects.toThrow(BadRequestException);
     });
   });

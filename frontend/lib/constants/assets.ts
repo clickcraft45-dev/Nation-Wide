@@ -40,16 +40,23 @@ export const PARTNER_NETWORKS = ["DHL", "DHL Express", "FedEx", "UPS"] as const;
 /**
  * The company mark — the NW monogram with the globe and aircraft.
  *
- * Single-ink black art on a transparent background, which is what makes the `reverse` variant
- * possible: on the dark sidebar and hero panels the Logo component inverts it to white rather
- * than needing a second file. Supply a real white asset here only if the mark ever stops being
- * one flat ink.
+ * Single-ink art on a transparent background, so the file carries the SHAPE and the Logo
+ * component supplies the colour: it uses the PNG as a CSS mask and paints the ink with a
+ * background-colour token — brand red on light surfaces, white on the near-black panels, black
+ * in print. One asset, three inks. Supply real artwork here only if the mark ever gains a
+ * second colour of its own, at which point masking stops being valid.
  *
- * AVIF first with PNG as the fallback — the AVIF is roughly a sixth of the size, and every
- * browser that cannot read it gets the PNG from the same <picture>.
+ * The AVIF is kept for the few places that still want it as a plain image (and is a sixth of the
+ * size), but the PNG is the one the mask uses — mask-image support for AVIF is not universal.
  */
 export const LOGO_MARK = {
   avif: "/assets/logo/logo-mark.avif",
   png: "/assets/logo/logo-mark.png",
   alt: "NationWide Logistics",
+} as const;
+
+/** "NationWide. / Delivering trust worldwide" wordmark, single ink on transparency — used as a mask. */
+export const TEXT_LOGO = {
+  src: "/assets/logo/text-logo.png",
+  alt: "NationWide — Delivering trust worldwide",
 } as const;

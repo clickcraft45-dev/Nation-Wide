@@ -22,6 +22,7 @@ add a second storage system, an S3 client, or a filesystem write anywhere else.
 | Prefix | Written by | Key format |
 |---|---|---|
 | `invoices/` | `InvoicesService.storePdf` | `invoices/YYYY/MM/<invoice-number>.pdf` |
+| `receipts/` | `ReceiptsService.renderAndStore` | `receipts/YYYY/MM/<receipt-number>.pdf` |
 | `rate-cards/` | `RateCardDocumentsService` | `rate-cards/<rateProviderId>/v<version>-<uuid>.pdf` |
 | `uploads/company-logos/` | `CompanySettingsService` | `uploads/company-logos/<settingsId>/<uuid><ext>` |
 
@@ -30,11 +31,12 @@ Generate a UUID and keep the real name in a column if it needs displaying.
 
 ## Where the key lives in PostgreSQL
 
-Exactly three columns point at S3 objects. Each is the **object key**, never a URL, never bytes:
+Exactly four columns point at S3 objects. Each is the **object key**, never a URL, never bytes:
 
 | Model | Column | Nullable |
 |---|---|---|
 | `Invoice` | `pdfPath` → `pdf_path` | yes — an invoice exists before its PDF is rendered |
+| `Receipt` | `pdfPath` → `pdf_path` | yes — same reason; the row is written, then rendered |
 | `RateCardDocument` | `storageKey` → `storage_key` | no |
 | `CompanySettings` | `logoPath` → `logo_path` | yes |
 
@@ -45,7 +47,8 @@ URL at read time from the key.
 
 Structured business data, in full — customers (contact, GST, addresses, auth fields), orders
 (pricing, status, relationships), shipments (AWB, provider, tracking events), pickups (workflow,
-status, provider), rate cards (providers, zones, weight slabs, pricing), and invoices.
+status, provider), rate cards (providers, zones, weight slabs, pricing), invoices (and the
+lines of a consolidated one), and payment receipts.
 
 Invoices keep every structured field in Postgres — number, sequence, financial year, customer and
 order ids, date, status, supplier and recipient snapshots, all GST/tax amounts, taxable value,

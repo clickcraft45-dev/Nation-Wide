@@ -3,6 +3,7 @@ import {
   apiClient,
   ApiError,
   errorMessage,
+  fieldErrors,
   setAccessToken,
   setUnauthorizedHandler,
 } from "./index";
@@ -175,6 +176,57 @@ describe("apiClient", () => {
       expect(errorMessage(new TypeError("fetch failed"), "Check your connection.")).toBe(
         "Check your connection.",
       );
+    });
+  });
+
+  describe("fieldErrors", () => {
+    async function failWith(body: unknown, status: number): Promise<unknown> {
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(body, { status })));
+      return apiClient.get("/anything").then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+    }
+
+    it("splits a class-validator rejection into one message per field", async () => {
+      const error = await failWith(
+        {
+          message: [
+            "pickupContactPhone must be shorter than or equal to 20 characters",
+            "pickupCity should not be empty",
+          ],
+        },
+        400,
+      );
+      expect(fieldErrors(error)).toEqual({
+        pickupContactPhone: "Must be shorter than or equal to 20 characters.",
+        pickupCity: "Should not be empty.",
+      });
+    });
+
+    it("keeps only the first broken rule for a field", async () => {
+      // One value, one thing to fix — listing every rule it broke is noise under the input.
+      const error = await failWith(
+        {
+          message: [
+            "pickupPostalCode must be a number string",
+            "pickupPostalCode must be shorter than or equal to 20 characters",
+          ],
+        },
+        400,
+      );
+      expect(fieldErrors(error)).toEqual({
+        pickupPostalCode: "Must be a number string.",
+      });
+    });
+
+    it("returns nothing for a prose message, which belongs in the banner", async () => {
+      const error = await failWith({ message: "This quote already has a pickup request" }, 409);
+      expect(fieldErrors(error)).toEqual({});
+    });
+
+    it("returns nothing for a failure that never reached the server", () => {
+      expect(fieldErrors(new TypeError("fetch failed"))).toEqual({});
     });
   });
 });
