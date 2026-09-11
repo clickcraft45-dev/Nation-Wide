@@ -57,6 +57,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # package-lock.json is generated on Windows, and npm records only the native binaries for the
+      # platform it ran on (npm/cli#4828). The lockfile therefore lists @tailwindcss/oxide,
+      # lightningcss, Next's SWC and esbuild for win32 only, `npm ci` installs exactly that, and the
+      # Linux build below dies looking for its native binding — every frontend deploy from 6 Sep
+      # 2026 failed on it. `npm install --no-save` after ci fills in just the optional packages this
+      # runner is missing: every locked version stays as pinned and the lockfile is not rewritten.
+      - name: Add this runner's native binaries
+        run: npm install --no-save --no-audit --no-fund
+
       # frontend imports @nationwide/shared-types from its dist/, which is gitignored and only
       # exists once tsc has run. `next build` fails to resolve the package without this.
       - name: Build shared-types
@@ -66,7 +75,14 @@ jobs:
       # frontend/.open-next/. A non-zero exit here fails the job and nothing is deployed.
       - name: Build frontend for Cloudflare
         working-directory: frontend
-        run: npm run build:cf
+        # The tail of the output is re-emitted as an error annotation on failure. Annotations are
+        # readable through the public API without signing in; the raw step log is not, which left
+        # "exit code 1" as the only thing anyone outside GitHub could see for a week of failures.
+        run: |
+          npm run build:cf 2>&1 | tee build.log || {
+            echo "::error title=build:cf failed::$(tail -c 3000 build.log | tr '\n' ' ')"
+            exit 1
+          }
 
       # The same command that works manually, using the repo's pinned wrangler and the existing
       # frontend/wrangler.jsonc. Output is not piped or suppressed, so a deploy failure surfaces
