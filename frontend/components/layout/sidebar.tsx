@@ -18,7 +18,8 @@ import { cn } from "@/lib/utils/cn";
 // (see the "System" section, two items in a panel sized for a dozen). The flyout already does
 // this job on demand; the permanent panel was a second way to look at the same fact, so it's
 // gone. Cuts the whole mobile drawer with it — a 64px rail is thin enough to just stay on screen
-// at every width, so there is no overlay/backdrop/hamburger to keep in sync any more.
+// below lg, so there is no overlay/backdrop/hamburger to keep in sync any more. On lg+ there is
+// room, so the rail widens and lists every section and item by name instead.
 //
 // ONE LOGO. It lives at the top of the rail and nowhere else.
 //
@@ -62,7 +63,7 @@ function SectionFlyout({
   return (
     <div
       className={cn(
-        "pointer-events-none invisible absolute left-full top-0 z-50 translate-x-1 pl-3 opacity-0 transition-[opacity,transform,visibility]",
+        "pointer-events-none invisible absolute left-full top-0 z-50 translate-x-1 pl-3 opacity-0 transition-[opacity,transform,visibility] lg:hidden",
         MOTION,
         "group-hover:pointer-events-auto group-hover:visible group-hover:translate-x-0 group-hover:opacity-100",
         "group-focus-within:pointer-events-auto group-focus-within:visible group-focus-within:translate-x-0 group-focus-within:opacity-100",
@@ -91,27 +92,42 @@ function SectionFlyout({
 
         {/* Capped rather than unbounded: a section near the foot of the rail would otherwise run
             its card off the bottom of a short viewport. */}
-        <div className="relative max-h-[60vh] space-y-0.5 overflow-y-auto">
-          {section.items.map((item) => {
-            const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
-            const ItemIcon = item.icon;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                aria-current={isActive ? "page" : undefined}
-                className={cn(
-                  "flex h-9 items-center gap-3 rounded-lg px-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                  rowTone(isActive),
-                )}
-              >
-                <ItemIcon className="h-4 w-4 shrink-0" aria-hidden />
-                <span className="truncate">{item.label}</span>
-              </Link>
-            );
-          })}
-        </div>
+        <SectionItems section={section} pathname={pathname} className="relative max-h-[60vh] overflow-y-auto" />
       </div>
+    </div>
+  );
+}
+
+/** A section's item links — inside the flyout card below lg, inline under the section on lg+. */
+function SectionItems({
+  section,
+  pathname,
+  className,
+}: {
+  section: NavGroup;
+  pathname: string;
+  className?: string;
+}) {
+  return (
+    <div className={cn("space-y-0.5", className)}>
+      {section.items.map((item) => {
+        const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
+        const ItemIcon = item.icon;
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            aria-current={isActive ? "page" : undefined}
+            className={cn(
+              "flex h-9 items-center gap-3 rounded-lg px-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              rowTone(isActive),
+            )}
+          >
+            <ItemIcon className="h-4 w-4 shrink-0" aria-hidden />
+            <span className="truncate">{item.label}</span>
+          </Link>
+        );
+      })}
     </div>
   );
 }
@@ -132,16 +148,23 @@ export function Sidebar({ items, groups }: { items: NavItem[]; groups?: NavGroup
   );
 
   return (
-    <div className="flex w-16 shrink-0 flex-col items-center gap-2 border-r border-sidebar-border bg-sidebar-bg px-3 py-3">
+    // Below lg: 64px icon rail + hover flyout cards. lg+: a 240px sidebar with every section
+    // label and its items listed inline, so there is nothing to hover for.
+    <div className="flex w-16 shrink-0 flex-col items-center gap-2 border-r border-sidebar-border bg-sidebar-bg px-3 py-3 lg:w-60 lg:items-stretch lg:overflow-y-auto lg:scrollbar-thin lg:[scrollbar-color:#3f3f46_transparent]">
       <Link
         href={sections[0]?.items[0]?.href ?? "/"}
-        className="mb-1 flex h-10 w-10 items-center justify-center"
+        className="mb-1 flex h-10 w-10 shrink-0 items-center justify-center lg:w-full lg:justify-start lg:px-1"
         aria-label="NationWide Logistics home"
       >
-        <Logo variant="icon" size="sm" tone="reverse" />
+        <span className="lg:hidden">
+          <Logo variant="icon" size="sm" tone="reverse" />
+        </span>
+        <span className="hidden lg:block">
+          <Logo variant="reverse" size="sm" />
+        </span>
       </Link>
 
-      <div className="my-1 h-px w-8 shrink-0 bg-sidebar-border" aria-hidden />
+      <div className="my-1 h-px w-8 shrink-0 bg-sidebar-border lg:w-full" aria-hidden />
 
       {sections.map((section, index) => {
         const Icon = section.icon ?? section.items[0].icon;
@@ -157,14 +180,20 @@ export function Sidebar({ items, groups }: { items: NavItem[]; groups?: NavGroup
               aria-label={section.label}
               aria-current={isActive ? "true" : undefined}
               className={cn(
-                "flex h-10 w-10 items-center justify-center rounded-xl transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                "flex h-10 w-10 items-center justify-center rounded-xl transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:w-full lg:justify-start lg:gap-3 lg:px-3",
                 MOTION,
                 rowTone(isActive),
               )}
               style={springStyle}
             >
-              <Icon className="h-4.5 w-4.5" aria-hidden />
+              <Icon className="h-4.5 w-4.5 shrink-0" aria-hidden />
+              <span className="hidden truncate text-sm font-semibold lg:inline">{section.label}</span>
             </Link>
+            <SectionItems
+              section={section}
+              pathname={pathname}
+              className="mt-0.5 hidden border-l border-sidebar-border pl-2 ml-5 lg:block"
+            />
             <SectionFlyout section={section} icon={Icon} pathname={pathname} />
           </div>
         );

@@ -52,6 +52,9 @@ export interface CreatePickupRequestDto {
   pickupCity: string;
   pickupState: string;
   pickupPostalCode: string;
+  /** The dropped pin, when the customer set one on the map. */
+  pickupLatitude?: number;
+  pickupLongitude?: number;
   // Required unless dropAtWarehouse is true.
   pickupDate?: string; // ISO 8601 date-only
   pickupTimeSlot?: PickupTimeSlot;
@@ -93,6 +96,9 @@ export interface PickupRequestDto {
   pickupCity: string;
   pickupState: string;
   pickupPostalCode: string;
+  /** Where the customer dropped the pin — null for a typed-in address. */
+  pickupLatitude: number | null;
+  pickupLongitude: number | null;
   pickupDate: string | null; // ISO 8601 date-only
   pickupTimeSlot: PickupTimeSlot | null;
   pickupInstructions: string | null;

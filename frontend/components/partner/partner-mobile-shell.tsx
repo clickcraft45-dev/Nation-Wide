@@ -3,6 +3,7 @@
 import { type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { LogOut } from "lucide-react";
+import { NotificationsBell } from "@/components/pwa/notifications-bell";
 import type { AuthUserDto } from "@nationwide/shared-types";
 import { useAuth } from "@/state/auth-context";
 import { PARTNER_NAV_ITEMS, findNavItemForPath } from "@/lib/nav-config";
@@ -46,6 +47,8 @@ export function PartnerMobileShell({
             {current?.label ?? "Pickup Partner"}
           </p>
         </div>
+        {/* Partners need this most: a new pickup lands here the moment it is assigned. */}
+        <NotificationsBell />
         <button
           onClick={handleLogout}
           aria-label="Log out"

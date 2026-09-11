@@ -32,6 +32,10 @@ jobs:
       # Without this the admin company-logo <img> is blocked by the frontend's own img-src CSP
       # (see frontend/next.config.ts) — silently, with no console error on the server side.
       NEXT_PUBLIC_S3_ORIGIN: ${{ vars.NEXT_PUBLIC_S3_ORIGIN || 'https://nationwide-logistics-s3.s3.ap-south-1.amazonaws.com' }}
+      # Browser key for the Maps address search and the pickup pin. Public by design, like the
+      # rest of this block: it ships in every page. What protects it is the website (HTTP
+      # referrer) restriction on the key in Google Cloud, not secrecy.
+      NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: ${{ vars.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || 'AIzaSyBhblGdNAJMBcH2_8lr9AOSi8eVa9_hJ04' }}
 
     steps:
       - name: Checkout

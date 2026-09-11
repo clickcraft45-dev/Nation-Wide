@@ -3,7 +3,8 @@
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Bell, LogOut, Menu, X } from "lucide-react";
+import { LogOut, Menu, X } from "lucide-react";
+import { NotificationsBell } from "@/components/pwa/notifications-bell";
 import type { AuthUserDto } from "@nationwide/shared-types";
 import { useAuth } from "@/state/auth-context";
 import { CUSTOMER_NAV_ITEMS, CUSTOMER_TAB_ITEMS } from "@/lib/nav-config";
@@ -52,12 +53,7 @@ export function CustomerMobileShell({
           <Menu className="h-5 w-5" aria-hidden />
         </button>
         <Logo variant="horizontal" size="sm" className="mx-auto" />
-        <button
-          aria-label="Notifications"
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-        >
-          <Bell className="h-5 w-5" aria-hidden />
-        </button>
+        <NotificationsBell />
       </header>
 
       <main className="flex-1 overflow-y-auto px-4 py-4 pb-32">{children}</main>

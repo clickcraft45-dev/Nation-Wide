@@ -15,7 +15,11 @@ describe('NotificationsService', () => {
       },
     };
     queue = { on: jest.fn(), add: jest.fn().mockResolvedValue(undefined) };
-    service = new NotificationsService(queue as never, prisma as never);
+    service = new NotificationsService(
+      queue as never,
+      prisma as never,
+      { sendToCustomer: jest.fn().mockResolvedValue(undefined) } as never,
+    );
   });
 
   it('registers an error listener on the queue so a Redis blip cannot crash the process', () => {

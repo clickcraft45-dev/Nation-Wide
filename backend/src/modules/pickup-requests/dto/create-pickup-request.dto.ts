@@ -3,6 +3,8 @@ import {
   IsBoolean,
   IsIn,
   IsISO8601,
+  IsLatitude,
+  IsLongitude,
   IsOptional,
   IsString,
   IsUUID,
@@ -67,6 +69,15 @@ export class CreatePickupRequestDto {
   @MinLength(1)
   @MaxLength(20)
   pickupPostalCode?: string;
+
+  /** Where the pin was dropped, or the searched place resolved to — see PickupRequest. */
+  @IsOptional()
+  @IsLatitude()
+  pickupLatitude?: number;
+
+  @IsOptional()
+  @IsLongitude()
+  pickupLongitude?: number;
 
   // Required unless dropAtWarehouse is true — enforced at the service layer since it's
   // conditional on another field, matching how CreateQuoteDto's own pickupDate/Slot are handled.

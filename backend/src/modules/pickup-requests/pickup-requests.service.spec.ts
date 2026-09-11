@@ -131,6 +131,7 @@ describe('PickupRequestsService', () => {
       notificationsService as never,
       invoicesService as never,
       receiptsService as never,
+      { sendToAdminUser: jest.fn().mockResolvedValue(undefined) } as never,
     );
   });
 

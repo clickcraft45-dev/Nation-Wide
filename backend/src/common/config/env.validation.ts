@@ -74,6 +74,20 @@ class EnvironmentVariables {
   @IsString()
   GUPSHUP_TEMPLATES?: string;
 
+  // Web Push (PushService). Both keys unset simply disables push; generate a pair with
+  // `npx web-push generate-vapid-keys`. The private key is a secret.
+  @IsOptional()
+  @IsString()
+  VAPID_PUBLIC_KEY?: string;
+
+  @IsOptional()
+  @IsString()
+  VAPID_PRIVATE_KEY?: string;
+
+  @IsOptional()
+  @IsString()
+  VAPID_SUBJECT?: string;
+
   @IsOptional()
   @IsInt()
   @Min(1)

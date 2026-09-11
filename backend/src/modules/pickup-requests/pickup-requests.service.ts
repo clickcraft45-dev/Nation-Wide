@@ -14,6 +14,7 @@ import { PrismaService } from '../../database/prisma.service';
 import { OrdersService } from '../orders/orders.service';
 import { InvoicesService } from '../invoices/invoices.service';
 import { ReceiptsService } from '../receipts/receipts.service';
+import { PushService } from '../push/push.service';
 import {
   PricingEngineService,
   type ComputedRateOption,
@@ -98,6 +99,8 @@ export class PickupRequestsService {
     // one does; see acceptParcel.
     private readonly invoicesService: InvoicesService,
     private readonly receiptsService: ReceiptsService,
+    // The partner's own heads-up when a pickup is assigned to them; see assignPartner.
+    private readonly pushService: PushService,
   ) {}
 
   async create(
@@ -189,6 +192,12 @@ export class PickupRequestsService {
           pickupPostalCode: dto.dropAtWarehouse
             ? ''
             : (dto.pickupPostalCode ?? ''),
+          pickupLatitude: dto.dropAtWarehouse
+            ? null
+            : (dto.pickupLatitude ?? null),
+          pickupLongitude: dto.dropAtWarehouse
+            ? null
+            : (dto.pickupLongitude ?? null),
           pickupDate: dto.dropAtWarehouse
             ? null
             : dto.pickupDate
@@ -328,6 +337,26 @@ export class PickupRequestsService {
       NOTIFICATION_TEMPLATES.PICKUP_PARTNER_ASSIGNED,
       {},
     );
+
+    // The customer's message above says a partner is coming; this tells the partner, on their
+    // phone, that they have somewhere to be. Fire-and-forget like every push.
+    void this.pushService.sendToAdminUser(partnerId, {
+      title: 'New pickup assigned',
+      body: [
+        pickupRequest.pickupContactName,
+        pickupRequest.dropAtWarehouse
+          ? 'warehouse drop-off'
+          : pickupRequest.pickupCity,
+        pickupRequest.pickupDate
+          ? pickupRequest.pickupDate.toISOString().slice(0, 10)
+          : null,
+        pickupRequest.pickupTimeSlot,
+      ]
+        .filter(Boolean)
+        .join(' · '),
+      url: `/partner/pickups/${id}`,
+      tag: `pickup-${id}`,
+    });
 
     return this.findOne(id);
   }

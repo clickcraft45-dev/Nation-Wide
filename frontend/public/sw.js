@@ -49,3 +49,46 @@ self.addEventListener("fetch", (event) => {
     fetch(request).catch(() => caches.match(OFFLINE_URL)),
   );
 });
+
+/*
+ * Push notifications — shipment updates for customers, new pickups for partners. The payload is
+ * JSON from the backend's PushService: { title, body, url, tag }.
+ */
+self.addEventListener("push", (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch {
+    data = { body: event.data ? event.data.text() : "" };
+  }
+  event.waitUntil(
+    self.registration.showNotification(data.title || "NationWide Logistics", {
+      body: data.body || "",
+      icon: "/assets/icons/icon-192.png",
+      badge: "/assets/icons/icon-192.png",
+      // Same tag replaces the earlier notification for the same thing, instead of stacking five
+      // "in transit" updates for one parcel.
+      tag: data.tag,
+      data: { url: data.url || "/" },
+    }),
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const path = (event.notification.data && event.notification.data.url) || "/";
+  const target = new URL(path, self.location.origin).href;
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((windows) => {
+      // Reuse an open app window rather than opening a second copy of the app.
+      const open = windows.find((w) => new URL(w.url).origin === self.location.origin);
+      if (open) {
+        return open
+          .focus()
+          .then(() => open.navigate(target))
+          .catch(() => self.clients.openWindow(target));
+      }
+      return self.clients.openWindow(target);
+    }),
+  );
+});

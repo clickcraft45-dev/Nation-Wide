@@ -5,7 +5,7 @@ import { ClipboardList } from "lucide-react";
 import type { PickupRequestDto, PickupRequestStatusCode } from "@nationwide/shared-types";
 import { apiClient, errorMessage } from "@/lib/api-client";
 import { SearchInput } from "@/components/ui/search-input";
-import { NativeSelect } from "@/components/ui/select";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import {
   Table,
   TableHeader,
@@ -18,15 +18,14 @@ import { TableSkeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/page-state";
 import { PickupRequestStatusBadge } from "@/components/ui/status-badge";
 
-const STATUS_OPTIONS: PickupRequestStatusCode[] = [
-  "PENDING_ASSIGNMENT",
-  "ASSIGNED",
-  "SCHEDULED",
-  "OUT_FOR_PICKUP",
-  "VERIFICATION_PENDING",
-  "COMPLETED",
-  "CANCELLED",
-  "REJECTED",
+// ponytail: exact single-status match, so SCHEDULED / OUT_FOR_PICKUP / CANCELLED / REJECTED
+// only show under "All". Group them into tabs (backend `in` filter) if they need their own view.
+const STATUS_TABS: { value: PickupRequestStatusCode | ""; label: string }[] = [
+  { value: "", label: "All" },
+  { value: "PENDING_ASSIGNMENT", label: "Pending" },
+  { value: "ASSIGNED", label: "Assigned" },
+  { value: "VERIFICATION_PENDING", label: "Verification" },
+  { value: "COMPLETED", label: "Completed" },
 ];
 
 export default function AdminPickupRequestsPage() {
@@ -75,27 +74,20 @@ export default function AdminPickupRequestsPage() {
         </p>
       </div>
 
-      <div className="flex flex-col gap-3 sm:flex-row">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <SegmentedControl
+          ariaLabel="Filter by status"
+          options={STATUS_TABS}
+          value={status}
+          onChange={setStatus}
+        />
         <SearchInput
-          className="sm:w-72"
+          className="sm:ml-auto sm:w-72"
           placeholder="Customer name or phone"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           aria-label="Search pickup requests"
         />
-        <NativeSelect
-          className="sm:w-56"
-          value={status}
-          onChange={(e) => setStatus(e.target.value as PickupRequestStatusCode | "")}
-          aria-label="Filter by status"
-        >
-          <option value="">All statuses</option>
-          {STATUS_OPTIONS.map((s) => (
-            <option key={s} value={s}>
-              {s.replace(/_/g, " ")}
-            </option>
-          ))}
-        </NativeSelect>
       </div>
 
       {isLoading && <TableSkeleton columns={7} />}

@@ -1,7 +1,8 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { Bell, LogOut, User as UserIcon, ChevronRight } from "lucide-react";
+import { LogOut, User as UserIcon, ChevronRight } from "lucide-react";
+import { NotificationsBell } from "@/components/pwa/notifications-bell";
 import type { AuthUserDto } from "@nationwide/shared-types";
 import { useAuth } from "@/state/auth-context";
 import { findNavItemForPath, type NavItem } from "@/lib/nav-config";
@@ -57,12 +58,7 @@ export function Topbar({
       <Breadcrumbs pathname={pathname} items={items} />
 
       <div className="ml-auto flex items-center gap-3">
-        <button
-          aria-label="Notifications"
-          className="relative flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-white/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <Bell className="h-4.5 w-4.5" aria-hidden />
-        </button>
+        <NotificationsBell className="rounded-full hover:bg-white/60" />
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

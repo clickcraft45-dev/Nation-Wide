@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Label, FieldError } from "@/components/ui/input";
 import { DateField } from "@/components/ui/date-field";
 import { PincodeInput } from "@/components/ui/pincode-input";
+import { AddressAutocomplete } from "@/components/ui/address-autocomplete";
 import { NativeSelect } from "@/components/ui/select";
 import {
   RecipientFields,
@@ -275,11 +276,22 @@ export function ShipmentDetailsForm({
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="origin-line1">Address line 1</Label>
-            <Input
+            <AddressAutocomplete
               id="origin-line1"
               value={origin.addressLine1}
-              onChange={(e) => setOrigin({ ...origin, addressLine1: e.target.value })}
+              onChange={(addressLine1) => setOrigin((prev) => ({ ...prev, addressLine1 }))}
+              onSelect={(picked) =>
+                setOrigin((prev) => ({
+                  ...prev,
+                  addressLine1: picked.addressLine1 || prev.addressLine1,
+                  city: picked.city || prev.city,
+                  state: picked.state || prev.state,
+                  postalCode: /^\d{6}$/.test(picked.postalCode) ? picked.postalCode : prev.postalCode,
+                }))
+              }
+              regionCodes={["in"]}
               error={Boolean(errors["origin.addressLine1"])}
+              placeholder="Start typing the pickup address"
             />
           </div>
           <div className="space-y-1.5">
@@ -317,11 +329,12 @@ export function ShipmentDetailsForm({
                 id="origin-postal"
                 value={origin.postalCode}
                 onChange={(postalCode) => setOrigin((prev) => ({ ...prev, postalCode }))}
-                onResolved={({ city, state }) =>
+                onResolved={({ city, district, state }) =>
+                  // The PIN wins over a city/state typed before it; a later edit still sticks.
                   setOrigin((prev) => ({
                     ...prev,
-                    city: prev.city.trim() === "" ? city : prev.city,
-                    state: prev.state.trim() === "" ? state : prev.state,
+                    city: city || district || prev.city,
+                    state: state || prev.state,
                   }))
                 }
                 error={Boolean(errors["origin.postalCode"])}

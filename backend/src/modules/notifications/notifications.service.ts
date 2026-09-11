@@ -8,6 +8,8 @@ import type {
 } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import type { OutboundDocument } from './interfaces/messaging-provider.interface';
+import { PushService } from '../push/push.service';
+import { renderMessageBody } from './message-bodies';
 
 export const NOTIFICATIONS_QUEUE = 'notifications';
 
@@ -33,6 +35,7 @@ export class NotificationsService {
     @InjectQueue(NOTIFICATIONS_QUEUE)
     private readonly queue: Queue<NotificationJobData>,
     private readonly prisma: PrismaService,
+    private readonly push: PushService,
   ) {
     // The Queue holds its own Redis connection, separate from the Worker's — each needs its
     // own 'error' listener, or an unhandled 'error' event crashes the whole Node process
@@ -62,6 +65,17 @@ export class NotificationsService {
       { notificationId: notification.id, variables, document },
       { attempts: 3, backoff: { type: 'exponential', delay: 2000 } },
     );
+
+    // The same message as a phone notification, for customers who turned them on in the app.
+    // Riding on enqueue means every existing trigger (tracking updates, pickup steps, invoices)
+    // gets it with no change at the call site. Fire-and-forget: PushService never throws, and a
+    // push must never hold up or fail the WhatsApp send it accompanies.
+    void this.push.sendToCustomer(customerId, {
+      title: 'NationWide Logistics',
+      body: renderMessageBody(template, variables),
+      url: pushUrlFor(template),
+      tag: template,
+    });
 
     // Returns the id so a caller that has to record what it sent (InvoicesService, linking an
     // invoice to its delivery attempt) doesn't have to re-query for the row it just created.
@@ -93,4 +107,18 @@ export class NotificationsService {
       data,
     });
   }
+}
+
+/** Where tapping the phone notification lands in the customer app. */
+function pushUrlFor(template: string): string {
+  if (/invoice|receipt|payment/.test(template)) return '/documents';
+  if (/quote/.test(template)) return '/quotes';
+  if (
+    /^pickup_(request|partner|verification|or_dropoff|rejected)|^custom_text$/.test(
+      template,
+    )
+  ) {
+    return '/dashboard';
+  }
+  return '/orders';
 }

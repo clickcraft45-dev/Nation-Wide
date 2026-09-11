@@ -182,6 +182,7 @@ model Customer {
   pickupRequests PickupRequest[]
   invoices       Invoice[]
   receipts       Receipt[]
+  pushSubscriptions PushSubscription[]
   reviews        Review[]
 
   @@map("customers")
@@ -384,6 +385,10 @@ model PickupRequest {
   pickupCity         String    @map("pickup_city")
   pickupState        String    @map("pickup_state")
   pickupPostalCode   String    @map("pickup_postal_code")
+  /// Where the pin was dropped (or the searched place resolved to), so the partner navigates to
+  /// the door rather than to the middle of a PIN code. Null for a typed-in address.
+  pickupLatitude     Float?    @map("pickup_latitude")
+  pickupLongitude    Float?    @map("pickup_longitude")
   pickupDate         DateTime? @map("pickup_date") // null when dropAtWarehouse
   pickupTimeSlot     String?   @map("pickup_time_slot") // null when dropAtWarehouse
   pickupInstructions String?   @map("pickup_instructions")
@@ -770,6 +775,7 @@ model AdminUser {
   assignedPickupRequests     PickupRequest[]    @relation("PickupRequestAssignedPartner")
   issuedInvoices             Invoice[]          @relation("InvoiceIssuedBy")
   recordedReceipts           Receipt[]          @relation("ReceiptRecordedBy")
+  pushSubscriptions          PushSubscription[]
   reviewedPartnerApplications PartnerApplication[] @relation("PartnerApplicationReviewedBy")
   approvedReviews             Review[]             @relation("ReviewApprovedBy")
 
@@ -797,6 +803,28 @@ model Notification {
 
   @@index([customerId, createdAt])
   @@map("notifications")
+}
+
+/// One browser or phone that agreed to receive push notifications. The app on two devices is two
+/// rows. Exactly one of customerId / adminUserId is set: a customer's device, or a staff or
+/// pickup-partner account's.
+model PushSubscription {
+  id          String   @id @default(uuid())
+  /// The push-service URL the browser handed over. Unique, so the same device subscribing again
+  /// replaces its row rather than adding one that would deliver every notification twice.
+  endpoint    String   @unique
+  p256dh      String
+  auth        String
+  customerId  String?  @map("customer_id")
+  adminUserId String?  @map("admin_user_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  customer  Customer?  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  adminUser AdminUser? @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
+  @@index([adminUserId])
+  @@map("push_subscriptions")
 }
 
 // ---------------------------------------------------------------------------

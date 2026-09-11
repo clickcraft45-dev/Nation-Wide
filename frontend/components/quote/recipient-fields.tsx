@@ -3,6 +3,7 @@
 import type { Dispatch, ReactNode, SetStateAction } from "react";
 import { Input, Label, FieldError } from "@/components/ui/input";
 import { PincodeInput } from "@/components/ui/pincode-input";
+import { AddressAutocomplete } from "@/components/ui/address-autocomplete";
 
 /**
  * The recipient's delivery address. One component for the three places it is taken down: the
@@ -109,7 +110,25 @@ export function RecipientFields({
         </Field>
       </div>
       <Field label="Address line 1" htmlFor={`${idPrefix}-addressLine1`} error={errors.addressLine1}>
-        <Input {...field("addressLine1")} />
+        {/* Google address search: picking a suggestion fills the rest of the address. Typing
+            freely still works, and it is a plain field whenever Maps is unavailable. */}
+        <AddressAutocomplete
+          id={`${idPrefix}-addressLine1`}
+          value={value.addressLine1}
+          onChange={(addressLine1) => onChange((prev) => ({ ...prev, addressLine1 }))}
+          onSelect={(picked) =>
+            onChange((prev) => ({
+              ...prev,
+              addressLine1: picked.addressLine1 || prev.addressLine1,
+              city: picked.city || prev.city,
+              state: picked.state || prev.state,
+              postalCode: picked.postalCode || prev.postalCode,
+            }))
+          }
+          regionCodes={isIndia ? ["in"] : undefined}
+          error={Boolean(errors.addressLine1)}
+          placeholder="Start typing the address"
+        />
       </Field>
       <Field label="Address line 2 (optional)" htmlFor={`${idPrefix}-addressLine2`}>
         <Input {...field("addressLine2")} />
@@ -131,11 +150,12 @@ export function RecipientFields({
               id={`${idPrefix}-postalCode`}
               value={value.postalCode}
               onChange={(postalCode) => onChange((prev) => ({ ...prev, postalCode }))}
-              onResolved={({ city, state }) =>
+              onResolved={({ city, district, state }) =>
+                // The PIN wins over a city/state typed before it; a later edit still sticks.
                 onChange((prev) => ({
                   ...prev,
-                  city: prev.city.trim() ? prev.city : city,
-                  state: prev.state.trim() ? prev.state : state,
+                  city: city || district || prev.city,
+                  state: state || prev.state,
                 }))
               }
               error={Boolean(errors.postalCode)}

@@ -11,6 +11,7 @@ import { StubWhatsAppAdapter } from './whatsapp/stub-whatsapp.adapter';
 import { GupshupWhatsAppAdapter } from './whatsapp/gupshup-whatsapp.adapter';
 import { WhatsAppWebhookController } from './whatsapp/whatsapp-webhook.controller';
 import { AdminWhatsAppController } from './admin-whatsapp.controller';
+import { PushModule } from '../push/push.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { AdminWhatsAppController } from './admin-whatsapp.controller';
       inject: [ConfigService],
     }),
     BullModule.registerQueue({ name: NOTIFICATIONS_QUEUE }),
+    PushModule,
   ],
   controllers: [WhatsAppWebhookController, AdminWhatsAppController],
   providers: [

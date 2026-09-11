@@ -26,6 +26,8 @@ export function toPickupRequestDto(
     pickupCity: pickupRequest.pickupCity,
     pickupState: pickupRequest.pickupState,
     pickupPostalCode: pickupRequest.pickupPostalCode,
+    pickupLatitude: pickupRequest.pickupLatitude,
+    pickupLongitude: pickupRequest.pickupLongitude,
     pickupDate: pickupRequest.pickupDate
       ? pickupRequest.pickupDate.toISOString().slice(0, 10)
       : null,

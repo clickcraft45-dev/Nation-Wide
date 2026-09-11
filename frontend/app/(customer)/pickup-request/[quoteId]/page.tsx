@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, CheckCircle2, MapPinned } from "lucide-react";
 import type { QuoteDto } from "@nationwide/shared-types";
 import { apiClient, errorMessage, fieldErrors } from "@/lib/api-client";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -10,6 +10,9 @@ import { Button } from "@/components/ui/button";
 import { Input, Label, FieldError } from "@/components/ui/input";
 import { DateField } from "@/components/ui/date-field";
 import { PincodeInput } from "@/components/ui/pincode-input";
+import { AddressAutocomplete } from "@/components/ui/address-autocomplete";
+import { MapPinPicker } from "@/components/ui/map-pin-picker";
+import type { PickedAddress } from "@/lib/google-maps";
 import { NativeSelect } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/ui/page-state";
@@ -69,6 +72,9 @@ export default function PickupRequestPage() {
   const [pickupDate, setPickupDate] = useState("");
   const [pickupTimeSlot, setPickupTimeSlot] = useState(TIME_SLOTS[0].value);
   const [pickupInstructions, setPickupInstructions] = useState("");
+  // The exact spot, from the map pin or a searched address — the partner navigates to it.
+  const [pickupLocation, setPickupLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [mapOpen, setMapOpen] = useState(false);
 
   // The recipient is optional here — the partner confirms (or takes it down) at the door.
   const [addRecipient, setAddRecipient] = useState(false);
@@ -121,6 +127,18 @@ export default function PickupRequestPage() {
   function goBack() {
     if (window.history.length > 1) router.back();
     else router.push(quote ? `/quotes/${quote.id}` : "/quotes");
+  }
+
+  /** A searched address or a dropped pin: fill the address and remember the exact spot. */
+  function applyPicked(picked: PickedAddress) {
+    if (picked.addressLine1) setPickupAddressLine1(picked.addressLine1);
+    if (picked.city) setPickupCity(picked.city);
+    if (picked.state) setPickupState(picked.state);
+    // The PIN field then verifies it against India Post, exactly like a typed one.
+    if (/^\d{6}$/.test(picked.postalCode)) setPickupPostalCode(picked.postalCode);
+    if (picked.latitude != null && picked.longitude != null) {
+      setPickupLocation({ lat: picked.latitude, lng: picked.longitude });
+    }
   }
 
   // Mirrors CreatePickupRequestDto's own limits. Checking them here is not duplication for its
@@ -215,6 +233,10 @@ export default function PickupRequestPage() {
               pickupDate,
               pickupTimeSlot,
               pickupInstructions: pickupInstructions.trim() || undefined,
+              // The pin, when they set one — the partner navigates straight to it.
+              ...(pickupLocation
+                ? { pickupLatitude: pickupLocation.lat, pickupLongitude: pickupLocation.lng }
+                : {}),
             }),
         recipient: addRecipient ? toRecipientPayload(recipient) : undefined,
       });
@@ -337,12 +359,29 @@ export default function PickupRequestPage() {
               <>
                 <div className="space-y-1.5">
                   <Label htmlFor="address-1">Pickup Address</Label>
-                  <Input
+                  <AddressAutocomplete
                     id="address-1"
-                    placeholder="House / flat / street"
+                    placeholder="Search your address, or type house / flat / street"
                     value={pickupAddressLine1}
-                    onChange={(e) => setPickupAddressLine1(e.target.value)}
+                    onChange={setPickupAddressLine1}
+                    onSelect={applyPicked}
+                    regionCodes={["in"]}
                     error={Boolean(errors.pickupAddressLine1)}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setMapOpen(true)}
+                    className="inline-flex items-center gap-1.5 text-sm font-medium text-primary"
+                  >
+                    <MapPinned className="h-4 w-4" aria-hidden />
+                    {pickupLocation ? "Pin set — adjust on the map" : "Pick the exact spot on a map"}
+                  </button>
+                  <MapPinPicker
+                    open={mapOpen}
+                    onClose={() => setMapOpen(false)}
+                    onPick={applyPicked}
+                    initial={pickupLocation}
+                    title="Where should we pick up?"
                   />
                   {errors.pickupAddressLine1 && <FieldError>{errors.pickupAddressLine1}</FieldError>}
                 </div>
@@ -384,9 +423,11 @@ export default function PickupRequestPage() {
                     id="postal-code"
                     value={pickupPostalCode}
                     onChange={setPickupPostalCode}
-                    onResolved={({ city, state }) => {
-                      setPickupCity((prev) => (prev.trim() === "" ? city : prev));
-                      setPickupState((prev) => (prev.trim() === "" ? state : prev));
+                    onResolved={({ city, district, state }) => {
+                      // The PIN wins over a city/state typed before it — it is where the partner
+                      // actually drives. Fires only when the PIN changes, so a later edit sticks.
+                      setPickupCity((prev) => city || district || prev);
+                      setPickupState((prev) => state || prev);
                     }}
                     error={Boolean(errors.pickupPostalCode)}
                   />

@@ -42,30 +42,37 @@ const isDev = process.env.NODE_ENV !== "production";
  * the public marketing pages to protect inline scripts that React never generates from user input.
  *
  * So: 'unsafe-inline' for script-src, and everything else stays tight. What still holds the line —
- * 'self' means no third-party script origin can load at all; object-src 'none' kills plugin
+ * 'self' means no script origin beyond 'self', the Cloudflare beacon and Google Maps can load; object-src 'none' kills plugin
  * vectors; base-uri 'self' blocks <base> hijacking of every relative script URL; form-action
  * 'self' stops injected forms exfiltrating to another origin; frame-ancestors 'none' blocks
  * clickjacking. There is no dangerouslySetInnerHTML anywhere in this app, so React's own escaping
  * is the primary defence against the injection 'unsafe-inline' would otherwise let through.
  */
+// Google Maps JavaScript API — the address search and the pickup pin. Google's documented allowlist:
+// https://developers.google.com/maps/documentation/javascript/content-security-policy
+const MAPS_SCRIPT =
+  "https://*.googleapis.com https://*.gstatic.com *.google.com https://*.ggpht.com *.googleusercontent.com blob:";
+const MAPS_IMG = "https://*.googleapis.com https://*.gstatic.com *.google.com *.googleusercontent.com";
+const MAPS_CONNECT = "https://*.googleapis.com *.google.com https://*.gstatic.com data: blob:";
+
 const CSP = [
   "default-src 'self'",
   // Dev additionally needs 'unsafe-eval' for Turbopack's HMR runtime; production never gets it.
-  `script-src 'self' 'unsafe-inline' ${CF_BEACON_SCRIPT}${isDev ? " 'unsafe-eval'" : ""}`,
+  `script-src 'self' 'unsafe-inline' ${CF_BEACON_SCRIPT} ${MAPS_SCRIPT}${isDev ? " 'unsafe-eval'" : ""}`,
   // Tailwind/Radix ship some styling via inline <style>/style attributes at runtime. style-src is
   // a far lower-value target than script-src, so 'unsafe-inline' here is uncontroversial.
-  "style-src 'self' 'unsafe-inline'",
-  `img-src 'self' data: ${API_ORIGIN} ${S3_ORIGIN}`.trim(),
-  "font-src 'self' data:",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  `img-src 'self' data: ${API_ORIGIN} ${S3_ORIGIN} ${MAPS_IMG}`,
+  "font-src 'self' data: https://fonts.gstatic.com",
   // 'self' also covers the same-origin ws:// upgrade Turbopack's HMR socket uses in dev.
   // The beacon POSTs its measurements to cloudflareinsights.com/cdn-cgi/rum — allowing the
   // script without this just moves the CSP violation from load time to report time.
-  `connect-src 'self' ${API_ORIGIN} ${CF_BEACON_REPORT}`,
+  `connect-src 'self' ${API_ORIGIN} ${CF_BEACON_REPORT} ${MAPS_CONNECT}`,
   // Both would fall back to default-src 'self' anyway; stated explicitly because the PWA breaks
   // in a confusing way without them — a blocked worker-src makes navigator.serviceWorker.register
   // reject with a bare SecurityError, and a blocked manifest-src silently makes the app
   // uninstallable with no console message at all.
-  "worker-src 'self'",
+  "worker-src 'self' blob:",
   "manifest-src 'self'",
   "object-src 'none'",
   "base-uri 'self'",

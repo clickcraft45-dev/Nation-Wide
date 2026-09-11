@@ -31,7 +31,14 @@ import {
   type RecipientForm,
 } from "@/components/quote/recipient-fields";
 
+/**
+ * Google Maps directions to the pickup — to the pin the customer dropped when there is one (that is
+ * the actual door), and to the typed address otherwise.
+ */
 function mapsUrl(pickup: PickupRequestDto): string {
+  if (pickup.pickupLatitude != null && pickup.pickupLongitude != null) {
+    return `https://www.google.com/maps/dir/?api=1&destination=${pickup.pickupLatitude},${pickup.pickupLongitude}`;
+  }
   const address = [
     pickup.pickupAddressLine1,
     pickup.pickupAddressLine2,
@@ -41,7 +48,7 @@ function mapsUrl(pickup: PickupRequestDto): string {
   ]
     .filter(Boolean)
     .join(", ");
-  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+  return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}`;
 }
 
 const WEIGHT_STEP_KG = 0.5;
@@ -381,7 +388,7 @@ export default function PartnerPickupDetailPage() {
                       className="mt-1 inline-flex items-center gap-1.5 text-sm font-medium text-primary"
                     >
                       <MapPinned className="h-3.5 w-3.5" aria-hidden />
-                      View on Map
+                      Navigate
                     </a>
                   </>
                 )}

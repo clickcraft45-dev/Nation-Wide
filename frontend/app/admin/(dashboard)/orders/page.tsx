@@ -9,6 +9,7 @@ import { useDebouncedValue } from "@/lib/utils/use-debounced-value";
 import { Button } from "@/components/ui/button";
 import { SearchInput } from "@/components/ui/search-input";
 import { NativeSelect } from "@/components/ui/select";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Pagination } from "@/components/ui/pagination";
 import {
   Table,
@@ -27,6 +28,12 @@ type SortKey = "id" | "customer" | "status" | "createdAt";
 type SortDir = "asc" | "desc";
 
 const PAGE_SIZE = 25;
+
+const AWB_TABS = [
+  { value: "", label: "All" },
+  { value: "mapped", label: "AWB mapped" },
+  { value: "unmapped", label: "AWB not mapped" },
+];
 
 function SortableHead({
   label,
@@ -70,7 +77,6 @@ export default function AdminOrdersPage() {
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
-  const [providerFilter, setProviderFilter] = useState("");
   const [awbFilter, setAwbFilter] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("createdAt");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -88,7 +94,6 @@ export default function AdminOrdersPage() {
     });
     if (debouncedSearch.trim()) params.set("search", debouncedSearch.trim());
     if (statusFilter) params.set("status", statusFilter);
-    if (providerFilter) params.set("providerId", providerFilter);
     if (awbFilter) params.set("awb", awbFilter);
     if (kpiStatus === "in-transit" || kpiStatus === "delivered") {
       params.set("trackingGroup", kpiStatus);
@@ -116,7 +121,7 @@ export default function AdminOrdersPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, debouncedSearch, statusFilter, providerFilter, awbFilter, sortKey, sortDir, kpiStatus]);
+  }, [page, debouncedSearch, statusFilter, awbFilter, sortKey, sortDir, kpiStatus]);
 
   const customerById = useMemo(
     () => new Map(customers.map((c) => [c.id, c])),
@@ -165,7 +170,31 @@ export default function AdminOrdersPage() {
       </div>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <div className="sm:w-72">
+        <SegmentedControl
+          ariaLabel="Filter by AWB mapping"
+          options={AWB_TABS}
+          value={awbFilter}
+          onChange={(value) => {
+            handleFilterChange(setAwbFilter, value);
+            // Status filter only exists under "AWB mapped"; don't let it silently linger.
+            if (value !== "mapped") setStatusFilter("");
+          }}
+        />
+        {awbFilter === "mapped" && (
+          <NativeSelect
+            className="sm:w-44"
+            value={statusFilter}
+            onChange={(e) => handleFilterChange(setStatusFilter, e.target.value)}
+            aria-label="Filter by status"
+          >
+            <option value="">All statuses</option>
+            <option value="PENDING">Pending</option>
+            <option value="CONFIRMED">Confirmed</option>
+            <option value="COMPLETED">Completed</option>
+            <option value="CANCELLED">Cancelled</option>
+          </NativeSelect>
+        )}
+        <div className="sm:ml-auto sm:w-72">
           <SearchInput
             placeholder="Order, customer or tracking #"
             value={search}
@@ -176,41 +205,6 @@ export default function AdminOrdersPage() {
             aria-label="Search orders"
           />
         </div>
-        <NativeSelect
-          className="sm:w-44"
-          value={statusFilter}
-          onChange={(e) => handleFilterChange(setStatusFilter, e.target.value)}
-          aria-label="Filter by status"
-        >
-          <option value="">All statuses</option>
-          <option value="PENDING">Pending</option>
-          <option value="CONFIRMED">Confirmed</option>
-          <option value="COMPLETED">Completed</option>
-          <option value="CANCELLED">Cancelled</option>
-        </NativeSelect>
-        <NativeSelect
-          className="sm:w-44"
-          value={providerFilter}
-          onChange={(e) => handleFilterChange(setProviderFilter, e.target.value)}
-          aria-label="Filter by provider"
-        >
-          <option value="">All providers</option>
-          {providers.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-        </NativeSelect>
-        <NativeSelect
-          className="sm:w-44"
-          value={awbFilter}
-          onChange={(e) => handleFilterChange(setAwbFilter, e.target.value)}
-          aria-label="Filter by AWB mapping"
-        >
-          <option value="">All orders</option>
-          <option value="unmapped">AWB not mapped</option>
-          <option value="mapped">AWB mapped</option>
-        </NativeSelect>
       </div>
 
       {error && <ErrorState message={error} onRetry={load} />}

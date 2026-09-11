@@ -5,6 +5,7 @@ import { PickupRequestsService } from './pickup-requests.service';
 import { OrdersModule } from '../orders/orders.module';
 import { InvoicesModule } from '../invoices/invoices.module';
 import { ReceiptsModule } from '../receipts/receipts.module';
+import { PushModule } from '../push/push.module';
 import { PricingModule } from '../pricing/pricing.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 
@@ -16,6 +17,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     // For the bill and the receipt raised when a partner accepts a parcel they were paid for.
     InvoicesModule,
     ReceiptsModule,
+    PushModule,
   ],
   controllers: [PickupRequestsController, PartnerPickupRequestsController],
   providers: [PickupRequestsService],
