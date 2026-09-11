@@ -92,4 +92,13 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npx wrangler deploy
+        # Same reasoning as the build step: wrangler's own error is re-emitted as an annotation so
+        # it can be read through the public API. The secrets are checked for presence only — their
+        # values are never echoed.
+        run: |
+          [ -n "$CLOUDFLARE_API_TOKEN" ] || { echo "::error title=Cloudflare credentials::The CLOUDFLARE_API_TOKEN repository secret is empty or not set"; exit 1; }
+          [ -n "$CLOUDFLARE_ACCOUNT_ID" ] || { echo "::error title=Cloudflare credentials::The CLOUDFLARE_ACCOUNT_ID repository secret is empty or not set"; exit 1; }
+          npx wrangler deploy 2>&1 | tee deploy.log || {
+            echo "::error title=wrangler deploy failed::$(tail -c 3000 deploy.log | tr '\n' ' ')"
+            exit 1
+          }
