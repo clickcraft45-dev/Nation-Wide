@@ -34,7 +34,9 @@ export function MarketingFooter() {
       <div className="mx-auto max-w-6xl px-6 pt-16">
         <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-4">
           <div>
-            <Logo variant="reverse" size="sm" />
+            <Link href="/" className="inline-flex" aria-label="NationWide Logistics home">
+              <Logo variant="reverse" size="sm" />
+            </Link>
             <p className="mt-3 text-xs font-medium uppercase tracking-[0.22em] text-white/45">
               Delivering trust worldwide
             </p>

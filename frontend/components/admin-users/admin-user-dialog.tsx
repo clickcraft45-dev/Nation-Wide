@@ -3,6 +3,7 @@
 import { useState, type ReactNode } from "react";
 import type { AdminUserDto } from "@nationwide/shared-types";
 import { apiClient, ApiError } from "@/lib/api-client";
+import { NativeSelect } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toast";
 import { Dialog, DialogContent, DialogClose } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -91,15 +92,14 @@ export function AdminUserDialog({
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="user-role">Role</Label>
-              <select
+              <NativeSelect
                 id="user-role"
                 value={role}
                 onChange={(e) => setRole(e.target.value as "STAFF" | "ADMIN")}
-                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground"
               >
                 <option value="STAFF">Staff</option>
                 <option value="ADMIN">Admin</option>
-              </select>
+              </NativeSelect>
               <p className="text-xs text-muted-foreground">
                 Admins can manage pricing, issue invoices and manage these accounts. Staff cannot.
               </p>

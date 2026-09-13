@@ -62,10 +62,18 @@ export class PartnerPickupRequestsController {
     @Param('id') id: string,
     @CurrentUser() user: JwtPayload,
   ): Promise<PickupRequestDto> {
-    const pickupRequest = await this.pickupRequestsService.findOneForPartner(
-      id,
-      user.sub,
-    );
+    const pickupRequest =
+      await this.pickupRequestsService.findOneVisibleToPartner(id, user.sub);
+    return toPickupRequestDto(pickupRequest);
+  }
+
+  // Accepting an open, broadcast request — first partner to claim it gets it.
+  @Patch(':id/claim')
+  async claim(
+    @Param('id') id: string,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<PickupRequestDto> {
+    const pickupRequest = await this.pickupRequestsService.claim(id, user.sub);
     return toPickupRequestDto(pickupRequest);
   }
 

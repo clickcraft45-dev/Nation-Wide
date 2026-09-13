@@ -147,8 +147,7 @@ export default function GetQuotePage() {
         submissionKey,
       });
 
-      // Unpriced but going ahead: straight to the pickup form, where submitting auto-assigns a
-      // partner. Checked before the RATED reconciliation below, which would otherwise fall
+      // Straight to the pickup form, where submitting broadcasts the request to partners. Checked before the RATED reconciliation below, which would otherwise fall
       // through to the "no exact match" branch and show an empty comparison.
       if (quote.status === "PENDING_PICKUP_REQUEST") {
         router.push(`/pickup-request/${quote.id}`);

@@ -43,7 +43,7 @@ function ForgotPasswordForm() {
     return (
       <div className="flex min-h-screen flex-1 items-center justify-center px-6 py-12">
         <div className="w-full max-w-sm space-y-6 text-center">
-          <Logo variant="horizontal" size="md" className="mx-auto" />
+          <Link href="/" className="inline-flex" aria-label="NationWide Logistics home"><Logo variant="horizontal" size="md" /></Link>
           <MailCheck className="mx-auto h-10 w-10 text-success" aria-hidden />
           <div className="space-y-1">
             <h1 className="text-2xl font-semibold text-foreground">Check your inbox</h1>
@@ -63,7 +63,9 @@ function ForgotPasswordForm() {
   return (
     <div className="flex min-h-screen flex-1 items-center justify-center px-6 py-12">
       <div className="w-full max-w-sm space-y-8">
-        <Logo variant="horizontal" size="md" />
+        <Link href="/" className="inline-flex" aria-label="NationWide Logistics home">
+          <Logo variant="horizontal" size="md" />
+        </Link>
 
         <div className="space-y-1">
           <h1 className="text-2xl font-semibold text-foreground">Forgot your password?</h1>

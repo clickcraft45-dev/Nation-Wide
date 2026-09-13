@@ -59,7 +59,7 @@ describe('PickupRequestsService', () => {
       updateMany: jest.Mock;
       count: jest.Mock;
     };
-    adminUser: { findUnique: jest.Mock; findFirst: jest.Mock };
+    adminUser: { findUnique: jest.Mock; findMany: jest.Mock };
     order: { update: jest.Mock };
     auditLog: { create: jest.Mock };
     $transaction: jest.Mock;
@@ -69,6 +69,7 @@ describe('PickupRequestsService', () => {
   let notificationsService: { enqueue: jest.Mock };
   let invoicesService: { generateForOrder: jest.Mock };
   let receiptsService: { issueAndSendQuietly: jest.Mock };
+  let pushService: { sendToAdminUser: jest.Mock };
   let service: PickupRequestsService;
 
   beforeEach(() => {
@@ -90,10 +91,7 @@ describe('PickupRequestsService', () => {
         findUnique: jest
           .fn()
           .mockResolvedValue({ id: 'partner-1', role: 'PICKUP_PARTNER' }),
-        // Defaults to "no active partner yet" so the existing create() tests (which don't care
-        // about auto-assignment) see unchanged behavior — see the dedicated auto-assign tests
-        // below for the case where this resolves a partner.
-        findFirst: jest.fn().mockResolvedValue(null),
+        findMany: jest.fn().mockResolvedValue([]),
       },
       order: { update: jest.fn().mockResolvedValue(undefined) },
       auditLog: { create: jest.fn().mockResolvedValue(undefined) },
@@ -124,6 +122,7 @@ describe('PickupRequestsService', () => {
     receiptsService = {
       issueAndSendQuietly: jest.fn().mockResolvedValue(undefined),
     };
+    pushService = { sendToAdminUser: jest.fn().mockResolvedValue(undefined) };
     service = new PickupRequestsService(
       prisma as never,
       ordersService as never,
@@ -131,7 +130,7 @@ describe('PickupRequestsService', () => {
       notificationsService as never,
       invoicesService as never,
       receiptsService as never,
-      { sendToAdminUser: jest.fn().mockResolvedValue(undefined) } as never,
+      pushService as never,
     );
   });
 
@@ -263,11 +262,11 @@ describe('PickupRequestsService', () => {
       );
     });
 
-    it('auto-assigns the one active Pickup Partner instead of leaving it unassigned', async () => {
-      prisma.adminUser.findFirst.mockResolvedValue({
-        id: 'auto-partner-1',
-        role: 'PICKUP_PARTNER',
-      });
+    it('broadcasts to every active partner and leaves the request unassigned', async () => {
+      prisma.adminUser.findMany.mockResolvedValue([
+        { id: 'partner-1' },
+        { id: 'partner-2' },
+      ]);
 
       await service.create(
         {
@@ -283,16 +282,28 @@ describe('PickupRequestsService', () => {
         'customer-1',
       );
 
-      expect(prisma.adminUser.findFirst).toHaveBeenCalledWith({
-        where: { role: 'PICKUP_PARTNER', isActive: true },
-        orderBy: { createdAt: 'asc' },
-      });
-      expect(prisma.pickupRequest.update).toHaveBeenCalledWith(
+      expect(pushService.sendToAdminUser).toHaveBeenCalledTimes(2);
+      expect(prisma.pickupRequest.update).not.toHaveBeenCalled();
+      expect(notificationsService.enqueue).not.toHaveBeenCalledWith(
+        'customer-1',
+        'WHATSAPP',
+        'pickup_partner_assigned',
+        {},
+      );
+    });
+  });
+
+  describe('claim', () => {
+    it('assigns the claiming partner and WhatsApps the customer', async () => {
+      await service.claim('pr-1', 'partner-1');
+
+      expect(prisma.pickupRequest.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({
-            assignedPartnerId: 'auto-partner-1',
-            status: 'ASSIGNED',
-          }),
+          where: {
+            id: 'pr-1',
+            status: 'PENDING_ASSIGNMENT',
+            assignedPartnerId: null,
+          },
         }),
       );
       expect(notificationsService.enqueue).toHaveBeenCalledWith(
@@ -303,24 +314,12 @@ describe('PickupRequestsService', () => {
       );
     });
 
-    it('leaves the pickup request unassigned when no active partner exists', async () => {
-      prisma.adminUser.findFirst.mockResolvedValue(null);
-
-      await service.create(
-        {
-          quoteId: 'quote-1',
-          dropAtWarehouse: true,
-          pickupContactName: 'Jane',
-          pickupContactPhone: '+911234567890',
-          pickupAddressLine1: '123 Main St',
-          pickupCity: 'NYC',
-          pickupState: 'NY',
-          pickupPostalCode: '10001',
-        },
-        'customer-1',
+    it('rejects the partner who loses the race', async () => {
+      prisma.pickupRequest.updateMany.mockResolvedValue({ count: 0 });
+      await expect(service.claim('pr-1', 'partner-2')).rejects.toThrow(
+        BadRequestException,
       );
-
-      expect(prisma.pickupRequest.update).not.toHaveBeenCalled();
+      expect(notificationsService.enqueue).not.toHaveBeenCalled();
     });
   });
 

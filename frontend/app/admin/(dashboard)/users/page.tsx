@@ -12,6 +12,7 @@ import {
   TableHead,
   TableCell,
 } from "@/components/ui/table";
+import { NativeSelect } from "@/components/ui/select";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/page-state";
 import { Badge } from "@/components/ui/badge";
@@ -145,7 +146,7 @@ export default function AdminUsersPage() {
                   </TableCell>
                   <TableCell className="text-muted-foreground">{u.email}</TableCell>
                   <TableCell>
-                    <select
+                    <NativeSelect
                       aria-label={`Role for ${u.email}`}
                       value={u.role}
                       disabled={isSelf}
@@ -156,14 +157,14 @@ export default function AdminUsersPage() {
                           `Role changed to ${ROLE_LABELS[e.target.value as ManagedAdminRole]}`,
                         )
                       }
-                      className="rounded-md border border-border bg-background px-2 py-1 text-sm text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                      className="w-36"
                     >
                       {ROLE_OPTIONS.map((role) => (
                         <option key={role} value={role}>
                           {ROLE_LABELS[role]}
                         </option>
                       ))}
-                    </select>
+                    </NativeSelect>
                   </TableCell>
                   <TableCell>
                     <Badge variant={u.isActive ? "success" : "neutral"}>

@@ -52,7 +52,9 @@ export function CustomerMobileShell({
         >
           <Menu className="h-5 w-5" aria-hidden />
         </button>
-        <Logo variant="horizontal" size="sm" className="mx-auto" />
+        <Link href="/" className="mx-auto inline-flex" aria-label="NationWide Logistics home">
+          <Logo variant="horizontal" size="sm" />
+        </Link>
         <NotificationsBell />
       </header>
 
@@ -69,7 +71,9 @@ export function CustomerMobileShell({
           />
           <aside className="glass-raised relative flex h-full w-72 max-w-[80vw] flex-col">
             <div className="flex h-14 items-center gap-2 border-b border-border px-4">
-              <Logo variant="horizontal" size="sm" />
+              <Link href="/" className="inline-flex" aria-label="NationWide Logistics home">
+                <Logo variant="horizontal" size="sm" />
+              </Link>
               <button
                 onClick={() => setDrawerOpen(false)}
                 aria-label="Close menu"

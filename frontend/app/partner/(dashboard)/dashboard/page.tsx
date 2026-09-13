@@ -2,13 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { CalendarClock, Wallet } from "lucide-react";
+import { CalendarClock, Inbox, Wallet } from "lucide-react";
 import type { PickupPartnerDashboardSummaryDto, PickupRequestDto } from "@nationwide/shared-types";
 import { apiClient, errorMessage } from "@/lib/api-client";
 import { useAuth } from "@/state/auth-context";
 import { ErrorState } from "@/components/ui/page-state";
 import { Skeleton } from "@/components/ui/skeleton";
-import { PickupCard } from "@/components/partner/pickup-card";
+import { PickupCard, isOpenRequest } from "@/components/partner/pickup-card";
 
 const NON_TERMINAL = new Set([
   "PENDING_ASSIGNMENT",
@@ -74,14 +74,15 @@ export default function PartnerDashboardHomePage() {
     };
   }, []);
 
-  const { todayPickups, tomorrowPickups, upcomingDates } = useMemo(() => {
+  const { openRequests, todayPickups, tomorrowPickups, upcomingDates } = useMemo(() => {
     const now = new Date();
     const today = isoDate(now);
     const tomorrowD = new Date(now);
     tomorrowD.setDate(tomorrowD.getDate() + 1);
     const tomorrow = isoDate(tomorrowD);
 
-    const active = pickups.filter((p) => NON_TERMINAL.has(p.status));
+    const openRequests = pickups.filter(isOpenRequest);
+    const active = pickups.filter((p) => NON_TERMINAL.has(p.status) && !isOpenRequest(p));
     const todayPickups = active.filter((p) => p.pickupDate === today);
     const tomorrowPickups = active.filter((p) => p.pickupDate === tomorrow);
 
@@ -94,7 +95,7 @@ export default function PartnerDashboardHomePage() {
       .sort(([a], [b]) => a.localeCompare(b))
       .slice(0, 5);
 
-    return { todayPickups, tomorrowPickups, upcomingDates };
+    return { openRequests, todayPickups, tomorrowPickups, upcomingDates };
   }, [pickups]);
 
   if (error) {
@@ -121,6 +122,26 @@ export default function PartnerDashboardHomePage() {
               : formatInr((summary?.cashCollectedToday ?? 0) + (summary?.upiCollectedToday ?? 0))
           }
         />
+      </div>
+
+      {/* Always shown, even empty: this is the first thing a partner opens the app to check. */}
+      <div id="requests" className="scroll-mt-4 space-y-2">
+        <h2 className="text-sm font-semibold text-foreground">
+          Pickup Requests{" "}
+          {!isLoading && <span className="font-normal text-muted-foreground">({openRequests.length})</span>}
+        </h2>
+        {isLoading ? (
+          <Skeleton className="h-24 w-full" />
+        ) : openRequests.length === 0 ? (
+          <div className="glass flex items-center gap-3 rounded-2xl px-4 py-3 text-sm text-muted-foreground">
+            <Inbox className="h-4 w-4 shrink-0" aria-hidden />
+            No new pickup requests right now — you&apos;ll get a notification when one comes in.
+          </div>
+        ) : (
+          openRequests.map((p) => (
+            <PickupCard key={p.id} pickup={p} onClaimFailed={() => window.location.reload()} />
+          ))
+        )}
       </div>
 
       <Section title="Today's Pickups" count={todayPickups.length} isLoading={isLoading}>

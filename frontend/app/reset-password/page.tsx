@@ -48,7 +48,7 @@ function ResetPasswordForm() {
   if (!token) {
     return (
       <div className="w-full max-w-sm space-y-6 text-center">
-        <Logo variant="horizontal" size="md" className="mx-auto" />
+        <Link href="/" className="inline-flex" aria-label="NationWide Logistics home"><Logo variant="horizontal" size="md" /></Link>
         <div className="space-y-1">
           <h1 className="text-2xl font-semibold text-foreground">Link incomplete</h1>
           <p className="text-sm text-muted-foreground">
@@ -69,7 +69,7 @@ function ResetPasswordForm() {
   if (done) {
     return (
       <div className="w-full max-w-sm space-y-6 text-center">
-        <Logo variant="horizontal" size="md" className="mx-auto" />
+        <Link href="/" className="inline-flex" aria-label="NationWide Logistics home"><Logo variant="horizontal" size="md" /></Link>
         <CheckCircle2 className="mx-auto h-10 w-10 text-success" aria-hidden />
         <div className="space-y-1">
           <h1 className="text-2xl font-semibold text-foreground">Password updated</h1>
@@ -86,7 +86,9 @@ function ResetPasswordForm() {
 
   return (
     <div className="w-full max-w-sm space-y-8">
-      <Logo variant="horizontal" size="md" />
+      <Link href="/" className="inline-flex" aria-label="NationWide Logistics home">
+        <Logo variant="horizontal" size="md" />
+      </Link>
 
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold text-foreground">Choose a new password</h1>

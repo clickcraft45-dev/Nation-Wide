@@ -152,7 +152,7 @@ export function Sidebar({ items, groups }: { items: NavItem[]; groups?: NavGroup
     // label and its items listed inline, so there is nothing to hover for.
     <div className="flex w-16 shrink-0 flex-col items-center gap-2 border-r border-sidebar-border bg-sidebar-bg px-3 py-3 lg:w-60 lg:items-stretch lg:overflow-y-auto lg:scrollbar-thin lg:[scrollbar-color:#3f3f46_transparent]">
       <Link
-        href={sections[0]?.items[0]?.href ?? "/"}
+        href="/"
         className="mb-1 flex h-10 w-10 shrink-0 items-center justify-center lg:w-full lg:justify-start lg:px-1"
         aria-label="NationWide Logistics home"
       >

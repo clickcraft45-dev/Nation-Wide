@@ -30,26 +30,7 @@ import {
   type RecipientErrors,
   type RecipientForm,
 } from "@/components/quote/recipient-fields";
-
-/**
- * Google Maps directions to the pickup — to the pin the customer dropped when there is one (that is
- * the actual door), and to the typed address otherwise.
- */
-function mapsUrl(pickup: PickupRequestDto): string {
-  if (pickup.pickupLatitude != null && pickup.pickupLongitude != null) {
-    return `https://www.google.com/maps/dir/?api=1&destination=${pickup.pickupLatitude},${pickup.pickupLongitude}`;
-  }
-  const address = [
-    pickup.pickupAddressLine1,
-    pickup.pickupAddressLine2,
-    pickup.pickupCity,
-    pickup.pickupState,
-    pickup.pickupPostalCode,
-  ]
-    .filter(Boolean)
-    .join(", ");
-  return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}`;
-}
+import { isOpenRequest, mapsUrl, useClaimPickup } from "@/components/partner/pickup-card";
 
 const WEIGHT_STEP_KG = 0.5;
 const PARTNER_PAYMENT_METHODS: { value: PaymentMethodCode; label: string }[] = [
@@ -80,6 +61,7 @@ export default function PartnerPickupDetailPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [isArriving, setIsArriving] = useState(false);
+  const { claim, isClaiming } = useClaimPickup();
 
   // Verification form state.
   const [verifiedWeightKg, setVerifiedWeightKg] = useState("");
@@ -117,10 +99,11 @@ export default function PartnerPickupDetailPage() {
   const [rejectReason, setRejectReason] = useState("");
   const [isRejecting, setIsRejecting] = useState(false);
 
-  // No rateProviderId means the pricing engine never produced an option for this shipment — the
-  // quote went straight to pickup unpriced (see QuotesService.create), so the price is set here
-  // rather than recalculated. The manual-quote path lands here too, and works the same way.
-  const needsManualPrice = pickup !== null && pickup.rateProviderId === null;
+  // No rate card and no admin-set price: only older unpriced pickups (unpriced quotes now go to an
+  // admin first — see QuotesService.create), so the partner names the price at the door. An
+  // admin-quoted pickup already carries its price in estimatedPrice.
+  const needsManualPrice =
+    pickup !== null && pickup.rateProviderId === null && pickup.estimatedPrice <= 0;
 
   function load() {
     setIsLoading(true);
@@ -200,6 +183,12 @@ export default function PartnerPickupDetailPage() {
     } finally {
       setIsArriving(false);
     }
+  }
+
+  async function handleClaim() {
+    const updated = await claim(params.id);
+    if (updated) setPickup(updated);
+    else load();
   }
 
   async function handleVerify() {
@@ -328,7 +317,8 @@ export default function PartnerPickupDetailPage() {
   }
 
   const isTerminal = ["COMPLETED", "CANCELLED", "REJECTED"].includes(pickup.status);
-  const canReject = !isTerminal;
+  const isOpen = isOpenRequest(pickup);
+  const canReject = !isTerminal && !isOpen;
   const step: Step = !pickup.arrivedAt ? "arrived" : !pickup.paymentCollectedAt ? "verify" : "complete";
   const showVerificationForm = step === "verify" && !pickup.verifiedAt;
   const showPaymentForm = step === "verify" && !!pickup.verifiedAt;
@@ -350,7 +340,7 @@ export default function PartnerPickupDetailPage() {
         <PickupRequestStatusBadge status={pickup.status} />
       </div>
 
-      {!isTerminal && (
+      {!isTerminal && !isOpen && (
         <Stepper steps={STEPPER_STEPS} currentIndex={STEP_ORDER.indexOf(step)} />
       )}
 
@@ -442,10 +432,17 @@ export default function PartnerPickupDetailPage() {
             </CardContent>
           </Card>
 
-          <Button size="lg" className="w-full" onClick={handleArrive} isLoading={isArriving}>
-            <Check className="h-5 w-5" aria-hidden />
-            Arrived at Pickup
-          </Button>
+          {isOpen ? (
+            <Button size="lg" className="w-full" onClick={handleClaim} isLoading={isClaiming}>
+              <Check className="h-5 w-5" aria-hidden />
+              Accept Pickup
+            </Button>
+          ) : (
+            <Button size="lg" className="w-full" onClick={handleArrive} isLoading={isArriving}>
+              <Check className="h-5 w-5" aria-hidden />
+              Arrived at Pickup
+            </Button>
+          )}
         </div>
       )}
 

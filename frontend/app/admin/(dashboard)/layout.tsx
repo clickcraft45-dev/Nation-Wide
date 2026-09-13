@@ -24,7 +24,7 @@ export default function AdminDashboardLayout({ children }: { children: React.Rea
     } else if (user.role === "PICKUP_PARTNER") {
       // Pickup Partners get their own tablet-friendly dashboard/nav tree, not a filtered
       // slice of the admin shell — the two audiences see almost none of the same screens.
-      router.replace("/partner/dashboard");
+      router.replace("/partner/requests");
     }
   }, [isLoading, user, router, pathname]);
 

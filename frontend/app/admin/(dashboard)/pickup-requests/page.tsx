@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ClipboardList } from "lucide-react";
 import type { PickupRequestDto, PickupRequestStatusCode } from "@nationwide/shared-types";
 import { apiClient, errorMessage } from "@/lib/api-client";
@@ -17,6 +17,15 @@ import {
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/page-state";
 import { PickupRequestStatusBadge } from "@/components/ui/status-badge";
+import { PickupsMap, type MapPoint } from "@/components/ui/pickups-map";
+
+// Colour by where the pickup is in its life, so the map reads at a glance.
+function statusColor(status: PickupRequestStatusCode): string {
+  if (status === "PENDING_ASSIGNMENT") return "#ea580c";
+  if (status === "COMPLETED") return "#6b7280";
+  if (status === "CANCELLED" || status === "REJECTED") return "#9ca3af";
+  return "#16a34a";
+}
 
 // ponytail: exact single-status match, so SCHEDULED / OUT_FOR_PICKUP / CANCELLED / REJECTED
 // only show under "All". Group them into tabs (backend `in` filter) if they need their own view.
@@ -34,6 +43,23 @@ export default function AdminPickupRequestsPage() {
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<PickupRequestStatusCode | "">("");
   const [search, setSearch] = useState("");
+  const [view, setView] = useState<"list" | "map">("list");
+
+  const points = useMemo<MapPoint[]>(
+    () =>
+      pickupRequests
+        .filter((p) => p.pickupLatitude != null && p.pickupLongitude != null)
+        .map((p) => ({
+          id: p.id,
+          lat: p.pickupLatitude!,
+          lng: p.pickupLongitude!,
+          title: p.customerName,
+          subtitle: `${p.pickupAddressLine1}, ${p.pickupCity} · ${p.assignedPartnerName ?? "Unassigned"} · ${p.status.replace(/_/g, " ").toLowerCase()}`,
+          href: `/admin/pickup-requests/${p.id}`,
+          color: statusColor(p.status),
+        })),
+    [pickupRequests],
+  );
 
   function load() {
     setIsLoading(true);
@@ -88,7 +114,29 @@ export default function AdminPickupRequestsPage() {
           onChange={(e) => setSearch(e.target.value)}
           aria-label="Search pickup requests"
         />
+        <SegmentedControl
+          ariaLabel="View"
+          options={[
+            { value: "list", label: "List" },
+            { value: "map", label: "Map" },
+          ]}
+          value={view}
+          onChange={setView}
+        />
       </div>
+
+      {view === "map" && !error && (
+        <div className="space-y-2">
+          <PickupsMap points={points} className="h-[65vh] min-h-96" />
+          <p className="text-xs text-muted-foreground">
+            <span style={{ color: "#ea580c" }}>●</span> Awaiting a partner ·{" "}
+            <span style={{ color: "#16a34a" }}>●</span> In progress ·{" "}
+            <span style={{ color: "#6b7280" }}>●</span> Closed
+            {pickupRequests.length - points.length > 0 &&
+              ` · ${pickupRequests.length - points.length} without a map pin (warehouse drop-offs or typed addresses)`}
+          </p>
+        </div>
+      )}
 
       {isLoading && <TableSkeleton columns={7} />}
       {!isLoading && error && <ErrorState message={error} onRetry={load} />}
@@ -99,7 +147,7 @@ export default function AdminPickupRequestsPage() {
         />
       )}
 
-      {!isLoading && !error && pickupRequests.length > 0 && (
+      {view === "list" && !isLoading && !error && pickupRequests.length > 0 && (
         <Table>
           <TableHeader>
             <TableRow>

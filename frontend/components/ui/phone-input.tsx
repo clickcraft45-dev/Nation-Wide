@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { NativeSelect } from "@/components/ui/select";
 import { cn } from "@/lib/utils/cn";
 import { Input } from "@/components/ui/input";
 import {
@@ -79,17 +80,13 @@ export function PhoneInput({
 
   return (
     <div className={cn("flex gap-2", className)}>
-      <select
+      <NativeSelect
         value={countryCode}
         onChange={(e) => selectCountry(e.target.value)}
         disabled={disabled}
         aria-label="Country calling code"
-        className={cn(
-          "w-28 shrink-0 rounded-lg border bg-background px-2 text-sm text-foreground",
-          "focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/25",
-          "disabled:cursor-not-allowed disabled:opacity-60",
-          error ? "border-destructive" : "border-border",
-        )}
+        aria-invalid={error || undefined}
+        className="w-28"
       >
         {countries.map((country) => (
           // The dial code leads, because that is what someone is scanning the list for; the name
@@ -98,7 +95,7 @@ export function PhoneInput({
             {country.dial} {country.code}
           </option>
         ))}
-      </select>
+      </NativeSelect>
       <Input
         id={id}
         type="tel"

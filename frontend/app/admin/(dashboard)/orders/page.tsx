@@ -8,7 +8,6 @@ import { apiClient } from "@/lib/api-client";
 import { useDebouncedValue } from "@/lib/utils/use-debounced-value";
 import { Button } from "@/components/ui/button";
 import { SearchInput } from "@/components/ui/search-input";
-import { NativeSelect } from "@/components/ui/select";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Pagination } from "@/components/ui/pagination";
 import {
@@ -33,6 +32,14 @@ const AWB_TABS = [
   { value: "", label: "All" },
   { value: "mapped", label: "AWB mapped" },
   { value: "unmapped", label: "AWB not mapped" },
+];
+
+const STATUS_TABS = [
+  { value: "", label: "All statuses" },
+  { value: "PENDING", label: "Pending" },
+  { value: "CONFIRMED", label: "Confirmed" },
+  { value: "COMPLETED", label: "Completed" },
+  { value: "CANCELLED", label: "Cancelled" },
 ];
 
 function SortableHead({
@@ -180,20 +187,6 @@ export default function AdminOrdersPage() {
             if (value !== "mapped") setStatusFilter("");
           }}
         />
-        {awbFilter === "mapped" && (
-          <NativeSelect
-            className="sm:w-44"
-            value={statusFilter}
-            onChange={(e) => handleFilterChange(setStatusFilter, e.target.value)}
-            aria-label="Filter by status"
-          >
-            <option value="">All statuses</option>
-            <option value="PENDING">Pending</option>
-            <option value="CONFIRMED">Confirmed</option>
-            <option value="COMPLETED">Completed</option>
-            <option value="CANCELLED">Cancelled</option>
-          </NativeSelect>
-        )}
         <div className="sm:ml-auto sm:w-72">
           <SearchInput
             placeholder="Order, customer or tracking #"
@@ -206,6 +199,16 @@ export default function AdminOrdersPage() {
           />
         </div>
       </div>
+      {awbFilter === "mapped" && (
+        <div className="flex">
+          <SegmentedControl
+            ariaLabel="Filter by status"
+            options={STATUS_TABS}
+            value={statusFilter}
+            onChange={(value) => handleFilterChange(setStatusFilter, value)}
+          />
+        </div>
+      )}
 
       {error && <ErrorState message={error} onRetry={load} />}
       {!error && isLoading && <TableSkeleton columns={7} />}

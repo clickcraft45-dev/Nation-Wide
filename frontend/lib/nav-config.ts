@@ -1,5 +1,7 @@
 import {
   LayoutDashboard,
+  History,
+  Inbox,
   Package,
   PackagePlus,
   Users,
@@ -119,8 +121,10 @@ export function filterNavGroupsByRole(groups: NavGroup[], role: Role): NavGroup[
 // A Pickup Partner's dashboard is a wholly separate audience from Orders/Customers/Pricing/etc
 // — deliberately its own short list, not a role-filtered slice of ADMIN_NAV_ITEMS.
 export const PARTNER_NAV_ITEMS: NavItem[] = [
+  { label: "Requests", href: "/partner/requests", icon: Inbox },
   { label: "Dashboard", href: "/partner/dashboard", icon: LayoutDashboard },
-  { label: "Scheduled Pickups", href: "/partner/pickups", icon: CalendarClock },
+  { label: "Pickups", href: "/partner/pickups", icon: CalendarClock },
+  { label: "History", href: "/partner/history", icon: History },
 ];
 
 // Full nav — surfaced in the mobile shell's hamburger drawer (see CustomerMobileShell). Kept

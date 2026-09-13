@@ -218,26 +218,70 @@ export class PickupRequestsService {
       {},
     );
 
-    // Single-partner operation (for now): every new pickup request auto-assigns to the one
-    // active Pickup Partner instead of sitting in PENDING_ASSIGNMENT for an admin to hand-pick —
-    // there's no dispatch decision to make when there's only one partner. Falls back to
-    // PENDING_ASSIGNMENT (admin can still assign manually via PATCH .../assign) if no active
-    // partner exists yet. actorId is the partner's own id — there's no human admin behind this
-    // assignment, and AuditLog.actorId is an AdminUser FK, so the assignee is the only valid,
-    // meaningful actor to record.
-    const autoAssignPartner = await this.prisma.adminUser.findFirst({
+    // Broadcast, not auto-assign (Rapido/Blinkit style): the request stays PENDING_ASSIGNMENT
+    // and every active partner sees it in their open-requests list until one claims it (see
+    // claim). An admin can still hand-assign via PATCH .../assign.
+    const partners = await this.prisma.adminUser.findMany({
       where: { role: 'PICKUP_PARTNER', isActive: true },
-      orderBy: { createdAt: 'asc' },
+      select: { id: true },
     });
-    if (autoAssignPartner) {
-      await this.assignPartner(
-        created.id,
-        autoAssignPartner.id,
-        autoAssignPartner.id,
-      );
+    for (const partner of partners) {
+      void this.pushService.sendToAdminUser(partner.id, {
+        title: 'New pickup request',
+        body: [
+          dto.pickupContactName,
+          dto.dropAtWarehouse ? 'warehouse drop-off' : dto.pickupCity,
+          dto.pickupTimeSlot,
+        ]
+          .filter(Boolean)
+          .join(' · '),
+        url: `/partner/pickups/${created.id}`,
+        tag: `pickup-${created.id}`,
+      });
     }
 
     return this.findOne(created.id);
+  }
+
+  // A partner taking an open request. The WHERE re-checks "still unclaimed" against the database,
+  // so when two partners tap Accept at the same moment exactly one wins and the other gets a
+  // clear "already taken" instead of both believing the pickup is theirs.
+  async claim(
+    id: string,
+    partnerId: string,
+  ): Promise<PickupRequestWithDetails> {
+    const won = await this.prisma.pickupRequest.updateMany({
+      where: { id, status: 'PENDING_ASSIGNMENT', assignedPartnerId: null },
+      data: {
+        assignedPartnerId: partnerId,
+        assignedAt: new Date(),
+        status: 'ASSIGNED',
+      },
+    });
+    if (won.count === 0) {
+      throw new BadRequestException(
+        'This pickup request has already been taken by another partner',
+      );
+    }
+
+    const pickupRequest = await this.findOne(id);
+    await this.prisma.auditLog.create({
+      data: {
+        actorId: partnerId,
+        action: 'PICKUP_REQUEST_PARTNER_ASSIGNED',
+        entity: 'PickupRequest',
+        entityId: id,
+        before: { assignedPartnerId: null },
+        after: { assignedPartnerId: partnerId },
+      },
+    });
+    await this.notificationsService.enqueue(
+      pickupRequest.customerId,
+      'WHATSAPP',
+      NOTIFICATION_TEMPLATES.PICKUP_PARTNER_ASSIGNED,
+      {},
+    );
+    return pickupRequest;
   }
 
   findAllForCustomer(customerId: string): Promise<PickupRequestWithDetails[]> {
@@ -365,8 +409,12 @@ export class PickupRequestsService {
     partnerId: string,
     query: QueryPickupRequestsDto,
   ): Promise<PickupRequestWithDetails[]> {
+    // Their own pickups plus every open, unclaimed request up for grabs.
     const where: Prisma.PickupRequestWhereInput = {
-      assignedPartnerId: partnerId,
+      OR: [
+        { assignedPartnerId: partnerId },
+        { assignedPartnerId: null, status: 'PENDING_ASSIGNMENT' },
+      ],
     };
     if (query.status) where.status = query.status;
     return this.prisma.pickupRequest.findMany({
@@ -374,6 +422,22 @@ export class PickupRequestsService {
       orderBy: { pickupDate: 'asc' },
       ...withDetails,
     });
+  }
+
+  // Read-only view: an open request is visible to every partner so they can decide to claim it.
+  // Every action below still goes through findOneForPartner, which requires the claim first.
+  async findOneVisibleToPartner(
+    id: string,
+    partnerId: string,
+  ): Promise<PickupRequestWithDetails> {
+    const pickupRequest = await this.findOne(id);
+    const isOpen =
+      pickupRequest.assignedPartnerId === null &&
+      pickupRequest.status === 'PENDING_ASSIGNMENT';
+    if (!isOpen && pickupRequest.assignedPartnerId !== partnerId) {
+      throw new NotFoundException(`Pickup request ${id} not found`);
+    }
+    return pickupRequest;
   }
 
   async findOneForPartner(

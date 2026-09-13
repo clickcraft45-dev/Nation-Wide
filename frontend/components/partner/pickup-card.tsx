@@ -1,29 +1,85 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { MapPin, Phone, Scale } from "lucide-react";
+import { MapPin, Navigation, Phone, Scale } from "lucide-react";
 import type { PickupRequestDto } from "@nationwide/shared-types";
+import { apiClient, errorMessage } from "@/lib/api-client";
 import { PickupRequestStatusBadge } from "@/components/ui/status-badge";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/toast";
 
 function shipmentLabel(type: PickupRequestDto["shipmentType"]): string {
   return type.charAt(0) + type.slice(1).toLowerCase();
+}
+
+/** A broadcast request no partner has taken yet — any partner may accept it. */
+export function isOpenRequest(pickup: PickupRequestDto): boolean {
+  return pickup.status === "PENDING_ASSIGNMENT" && pickup.assignedPartnerId === null;
+}
+
+/**
+ * Google Maps directions to the pickup — to the pin the customer dropped when there is one (that is
+ * the actual door), and to the typed address otherwise.
+ */
+export function mapsUrl(pickup: PickupRequestDto): string {
+  if (pickup.pickupLatitude != null && pickup.pickupLongitude != null) {
+    return `https://www.google.com/maps/dir/?api=1&destination=${pickup.pickupLatitude},${pickup.pickupLongitude}`;
+  }
+  const address = [
+    pickup.pickupAddressLine1,
+    pickup.pickupAddressLine2,
+    pickup.pickupCity,
+    pickup.pickupState,
+    pickup.pickupPostalCode,
+  ]
+    .filter(Boolean)
+    .join(", ");
+  return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}`;
+}
+
+/** Claims an open request; resolves to the updated pickup, or null when someone else got it first. */
+export function useClaimPickup() {
+  const { showToast } = useToast();
+  const [isClaiming, setIsClaiming] = useState(false);
+
+  async function claim(id: string): Promise<PickupRequestDto | null> {
+    setIsClaiming(true);
+    try {
+      const updated = await apiClient.patch<PickupRequestDto>(`/partner/pickup-requests/${id}/claim`, {});
+      showToast({ variant: "success", title: "Pickup accepted — the customer has been notified" });
+      return updated;
+    } catch (err) {
+      showToast({ variant: "error", title: errorMessage(err, "Couldn't accept this pickup.") });
+      return null;
+    } finally {
+      setIsClaiming(false);
+    }
+  }
+
+  return { claim, isClaiming };
 }
 
 // One pickup, one large tappable card — the primary unit of the mobile home/list screens.
 // Deliberately dense but single-column: everything the partner needs to recognize a stop is
 // visible without opening it, nothing requires horizontal scrolling.
 //
-// This is a clickable div rather than a Link because the card also embeds a real "tel:" anchor
-// (tap-to-call) — nesting an <a> inside next/link's <a> would be invalid HTML.
-export function PickupCard({ pickup }: { pickup: PickupRequestDto }) {
+// This is a clickable div rather than a Link because the card also embeds real anchors
+// (tap-to-call, directions) — nesting an <a> inside next/link's <a> would be invalid HTML.
+export function PickupCard({ pickup, onClaimFailed }: { pickup: PickupRequestDto; onClaimFailed?: () => void }) {
   const router = useRouter();
+  const { claim, isClaiming } = useClaimPickup();
   const weight = pickup.verifiedWeightKg ?? pickup.estimatedWeightKg;
   const amount = pickup.verifiedPrice ?? pickup.estimatedPrice;
   const href = `/partner/pickups/${pickup.id}`;
+  const open = isOpenRequest(pickup);
 
   function openDetail() {
     router.push(href);
   }
+
+  const iconLink =
+    "flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-info-bg text-primary";
 
   return (
     <div
@@ -31,6 +87,7 @@ export function PickupCard({ pickup }: { pickup: PickupRequestDto }) {
       tabIndex={0}
       onClick={openDetail}
       onKeyDown={(e) => {
+        if (e.target !== e.currentTarget) return;
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
           openDetail();
@@ -42,12 +99,24 @@ export function PickupCard({ pickup }: { pickup: PickupRequestDto }) {
         <p className="text-base font-semibold text-foreground">{pickup.pickupContactName}</p>
         <div className="flex shrink-0 items-center gap-2">
           <PickupRequestStatusBadge status={pickup.status} />
+          {!pickup.dropAtWarehouse && (
+            <a
+              href={mapsUrl(pickup)}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              aria-label={`Directions to ${pickup.pickupContactName}`}
+              className={iconLink}
+            >
+              <Navigation className="h-4 w-4" aria-hidden />
+            </a>
+          )}
           {/* Tap-to-call without opening the pickup — the partner is often mid-walk to the door. */}
           <a
             href={`tel:${pickup.pickupContactPhone}`}
             onClick={(e) => e.stopPropagation()}
             aria-label={`Call ${pickup.pickupContactName}`}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-info-bg text-primary"
+            className={iconLink}
           >
             <Phone className="h-4 w-4" aria-hidden />
           </a>
@@ -78,6 +147,22 @@ export function PickupCard({ pickup }: { pickup: PickupRequestDto }) {
           {pickup.currency} {Math.round(amount).toLocaleString("en-IN")}
         </p>
       </div>
+
+      {open && (
+        <Button
+          size="lg"
+          className="mt-3 w-full"
+          isLoading={isClaiming}
+          onClick={async (e) => {
+            e.stopPropagation();
+            const updated = await claim(pickup.id);
+            if (updated) router.push(href);
+            else onClaimFailed?.();
+          }}
+        >
+          Accept Pickup
+        </Button>
+      )}
     </div>
   );
 }

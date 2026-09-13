@@ -12,7 +12,8 @@ import { DateField } from "@/components/ui/date-field";
 import { PincodeInput } from "@/components/ui/pincode-input";
 import { AddressAutocomplete } from "@/components/ui/address-autocomplete";
 import { MapPinPicker } from "@/components/ui/map-pin-picker";
-import type { PickedAddress } from "@/lib/google-maps";
+import { googleMapsEnabled, type PickedAddress } from "@/lib/google-maps";
+import { PickupsMap } from "@/components/ui/pickups-map";
 import { NativeSelect } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/ui/page-state";
@@ -45,6 +46,8 @@ function maxPickupDateIso(): string {
 interface FormErrors {
   pickupContactName?: string;
   pickupContactPhone?: string;
+  pickupLocation?: string;
+  pickupHouse?: string;
   pickupAddressLine1?: string;
   pickupCity?: string;
   pickupState?: string;
@@ -64,6 +67,8 @@ export default function PickupRequestPage() {
   const [dropAtWarehouse, setDropAtWarehouse] = useState(false);
   const [pickupContactName, setPickupContactName] = useState("");
   const [pickupContactPhone, setPickupContactPhone] = useState("");
+  // House / flat / floor — what the map can't know. Put in front of the street line on submit.
+  const [pickupHouse, setPickupHouse] = useState("");
   const [pickupAddressLine1, setPickupAddressLine1] = useState("");
   const [pickupAddressLine2, setPickupAddressLine2] = useState("");
   const [pickupCity, setPickupCity] = useState("");
@@ -75,6 +80,7 @@ export default function PickupRequestPage() {
   // The exact spot, from the map pin or a searched address — the partner navigates to it.
   const [pickupLocation, setPickupLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [mapOpen, setMapOpen] = useState(false);
+  const [pickedLabel, setPickedLabel] = useState("");
 
   // The recipient is optional here — the partner confirms (or takes it down) at the door.
   const [addRecipient, setAddRecipient] = useState(false);
@@ -138,7 +144,12 @@ export default function PickupRequestPage() {
     if (/^\d{6}$/.test(picked.postalCode)) setPickupPostalCode(picked.postalCode);
     if (picked.latitude != null && picked.longitude != null) {
       setPickupLocation({ lat: picked.latitude, lng: picked.longitude });
+      setPickedLabel(picked.formatted);
     }
+  }
+
+  function fullLine1(): string {
+    return [pickupHouse.trim(), pickupAddressLine1.trim()].filter(Boolean).join(", ");
   }
 
   // Mirrors CreatePickupRequestDto's own limits. Checking them here is not duplication for its
@@ -163,9 +174,14 @@ export default function PickupRequestPage() {
     }
 
     if (!dropAtWarehouse) {
+      // The partner navigates to the pin, so it is required whenever the map is available.
+      if (googleMapsEnabled() && !pickupLocation) {
+        next.pickupLocation = "Select your pickup location on the map.";
+      }
+      if (!pickupHouse.trim()) next.pickupHouse = "Enter your house / flat number.";
       if (!pickupAddressLine1.trim()) {
         next.pickupAddressLine1 = "Enter your pickup address.";
-      } else if (pickupAddressLine1.trim().length > 200) {
+      } else if (fullLine1().length > 200) {
         next.pickupAddressLine1 = "Keep the address under 200 characters.";
       }
       if (!pickupCity.trim()) next.pickupCity = "Enter a city.";
@@ -225,7 +241,7 @@ export default function PickupRequestPage() {
         ...(dropAtWarehouse
           ? {}
           : {
-              pickupAddressLine1: pickupAddressLine1.trim(),
+              pickupAddressLine1: fullLine1(),
               pickupAddressLine2: pickupAddressLine2.trim() || undefined,
               pickupCity: pickupCity.trim(),
               pickupState: pickupState.trim(),
@@ -357,25 +373,29 @@ export default function PickupRequestPage() {
 
             {!dropAtWarehouse && (
               <>
-                <div className="space-y-1.5">
-                  <Label htmlFor="address-1">Pickup Address</Label>
-                  <AddressAutocomplete
-                    id="address-1"
-                    placeholder="Search your address, or type house / flat / street"
-                    value={pickupAddressLine1}
-                    onChange={setPickupAddressLine1}
-                    onSelect={applyPicked}
-                    regionCodes={["in"]}
-                    error={Boolean(errors.pickupAddressLine1)}
-                  />
-                  <button
+                <div className="space-y-2">
+                  <Label>Pickup Location</Label>
+                  {pickupLocation ? (
+                    <>
+                      {/* Remounted per pin so the preview re-centres on a changed location. */}
+                      <PickupsMap
+                        key={`${pickupLocation.lat},${pickupLocation.lng}`}
+                        points={[{ id: "pickup", title: "Pickup here", ...pickupLocation }]}
+                        className="h-40"
+                      />
+                      {pickedLabel && <p className="text-sm text-foreground">{pickedLabel}</p>}
+                    </>
+                  ) : null}
+                  <Button
                     type="button"
+                    variant={pickupLocation ? "secondary" : "primary"}
+                    className="w-full"
                     onClick={() => setMapOpen(true)}
-                    className="inline-flex items-center gap-1.5 text-sm font-medium text-primary"
+                    aria-invalid={Boolean(errors.pickupLocation)}
                   >
                     <MapPinned className="h-4 w-4" aria-hidden />
-                    {pickupLocation ? "Pin set — adjust on the map" : "Pick the exact spot on a map"}
-                  </button>
+                    {pickupLocation ? "Change location on map" : "Select pickup location on map"}
+                  </Button>
                   <MapPinPicker
                     open={mapOpen}
                     onClose={() => setMapOpen(false)}
@@ -383,10 +403,34 @@ export default function PickupRequestPage() {
                     initial={pickupLocation}
                     title="Where should we pick up?"
                   />
+                  {errors.pickupLocation && <FieldError>{errors.pickupLocation}</FieldError>}
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="house">House / Flat / Floor No.</Label>
+                  <Input
+                    id="house"
+                    placeholder="e.g. Flat 402, 4th Floor, Sai Residency"
+                    value={pickupHouse}
+                    onChange={(e) => setPickupHouse(e.target.value)}
+                    error={Boolean(errors.pickupHouse)}
+                  />
+                  {errors.pickupHouse && <FieldError>{errors.pickupHouse}</FieldError>}
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="address-1">Street / Area</Label>
+                  <AddressAutocomplete
+                    id="address-1"
+                    placeholder="Filled from the map — or search / type it"
+                    value={pickupAddressLine1}
+                    onChange={setPickupAddressLine1}
+                    onSelect={applyPicked}
+                    regionCodes={["in"]}
+                    error={Boolean(errors.pickupAddressLine1)}
+                  />
                   {errors.pickupAddressLine1 && <FieldError>{errors.pickupAddressLine1}</FieldError>}
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="address-2">Landmark (optional)</Label>
+                  <Label htmlFor="address-2">Nearby Landmark (optional)</Label>
                   <Input
                     id="address-2"
                     value={pickupAddressLine2}

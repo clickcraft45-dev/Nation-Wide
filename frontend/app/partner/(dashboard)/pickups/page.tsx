@@ -8,7 +8,7 @@ import { apiClient, errorMessage } from "@/lib/api-client";
 import { SearchInput } from "@/components/ui/search-input";
 import { EmptyState, ErrorState } from "@/components/ui/page-state";
 import { Skeleton } from "@/components/ui/skeleton";
-import { PickupCard } from "@/components/partner/pickup-card";
+import { PickupCard, isOpenRequest } from "@/components/partner/pickup-card";
 import { Calendar, todayIso } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils/cn";
 
@@ -73,11 +73,12 @@ function PartnerPickupsPageInner() {
     const q = search.trim().toLowerCase();
     let rows = pickups.filter(
       (p) =>
-        !q ||
+        !isOpenRequest(p) &&
+        (!q ||
         p.pickupContactName.toLowerCase().includes(q) ||
         p.pickupAddressLine1.toLowerCase().includes(q) ||
         p.pickupCity.toLowerCase().includes(q) ||
-        p.id.toLowerCase().includes(q),
+        p.id.toLowerCase().includes(q)),
     );
 
     if (dateParam) {
@@ -111,6 +112,8 @@ function PartnerPickupsPageInner() {
     return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b));
   }, [pickups, filter, search, dateParam]);
 
+  const openRequests = useMemo(() => pickups.filter(isOpenRequest), [pickups]);
+
   const totalCount = grouped.reduce((sum, [, rows]) => sum + rows.length, 0);
 
   // Dots on the calendar = pickups still to run that day, so a partner can see their week
@@ -118,7 +121,7 @@ function PartnerPickupsPageInner() {
   const pickupsByDay = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const p of pickups) {
-      if (p.pickupDate && NON_TERMINAL.has(p.status)) {
+      if (p.pickupDate && NON_TERMINAL.has(p.status) && !isOpenRequest(p)) {
         counts[p.pickupDate] = (counts[p.pickupDate] ?? 0) + 1;
       }
     }
@@ -131,6 +134,17 @@ function PartnerPickupsPageInner() {
         <h1 className="text-xl font-semibold text-foreground">Pickups</h1>
         <p className="text-sm text-muted-foreground">Every pickup assigned to you.</p>
       </div>
+
+      {!isLoading && openRequests.length > 0 && (
+        <div className="space-y-2">
+          <h2 className="text-sm font-semibold text-foreground">
+            New Pickup Requests <span className="font-normal text-muted-foreground">({openRequests.length})</span>
+          </h2>
+          {openRequests.map((p) => (
+            <PickupCard key={p.id} pickup={p} onClaimFailed={load} />
+          ))}
+        </div>
+      )}
 
       {dateParam ? (
         <button

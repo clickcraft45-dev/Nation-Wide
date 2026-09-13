@@ -204,11 +204,8 @@ describe('QuotesService', () => {
       );
     });
 
-    // No rate card covering the request is OUR data gap, not something a human reviewer can
-    // resolve any better than the engine did — it goes straight to the pickup step and is
-    // priced at the door. reviewReason is still recorded as the only trace of why it has no
-    // quoted amount.
-    it('sends an unratable request to PENDING_PICKUP_REQUEST, not manual review', async () => {
+    // An unpriced request waits for an admin to price it before any pickup goes out.
+    it('sends an unratable request to manual review', async () => {
       pricingEngineService.computeQuotesForRequest.mockResolvedValue([]);
 
       await service.create(baseCreateDto(), 'customer-1');
@@ -216,7 +213,7 @@ describe('QuotesService', () => {
       expect(prisma.quote.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
-            status: 'PENDING_PICKUP_REQUEST',
+            status: 'NEEDS_MANUAL_REVIEW',
             reviewReason: 'NO_RATE_AVAILABLE',
           }),
         }),
@@ -602,7 +599,7 @@ describe('QuotesService', () => {
     });
 
     // Must match create() exactly, or the wizard promises one thing and the submit does another.
-    it('returns PENDING_PICKUP_REQUEST/NO_RATE_AVAILABLE when the engine finds no eligible providers', async () => {
+    it('returns NEEDS_MANUAL_REVIEW/NO_RATE_AVAILABLE when the engine finds no eligible providers', async () => {
       pricingEngineService.computeQuotesForRequest.mockResolvedValue([]);
 
       const result = await service.preview({
@@ -612,7 +609,7 @@ describe('QuotesService', () => {
       });
 
       expect(result).toEqual({
-        status: 'PENDING_PICKUP_REQUEST',
+        status: 'NEEDS_MANUAL_REVIEW',
         reviewReason: 'NO_RATE_AVAILABLE',
         options: [],
       });

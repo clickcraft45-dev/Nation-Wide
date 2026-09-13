@@ -9,10 +9,8 @@ export type FulfillmentMethodCode = (typeof FULFILLMENT_METHODS)[number];
 // The pricing engine auto-computes RATED options for most requests at creation time — see
 // PricingEngineService. NEEDS_MANUAL_REVIEW is now reserved for the two cases a human genuinely
 // has to look at before anyone is dispatched: an "Other" shipment type and anything over the
-// oversized weight threshold. A destination with no active rate card (NO_RATE_AVAILABLE) does
-// NOT wait for review any more — it goes straight to PENDING_PICKUP_REQUEST, a partner is
-// auto-assigned, and the partner prices it from the verified weight at the door; reviewReason
-// stays set as the only record of why that quote carries no amount. SUBMITTED only appears on
+// oversized weight threshold, plus a destination with no active rate card (NO_RATE_AVAILABLE) —
+// an admin prices those before any pickup request is broadcast to partners. SUBMITTED only appears on
 // pre-existing
 // rows created before the engine shipped. PENDING_PICKUP_REQUEST / PICKUP_REQUESTED are the new
 // customer self-service pre-order states — see pickup-request.ts — reached instead of ACCEPTED
@@ -68,10 +66,9 @@ export interface QuotePreviewOptionDto {
 
 export interface QuotePreviewResultDto {
   /**
-   * PENDING_PICKUP_REQUEST means "we have no rate card for this, so it will be priced at pickup"
-   * — the request proceeds with a partner assigned, it does not wait on staff.
-   * NEEDS_MANUAL_REVIEW is reserved for the two cases a human genuinely has to look at first:
-   * an "Other" shipment type and anything over the oversized weight threshold.
+   * NEEDS_MANUAL_REVIEW covers everything an admin must price first: an "Other" shipment type,
+   * anything oversized, and routes with no rate card (NO_RATE_AVAILABLE). The preview no longer
+   * returns PENDING_PICKUP_REQUEST; it stays in the union for older clients.
    */
   status: "RATED" | "NEEDS_MANUAL_REVIEW" | "PENDING_PICKUP_REQUEST";
   reviewReason: QuoteReviewReasonCode | null;
