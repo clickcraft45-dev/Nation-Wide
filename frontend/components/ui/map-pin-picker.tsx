@@ -1,38 +1,53 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import { Crosshair, MapPin, X } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Crosshair, MapPin } from "lucide-react";
 import { loadGoogleMaps, parseAddressComponents, type PickedAddress } from "@/lib/google-maps";
+import { cn } from "@/lib/utils/cn";
 
 const INDIA = { lat: 20.5937, lng: 78.9629 };
 
 /**
- * Pick a location by moving the map under a fixed pin — the ride-hailing pattern. Easier to aim
- * precisely with a thumb than dragging a marker, and it needs no marker API at all.
+ * An inline map for choosing a location: the map moves under a fixed pin — the ride-hailing
+ * pattern, easier to aim with a thumb than dragging a marker.
  *
- * The address under the pin is looked up as the map settles (Geocoding API) and shown before
- * confirming, so the customer sees what the partner will see.
+ * Every time the map settles, the pin's coordinates are reported straight away. The street
+ * address is looked up afterwards (Geocoding API) and reported when it arrives; a failed lookup
+ * never loses the coordinates — they are what the partner navigates to, the address is a
+ * convenience. (It used to wait for the lookup, so a key without the Geocoding API enabled left the
+ * location un-pickable.)
  */
-export function MapPinPicker({
-  open,
-  onClose,
-  onPick,
-  initial,
-  title = "Pick the location",
+export function MapPinField({
+  value,
+  onChange,
+  className,
 }: {
-  open: boolean;
-  onClose: () => void;
-  onPick: (address: PickedAddress) => void;
-  /** Where to start. Without one the map starts on India and asks for the phone's location. */
-  initial?: { lat: number; lng: number } | null;
-  title?: string;
+  /** The pinned spot, if any. Set from outside (a searched address), the map follows it. */
+  value: { lat: number; lng: number } | null;
+  onChange: (picked: PickedAddress) => void;
+  className?: string;
 }) {
   const mapEl = useRef<HTMLDivElement>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
-  const [picked, setPicked] = useState<PickedAddress | null>(null);
+  const onChangeRef = useRef(onChange);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [address, setAddress] = useState("");
+
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  });
+
+  // Follow a pin set from outside, e.g. an address picked from search. A pin the map itself just
+  // reported is already its centre, so this is a no-op for the customer's own dragging.
+  useEffect(() => {
+    const map = mapRef.current;
+    const center = map?.getCenter();
+    if (!map || !center || !value) return;
+    if (Math.abs(center.lat() - value.lat) > 1e-5 || Math.abs(center.lng() - value.lng) > 1e-5) {
+      map.setCenter(value);
+      map.setZoom(17);
+    }
+  }, [value, status]);
 
   function locate() {
     if (!("geolocation" in navigator)) return;
@@ -47,14 +62,7 @@ export function MapPinPicker({
     );
   }
 
-  function close() {
-    setPicked(null);
-    setStatus("loading");
-    onClose();
-  }
-
   useEffect(() => {
-    if (!open) return;
     let cancelled = false;
     let idle: google.maps.MapsEventListener | null = null;
     let lookup: ReturnType<typeof setTimeout> | undefined;
@@ -67,8 +75,8 @@ export function MapPinPicker({
         if (cancelled || !mapEl.current) return;
 
         const map = new Map(mapEl.current, {
-          center: initial ?? INDIA,
-          zoom: initial ? 17 : 5,
+          center: value ?? INDIA,
+          zoom: value ? 17 : 5,
           disableDefaultUI: true,
           zoomControl: true,
           gestureHandling: "greedy",
@@ -76,38 +84,42 @@ export function MapPinPicker({
         });
         mapRef.current = map;
         const geocoder = new Geocoder();
+        let first = true;
 
-        // Looked up once the map has stopped moving, debounced, so a drag is one lookup and not
-        // fifty.
+        // Debounced, so a drag is one report and one lookup, not fifty.
         idle = map.addListener("idle", () => {
+          // The very first idle is the starting view — the middle of India when nothing is pinned
+          // yet, which is not a location anybody chose.
+          if (first) {
+            first = false;
+            if (!value) return;
+          }
           clearTimeout(lookup);
           lookup = setTimeout(async () => {
             const center = map.getCenter();
             if (!center) return;
+            const coords = { latitude: center.lat(), longitude: center.lng() };
+            const blank = { addressLine1: "", city: "", state: "", postalCode: "", countryCode: "", formatted: "" };
+            onChangeRef.current({ ...blank, ...coords });
+            setAddress("");
             try {
               const { results } = await geocoder.geocode({ location: center });
-              if (cancelled) return;
               const best = results[0];
-              setPicked(
-                best
-                  ? {
-                      ...parseAddressComponents(
-                        best.address_components.map((c) => ({ long: c.long_name, short: c.short_name, types: c.types })),
-                        best.formatted_address,
-                      ),
-                      latitude: center.lat(),
-                      longitude: center.lng(),
-                    }
-                  : null,
+              if (cancelled || !best) return;
+              const parsed = parseAddressComponents(
+                best.address_components.map((c) => ({ long: c.long_name, short: c.short_name, types: c.types })),
+                best.formatted_address,
               );
+              setAddress(parsed.formatted);
+              onChangeRef.current({ ...parsed, ...coords });
             } catch {
-              if (!cancelled) setPicked(null);
+              // No address for this spot (or Geocoding not enabled) — the coordinates above stand.
             }
           }, 400);
         });
 
         setStatus("ready");
-        if (!initial) locate();
+        if (!value) locate();
       } catch {
         if (!cancelled) setStatus("error");
       }
@@ -119,85 +131,40 @@ export function MapPinPicker({
       idle?.remove();
       mapRef.current = null;
     };
-    // `initial` is read once per opening on purpose: re-centring the map every time the parent
-    // re-renders would yank it out from under the customer's thumb.
+    // Mount-only: `value` is followed by the effect above instead.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  }, []);
 
-  useEffect(() => {
-    if (!open) return;
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") close();
-    }
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
-
-  if (!open) return null;
-
-  return createPortal(
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label={title}
-      className="fixed inset-0 z-[60] flex items-end justify-center bg-black/50 sm:items-center"
-    >
-      <div className="flex max-h-[92vh] w-full max-w-lg flex-col overflow-hidden rounded-t-2xl bg-card sm:rounded-2xl">
-        <div className="flex items-center justify-between border-b border-border px-4 py-3">
-          <p className="font-semibold text-foreground">{title}</p>
-          <button
-            type="button"
-            onClick={close}
-            aria-label="Close"
-            className="flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-          >
-            <X className="h-5 w-5" aria-hidden />
-          </button>
-        </div>
-
-        <div className="relative h-[55vh] min-h-72">
-          <div ref={mapEl} className="h-full w-full" />
-          {/* The pin stays put; the map moves under it. Its tip marks the exact spot. */}
-          <MapPin
-            className="pointer-events-none absolute left-1/2 top-1/2 h-10 w-10 -translate-x-1/2 -translate-y-full text-brand-red drop-shadow-md"
-            fill="currentColor"
-            stroke="white"
-            aria-hidden
-          />
-          {status !== "ready" && (
-            <div className="absolute inset-0 flex items-center justify-center bg-card/80 p-6 text-center text-sm text-muted-foreground">
-              {status === "loading" ? "Loading map…" : "Couldn't load the map. Type the address instead."}
-            </div>
-          )}
-          <button
-            type="button"
-            onClick={locate}
-            aria-label="Use my current location"
-            className="absolute bottom-3 right-3 flex h-11 w-11 items-center justify-center rounded-full bg-card text-foreground shadow-md"
-          >
-            <Crosshair className="h-5 w-5" aria-hidden />
-          </button>
-        </div>
-
-        <div className="space-y-3 p-4">
-          <p className="min-h-10 text-sm text-foreground">
-            {picked?.formatted || "Move the map so the pin sits on the exact spot."}
-          </p>
-          <Button
-            className="w-full"
-            disabled={!picked}
-            onClick={() => {
-              if (!picked) return;
-              onPick(picked);
-              close();
-            }}
-          >
-            Use this location
-          </Button>
-        </div>
+  return (
+    <div className="space-y-2">
+      <div className={cn("relative h-72 overflow-hidden rounded-2xl border border-border bg-muted", className)}>
+        <div ref={mapEl} className="h-full w-full" />
+        {/* The pin stays put; the map moves under it. Its tip marks the exact spot. */}
+        <MapPin
+          className="pointer-events-none absolute left-1/2 top-1/2 h-10 w-10 -translate-x-1/2 -translate-y-full text-brand-red drop-shadow-md"
+          fill="currentColor"
+          stroke="white"
+          aria-hidden
+        />
+        {status !== "ready" && (
+          <div className="absolute inset-0 flex items-center justify-center bg-card/80 p-6 text-center text-sm text-muted-foreground">
+            {status === "loading" ? "Loading map…" : "Couldn't load the map. Type the address below instead."}
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={locate}
+          aria-label="Use my current location"
+          className="absolute bottom-3 right-3 flex h-11 w-11 items-center justify-center rounded-full bg-card text-foreground shadow-md"
+        >
+          <Crosshair className="h-5 w-5" aria-hidden />
+        </button>
       </div>
-    </div>,
-    document.body,
+      <p className="text-sm text-foreground">
+        {value
+          ? address || `Pinned at ${value.lat.toFixed(5)}, ${value.lng.toFixed(5)}`
+          : "Move the map so the pin sits exactly on your pickup spot."}
+      </p>
+    </div>
   );
 }

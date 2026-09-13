@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, CheckCircle2, MapPinned } from "lucide-react";
+import { ArrowLeft, CheckCircle2 } from "lucide-react";
 import type { QuoteDto } from "@nationwide/shared-types";
 import { apiClient, errorMessage, fieldErrors } from "@/lib/api-client";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -11,9 +11,8 @@ import { Input, Label, FieldError } from "@/components/ui/input";
 import { DateField } from "@/components/ui/date-field";
 import { PincodeInput } from "@/components/ui/pincode-input";
 import { AddressAutocomplete } from "@/components/ui/address-autocomplete";
-import { MapPinPicker } from "@/components/ui/map-pin-picker";
+import { MapPinField } from "@/components/ui/map-pin-picker";
 import { googleMapsEnabled, type PickedAddress } from "@/lib/google-maps";
-import { PickupsMap } from "@/components/ui/pickups-map";
 import { NativeSelect } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/ui/page-state";
@@ -79,8 +78,6 @@ export default function PickupRequestPage() {
   const [pickupInstructions, setPickupInstructions] = useState("");
   // The exact spot, from the map pin or a searched address — the partner navigates to it.
   const [pickupLocation, setPickupLocation] = useState<{ lat: number; lng: number } | null>(null);
-  const [mapOpen, setMapOpen] = useState(false);
-  const [pickedLabel, setPickedLabel] = useState("");
 
   // The recipient is optional here — the partner confirms (or takes it down) at the door.
   const [addRecipient, setAddRecipient] = useState(false);
@@ -144,7 +141,6 @@ export default function PickupRequestPage() {
     if (/^\d{6}$/.test(picked.postalCode)) setPickupPostalCode(picked.postalCode);
     if (picked.latitude != null && picked.longitude != null) {
       setPickupLocation({ lat: picked.latitude, lng: picked.longitude });
-      setPickedLabel(picked.formatted);
     }
   }
 
@@ -302,7 +298,9 @@ export default function PickupRequestPage() {
           Your pickup request has been received successfully.
         </h1>
         <p className="text-sm text-muted-foreground">
-          Our pickup partner will contact you shortly to collect your parcel.
+          {dropAtWarehouse
+            ? "Bring your parcel to our warehouse — our team will weigh it, take payment and ship it."
+            : "Our pickup partner will contact you shortly to collect your parcel."}
         </p>
         <Button size="lg" onClick={() => router.push(`/quotes/${quote.id}`)}>
           Track this request
@@ -373,36 +371,9 @@ export default function PickupRequestPage() {
 
             {!dropAtWarehouse && (
               <>
-                <div className="space-y-2">
+                <div className="space-y-2" aria-invalid={Boolean(errors.pickupLocation)} tabIndex={-1}>
                   <Label>Pickup Location</Label>
-                  {pickupLocation ? (
-                    <>
-                      {/* Remounted per pin so the preview re-centres on a changed location. */}
-                      <PickupsMap
-                        key={`${pickupLocation.lat},${pickupLocation.lng}`}
-                        points={[{ id: "pickup", title: "Pickup here", ...pickupLocation }]}
-                        className="h-40"
-                      />
-                      {pickedLabel && <p className="text-sm text-foreground">{pickedLabel}</p>}
-                    </>
-                  ) : null}
-                  <Button
-                    type="button"
-                    variant={pickupLocation ? "secondary" : "primary"}
-                    className="w-full"
-                    onClick={() => setMapOpen(true)}
-                    aria-invalid={Boolean(errors.pickupLocation)}
-                  >
-                    <MapPinned className="h-4 w-4" aria-hidden />
-                    {pickupLocation ? "Change location on map" : "Select pickup location on map"}
-                  </Button>
-                  <MapPinPicker
-                    open={mapOpen}
-                    onClose={() => setMapOpen(false)}
-                    onPick={applyPicked}
-                    initial={pickupLocation}
-                    title="Where should we pick up?"
-                  />
+                  <MapPinField value={pickupLocation} onChange={applyPicked} />
                   {errors.pickupLocation && <FieldError>{errors.pickupLocation}</FieldError>}
                 </div>
                 <div className="space-y-1.5">

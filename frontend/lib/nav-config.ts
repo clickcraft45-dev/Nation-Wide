@@ -1,5 +1,6 @@
 import {
   LayoutDashboard,
+  Warehouse,
   History,
   Inbox,
   Package,
@@ -56,6 +57,7 @@ export const ADMIN_NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "Orders", href: "/admin/orders", icon: Package },
       { label: "Pickup Requests", href: "/admin/pickup-requests", icon: ClipboardList },
+      { label: "Warehouse Drop-offs", href: "/admin/warehouse-dropoffs", icon: Warehouse },
       { label: "Pickup Partners", href: "/admin/pickup-partners", icon: UserCog },
       { label: "Partner Applications", href: "/admin/partner-applications", icon: ClipboardCheck },
       { label: "Customers", href: "/admin/customers", icon: Users },

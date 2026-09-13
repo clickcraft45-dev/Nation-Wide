@@ -221,18 +221,17 @@ export class PickupRequestsService {
     // Broadcast, not auto-assign (Rapido/Blinkit style): the request stays PENDING_ASSIGNMENT
     // and every active partner sees it in their open-requests list until one claims it (see
     // claim). An admin can still hand-assign via PATCH .../assign.
-    const partners = await this.prisma.adminUser.findMany({
-      where: { role: 'PICKUP_PARTNER', isActive: true },
-      select: { id: true },
-    });
+    // Warehouse drop-offs are handled by admin at the warehouse — nothing for a partner to do.
+    const partners = dto.dropAtWarehouse
+      ? []
+      : await this.prisma.adminUser.findMany({
+          where: { role: 'PICKUP_PARTNER', isActive: true },
+          select: { id: true },
+        });
     for (const partner of partners) {
       void this.pushService.sendToAdminUser(partner.id, {
         title: 'New pickup request',
-        body: [
-          dto.pickupContactName,
-          dto.dropAtWarehouse ? 'warehouse drop-off' : dto.pickupCity,
-          dto.pickupTimeSlot,
-        ]
+        body: [dto.pickupContactName, dto.pickupCity, dto.pickupTimeSlot]
           .filter(Boolean)
           .join(' · '),
         url: `/partner/pickups/${created.id}`,
@@ -251,7 +250,12 @@ export class PickupRequestsService {
     partnerId: string,
   ): Promise<PickupRequestWithDetails> {
     const won = await this.prisma.pickupRequest.updateMany({
-      where: { id, status: 'PENDING_ASSIGNMENT', assignedPartnerId: null },
+      where: {
+        id,
+        status: 'PENDING_ASSIGNMENT',
+        assignedPartnerId: null,
+        dropAtWarehouse: false,
+      },
       data: {
         assignedPartnerId: partnerId,
         assignedAt: new Date(),
@@ -413,7 +417,11 @@ export class PickupRequestsService {
     const where: Prisma.PickupRequestWhereInput = {
       OR: [
         { assignedPartnerId: partnerId },
-        { assignedPartnerId: null, status: 'PENDING_ASSIGNMENT' },
+        {
+          assignedPartnerId: null,
+          status: 'PENDING_ASSIGNMENT',
+          dropAtWarehouse: false,
+        },
       ],
     };
     if (query.status) where.status = query.status;
@@ -433,18 +441,31 @@ export class PickupRequestsService {
     const pickupRequest = await this.findOne(id);
     const isOpen =
       pickupRequest.assignedPartnerId === null &&
-      pickupRequest.status === 'PENDING_ASSIGNMENT';
+      pickupRequest.status === 'PENDING_ASSIGNMENT' &&
+      !pickupRequest.dropAtWarehouse;
     if (!isOpen && pickupRequest.assignedPartnerId !== partnerId) {
       throw new NotFoundException(`Pickup request ${id} not found`);
     }
     return pickupRequest;
   }
 
+  // Who may work a pickup: its assigned partner, or — for a warehouse drop-off, which never goes
+  // to a partner — any admin/staff (asAdmin, set only by AdminPickupRequestsController). The actor
+  // id is an AdminUser either way, so audit logs and payment attribution stay valid.
   async findOneForPartner(
     id: string,
     partnerId: string,
+    asAdmin = false,
   ): Promise<PickupRequestWithDetails> {
     const pickupRequest = await this.findOne(id);
+    if (asAdmin) {
+      if (!pickupRequest.dropAtWarehouse) {
+        throw new BadRequestException(
+          'Only warehouse drop-offs are handled by admin; this pickup belongs to a partner',
+        );
+      }
+      return pickupRequest;
+    }
     if (pickupRequest.assignedPartnerId !== partnerId) {
       throw new NotFoundException(`Pickup request ${id} not found`);
     }
@@ -457,8 +478,9 @@ export class PickupRequestsService {
     id: string,
     dto: RecalculateWeightDto,
     partnerId: string,
+    asAdmin = false,
   ): Promise<RecalculatePreviewDto> {
-    const pickupRequest = await this.findOneForPartner(id, partnerId);
+    const pickupRequest = await this.findOneForPartner(id, partnerId, asAdmin);
     const recalculated = await this.repriceAgainstOriginalProvider(
       pickupRequest,
       dto.weightKg,
@@ -482,8 +504,9 @@ export class PickupRequestsService {
   async markArrived(
     id: string,
     partnerId: string,
+    asAdmin = false,
   ): Promise<PickupRequestWithDetails> {
-    const pickupRequest = await this.findOneForPartner(id, partnerId);
+    const pickupRequest = await this.findOneForPartner(id, partnerId, asAdmin);
     if (!NON_TERMINAL_STATUSES.includes(pickupRequest.status)) {
       throw new BadRequestException(
         `Cannot mark arrival on a pickup request that is already ${pickupRequest.status}`,
@@ -501,7 +524,7 @@ export class PickupRequestsService {
       data: { arrivedAt: new Date(), status: 'OUT_FOR_PICKUP' },
     });
     if (claim.count === 0) {
-      return this.findOneForPartner(id, partnerId);
+      return this.findOneForPartner(id, partnerId, asAdmin);
     }
 
     await this.prisma.auditLog.create({
@@ -525,8 +548,9 @@ export class PickupRequestsService {
     id: string,
     dto: VerifyPickupRequestDto,
     partnerId: string,
+    asAdmin = false,
   ): Promise<PickupRequestWithDetails> {
-    const pickupRequest = await this.findOneForPartner(id, partnerId);
+    const pickupRequest = await this.findOneForPartner(id, partnerId, asAdmin);
     if (!NON_TERMINAL_STATUSES.includes(pickupRequest.status)) {
       throw new BadRequestException(
         `Cannot verify a pickup request that is already ${pickupRequest.status}`,
@@ -626,8 +650,9 @@ export class PickupRequestsService {
     id: string,
     dto: CollectPaymentDto,
     partnerId: string,
+    asAdmin = false,
   ): Promise<PickupRequestWithDetails> {
-    const pickupRequest = await this.findOneForPartner(id, partnerId);
+    const pickupRequest = await this.findOneForPartner(id, partnerId, asAdmin);
     if (!pickupRequest.verifiedAt) {
       throw new BadRequestException(
         'Verify the parcel before collecting payment',
@@ -703,8 +728,9 @@ export class PickupRequestsService {
     id: string,
     dto: AcceptParcelDto,
     partnerId: string,
+    asAdmin = false,
   ): Promise<PickupRequestWithDetails> {
-    const pickupRequest = await this.findOneForPartner(id, partnerId);
+    const pickupRequest = await this.findOneForPartner(id, partnerId, asAdmin);
     if (!NON_TERMINAL_STATUSES.includes(pickupRequest.status)) {
       throw new BadRequestException(
         `Cannot accept a pickup request that is already ${pickupRequest.status}`,
@@ -827,8 +853,9 @@ export class PickupRequestsService {
     id: string,
     dto: RejectParcelDto,
     partnerId: string,
+    asAdmin = false,
   ): Promise<PickupRequestWithDetails> {
-    const pickupRequest = await this.findOneForPartner(id, partnerId);
+    const pickupRequest = await this.findOneForPartner(id, partnerId, asAdmin);
     if (!NON_TERMINAL_STATUSES.includes(pickupRequest.status)) {
       throw new BadRequestException(
         `Cannot reject a pickup request that is already ${pickupRequest.status}`,

@@ -271,14 +271,16 @@ describe('PickupRequestsService', () => {
       await service.create(
         {
           quoteId: 'quote-1',
-          dropAtWarehouse: true,
+          dropAtWarehouse: false,
           pickupContactName: 'Jane',
           pickupContactPhone: '+911234567890',
           pickupAddressLine1: '123 Main St',
           pickupCity: 'NYC',
           pickupState: 'NY',
           pickupPostalCode: '10001',
-        },
+          pickupDate: '2026-08-10',
+          pickupTimeSlot: 'MORNING',
+        } as never,
         'customer-1',
       );
 
@@ -293,6 +295,41 @@ describe('PickupRequestsService', () => {
     });
   });
 
+  describe('warehouse drop-offs', () => {
+    it('are not broadcast to partners', async () => {
+      prisma.adminUser.findMany.mockResolvedValue([{ id: 'partner-1' }]);
+      await service.create(
+        {
+          quoteId: 'quote-1',
+          dropAtWarehouse: true,
+          pickupContactName: 'Jane',
+          pickupContactPhone: '+911234567890',
+        },
+        'customer-1',
+      );
+      expect(pushService.sendToAdminUser).not.toHaveBeenCalled();
+    });
+
+    it('can be worked by admin, but a partner pickup cannot', async () => {
+      prisma.pickupRequest.findUnique.mockResolvedValue({
+        ...basePickupRequest,
+        assignedPartnerId: null,
+        dropAtWarehouse: true,
+      });
+      await expect(
+        service.findOneForPartner('pr-1', 'admin-1', true),
+      ).resolves.toMatchObject({ id: 'pr-1' });
+
+      prisma.pickupRequest.findUnique.mockResolvedValue({
+        ...basePickupRequest,
+        dropAtWarehouse: false,
+      });
+      await expect(
+        service.findOneForPartner('pr-1', 'admin-1', true),
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
+
   describe('claim', () => {
     it('assigns the claiming partner and WhatsApps the customer', async () => {
       await service.claim('pr-1', 'partner-1');
@@ -303,6 +340,7 @@ describe('PickupRequestsService', () => {
             id: 'pr-1',
             status: 'PENDING_ASSIGNMENT',
             assignedPartnerId: null,
+            dropAtWarehouse: false,
           },
         }),
       );
