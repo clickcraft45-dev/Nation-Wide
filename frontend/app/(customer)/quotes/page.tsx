@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { FileQuestion } from "lucide-react";
-import type { QuoteDto } from "@nationwide/shared-types";
+import type { PickupRequestDto, QuoteDto } from "@nationwide/shared-types";
 import { apiClient, errorMessage } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -13,6 +13,8 @@ import { QuoteSummaryCard } from "@/components/quote/quote-summary-card";
 
 export default function CustomerQuotesPage() {
   const [quotes, setQuotes] = useState<QuoteDto[]>([]);
+  // Pickup requests by quote id, for the live progress on booked quotes.
+  const [pickups, setPickups] = useState<Record<string, PickupRequestDto>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
@@ -23,7 +25,16 @@ export default function CustomerQuotesPage() {
     setError(null);
     apiClient
       .get<QuoteDto[]>("/quotes/me")
-      .then(setQuotes)
+      .then((rows) => {
+        setQuotes(rows);
+        if (rows.some((q) => q.status === "PICKUP_REQUESTED")) {
+          // Secondary: a failure here just leaves the cards on their plain status note.
+          apiClient
+            .get<PickupRequestDto[]>("/pickup-requests/me")
+            .then((requests) => setPickups(Object.fromEntries(requests.map((r) => [r.quoteId, r]))))
+            .catch(() => undefined);
+        }
+      })
       .catch((err) => {
         setError(errorMessage(err, "Failed to load your quotes."));
       })
@@ -93,6 +104,7 @@ export default function CustomerQuotesPage() {
             <QuoteSummaryCard
               key={q.id}
               quote={q}
+              pickup={q.status === "PICKUP_REQUESTED" ? pickups[q.id] : undefined}
               isAccepting={acceptingId === q.id}
               onAccept={() => void accept(q.id)}
             />

@@ -62,6 +62,8 @@ export function toPickupRequestDto(
       pickupRequest.assignedPartner?.name ??
       pickupRequest.assignedPartner?.email ??
       null,
+    // Shown to the customer once a partner has accepted, so they can call whoever is coming.
+    assignedPartnerPhone: pickupRequest.assignedPartner?.phone ?? null,
     assignedAt: pickupRequest.assignedAt
       ? pickupRequest.assignedAt.toISOString()
       : null,

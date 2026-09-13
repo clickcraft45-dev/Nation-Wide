@@ -11,7 +11,8 @@ import {
   Truck,
   type LucideIcon,
 } from "lucide-react";
-import type { QuoteDto, ShipmentTypeCode } from "@nationwide/shared-types";
+import type { PickupRequestDto, QuoteDto, ShipmentTypeCode } from "@nationwide/shared-types";
+import { PartnerContact, PickupProgressBar } from "@/components/pickup-requests/pickup-status-pipeline";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { QuoteStatusBadge } from "@/components/ui/status-badge";
 import { cn } from "@/lib/utils/cn";
@@ -75,11 +76,8 @@ function noteFor(quote: QuoteDto): Note | null {
             text: "This route isn't on our instant rate card, so we'll price it at pickup — book a slot and our partner will weigh it at your door.",
           };
     case "PICKUP_REQUESTED":
-      return {
-        tone: "success",
-        icon: Truck,
-        text: "Pickup booked. A partner has been assigned and will collect your parcel.",
-      };
+      // Normally replaced by the live progress bar; this only shows while that is loading.
+      return { tone: "success", icon: Truck, text: "Pickup booked." };
     case "REJECTED":
       return quote.rejectionReason
         ? { tone: "danger", icon: CircleAlert, text: `Declined: ${quote.rejectionReason}` }
@@ -91,15 +89,18 @@ function noteFor(quote: QuoteDto): Note | null {
 
 export function QuoteSummaryCard({
   quote,
+  pickup,
   isAccepting,
   onAccept,
 }: {
   quote: QuoteDto;
+  /** This quote's pickup request, once one exists — drives the progress bar. */
+  pickup?: PickupRequestDto;
   isAccepting: boolean;
   onAccept: () => void;
 }) {
   const Icon = TYPE_ICON[quote.shipmentType];
-  const note = noteFor(quote);
+  const note = pickup ? null : noteFor(quote);
   const detailHref = `/quotes/${quote.id}`;
 
   return (
@@ -126,11 +127,14 @@ export function QuoteSummaryCard({
                 ) : (
                   <span className="text-muted-foreground">To </span>
                 )}
-                {quote.destination.city}
+                {/* The city is optional; the country always names the shipment. */}
+                {quote.destination.city || quote.destination.country}
               </p>
-              <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                {quote.destination.country}
-              </p>
+              {quote.destination.city && (
+                <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                  {quote.destination.country}
+                </p>
+              )}
             </div>
             <QuoteStatusBadge status={quote.status} />
           </div>
@@ -153,6 +157,13 @@ export function QuoteSummaryCard({
               </span>
             ))}
           </div>
+
+          {pickup && (
+            <div className="mt-3 space-y-2.5">
+              <PickupProgressBar pickup={pickup} />
+              {!pickup.orderId && <PartnerContact pickup={pickup} compact />}
+            </div>
+          )}
 
           {note && (
             <p

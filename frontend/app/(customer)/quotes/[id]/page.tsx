@@ -134,11 +134,13 @@ export default function CustomerQuoteDetailPage() {
 
       {!isLoading && !error && quote && (
         <>
-          <div className="flex items-center justify-between">
-            <div>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              {/* The city is optional (the partner can take the address down at pickup), so the
+                  country is what always names the shipment. */}
               <h1 className="text-xl font-semibold text-foreground">
-                {quote.origin ? `${quote.origin.city} → ` : "To "}
-                {quote.destination.city}
+                {quote.origin?.city ? `${quote.origin.city} → ` : "Shipment to "}
+                {[quote.destination.city, quote.destination.country].filter(Boolean).join(", ")}
               </h1>
               <p className="text-sm text-muted-foreground">
                 {quote.shipmentType.charAt(0) + quote.shipmentType.slice(1).toLowerCase()} ·{" "}
@@ -237,18 +239,16 @@ export default function CustomerQuoteDetailPage() {
           )}
 
           {quote.status === "PICKUP_REQUESTED" && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Pickup progress</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {pickupRequest ? (
-                  <PickupStatusPipeline pickup={pickupRequest} />
-                ) : (
-                  <Skeleton className="h-40 w-full" />
-                )}
-              </CardContent>
-            </Card>
+            <section aria-label="Pickup progress">
+              {pickupRequest ? (
+                <PickupStatusPipeline pickup={pickupRequest} />
+              ) : (
+                <div className="space-y-3">
+                  <Skeleton className="h-24 w-full rounded-2xl" />
+                  <Skeleton className="h-64 w-full rounded-2xl" />
+                </div>
+              )}
+            </section>
           )}
 
           {quote.status === "REJECTED" && quote.rejectionReason && (

@@ -117,6 +117,8 @@ export interface PickupRequestDto {
 
   assignedPartnerId: string | null;
   assignedPartnerName: string | null;
+  /** The assigned partner's phone — shown to the customer so they can call them. */
+  assignedPartnerPhone: string | null;
   assignedAt: string | null; // ISO 8601
 
   // Set when the partner confirms they're physically at the pickup location — required before

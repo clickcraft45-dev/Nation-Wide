@@ -33,7 +33,9 @@ import { RecipientAddressDto } from './dto/recipient-address.dto';
 const withDetails = {
   include: {
     customer: { select: { name: true, phone: true } },
-    assignedPartner: { select: { id: true, name: true, email: true } },
+    assignedPartner: {
+      select: { id: true, name: true, email: true, phone: true },
+    },
     quote: {
       select: {
         destName: true,
