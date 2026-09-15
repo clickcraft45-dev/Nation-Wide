@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
 import { QuoteStatusBadge } from "@/components/ui/status-badge";
 import { PickupStatusPipeline } from "@/components/pickup-requests/pickup-status-pipeline";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 export default function CustomerQuoteDetailPage() {
   const params = useParams<{ id: string }>();
@@ -105,6 +106,17 @@ export default function CustomerQuoteDetailPage() {
       });
     } finally {
       setIsAccepting(false);
+    }
+  }
+
+  async function decline() {
+    if (!quote) return;
+    try {
+      await apiClient.post<QuoteDto>(`/quotes/${quote.id}/decline`, {});
+      showToast({ variant: "success", title: "Quotation declined" });
+      load();
+    } catch (err) {
+      showToast({ variant: "error", title: errorMessage(err, "Couldn't decline this quotation.") });
     }
   }
 
@@ -213,9 +225,23 @@ export default function CustomerQuoteDetailPage() {
                 <p className="text-lg font-semibold text-foreground">
                   {quote.quotedCurrency ?? "INR"} {quote.quotedAmount.toLocaleString("en-IN")}
                 </p>
-                <Button size="sm" isLoading={isAccepting} onClick={accept}>
-                  Accept
-                </Button>
+                <div className="flex gap-2">
+                  <ConfirmDialog
+                    title="Decline this quotation?"
+                    description="We won't ship this parcel. You can always request a new quote later."
+                    confirmLabel="Decline"
+                    variant="danger"
+                    onConfirm={decline}
+                    trigger={
+                      <Button size="sm" variant="secondary" disabled={isAccepting}>
+                        Decline
+                      </Button>
+                    }
+                  />
+                  <Button size="sm" isLoading={isAccepting} onClick={accept}>
+                    Accept
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           )}

@@ -380,6 +380,7 @@ export function ShipmentDetailsForm({
               onChange={setDestination}
               errors={recipientErrors}
               isIndia={destinationCountry.code === "IN"}
+              country={destinationCountry.code}
               idPrefix="dest"
             />
           )}

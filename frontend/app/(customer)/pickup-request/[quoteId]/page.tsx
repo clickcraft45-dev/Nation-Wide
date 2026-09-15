@@ -520,6 +520,7 @@ export default function PickupRequestPage() {
                 onChange={setRecipient}
                 errors={recipientErrors}
                 isIndia={quote.destination.country === "India"}
+                country={quote.destination.country}
                 idPrefix="recipient"
               />
             )}

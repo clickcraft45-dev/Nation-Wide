@@ -114,3 +114,34 @@ export function distanceKm(a: { lat: number; lng: number }, b: { lat: number; ln
   const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
   return 6371 * 2 * Math.asin(Math.sqrt(h));
 }
+
+export type PostalLookup =
+  | { kind: "found"; city: string; state: string; formatted: string }
+  | { kind: "not-found" }
+  | { kind: "unavailable" };
+
+/**
+ * What a postal / ZIP code belongs to, anywhere in the world — Google's geocoder with the country
+ * and postal code as component filters. `country` may be a name ("Afghanistan") or an ISO code.
+ *
+ * Only a result that IS a postal code counts: for a code Google doesn't know it can fall back to
+ * the whole country, and "found: Afghanistan" would read as a verified code.
+ */
+export async function lookupPostalCode(country: string, postalCode: string): Promise<PostalLookup> {
+  try {
+    await loadGoogleMaps();
+    const { Geocoder } = (await google.maps.importLibrary("geocoding")) as google.maps.GeocodingLibrary;
+    const { results } = await new Geocoder().geocode({ componentRestrictions: { country, postalCode } });
+    const hit = results.find((r) => r.types.includes("postal_code") && !r.partial_match);
+    if (!hit) return { kind: "not-found" };
+    const parsed = parseAddressComponents(
+      hit.address_components.map((c) => ({ long: c.long_name, short: c.short_name, types: c.types })),
+      hit.formatted_address,
+    );
+    return { kind: "found", city: parsed.city, state: parsed.state, formatted: hit.formatted_address };
+  } catch (error) {
+    // The geocoder rejects with ZERO_RESULTS for an unknown code; anything else (no key, Geocoding
+    // API not enabled, offline) means we simply couldn't check.
+    return (error as { code?: string }).code === "ZERO_RESULTS" ? { kind: "not-found" } : { kind: "unavailable" };
+  }
+}

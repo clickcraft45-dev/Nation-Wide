@@ -46,10 +46,11 @@ export const PARTNER_NETWORKS = ["DHL", "DHL Express", "FedEx", "UPS"] as const;
  * in print. One asset, three inks. Supply real artwork here only if the mark ever gains a
  * second colour of its own, at which point masking stops being valid.
  *
- * The AVIF is kept for the few places that still want it as a plain image (and is a sixth of the
- * size), but the PNG is the one the mask uses — mask-image support for AVIF is not universal.
+ * The SVG is a vector trace of the PNG and is what the mask uses: it stays sharp at any size and
+ * on high-DPI screens. The PNG/AVIF are kept as plain-image fallbacks.
  */
 export const LOGO_MARK = {
+  svg: "/assets/logo/logo-mark.svg",
   avif: "/assets/logo/logo-mark.avif",
   png: "/assets/logo/logo-mark.png",
   alt: "NationWide Logistics",

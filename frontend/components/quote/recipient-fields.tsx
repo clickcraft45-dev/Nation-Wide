@@ -3,6 +3,7 @@
 import type { Dispatch, ReactNode, SetStateAction } from "react";
 import { Input, Label, FieldError } from "@/components/ui/input";
 import { PincodeInput } from "@/components/ui/pincode-input";
+import { PostalCodeInput } from "@/components/ui/postal-code-input";
 import { AddressAutocomplete } from "@/components/ui/address-autocomplete";
 
 /**
@@ -80,13 +81,16 @@ export function RecipientFields({
   onChange,
   errors,
   isIndia,
+  country,
   idPrefix = "recipient",
 }: {
   value: RecipientForm;
   onChange: Dispatch<SetStateAction<RecipientForm>>;
   errors: RecipientErrors;
-  /** Only Indian PIN codes can be verified; anywhere else keeps a plain field. */
+  /** India verifies its PIN against India Post; every other country is checked worldwide. */
   isIndia: boolean;
+  /** Destination country (name or ISO code) — scopes the worldwide postal-code lookup. */
+  country: string;
   idPrefix?: string;
 }) {
   const field = (key: keyof RecipientForm) => ({
@@ -141,7 +145,7 @@ export function RecipientFields({
           <Input {...field("state")} />
         </Field>
         <Field
-          label={isIndia ? "PIN code" : "Postal code"}
+          label={isIndia ? "PIN code" : "Postal / ZIP code"}
           htmlFor={`${idPrefix}-postalCode`}
           error={errors.postalCode}
         >
@@ -161,7 +165,17 @@ export function RecipientFields({
               error={Boolean(errors.postalCode)}
             />
           ) : (
-            <Input {...field("postalCode")} />
+            <PostalCodeInput
+              id={`${idPrefix}-postalCode`}
+              value={value.postalCode}
+              country={country}
+              onChange={(postalCode) => onChange((prev) => ({ ...prev, postalCode }))}
+              onResolved={({ city, state }) =>
+                // Same rule as the PIN: the code wins over a city/state typed before it.
+                onChange((prev) => ({ ...prev, city: city || prev.city, state: state || prev.state }))
+              }
+              error={Boolean(errors.postalCode)}
+            />
           )}
         </Field>
       </div>

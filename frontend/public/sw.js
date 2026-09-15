@@ -14,7 +14,7 @@
  *  - Any cross-origin request.
  */
 
-const CACHE = "nw-shell-v1";
+const CACHE = "nw-shell-v2";
 const OFFLINE_URL = "/offline.html";
 
 self.addEventListener("install", (event) => {
@@ -65,7 +65,7 @@ self.addEventListener("push", (event) => {
     self.registration.showNotification(data.title || "NationWide Logistics", {
       body: data.body || "",
       icon: "/assets/icons/icon-192.png",
-      badge: "/assets/icons/icon-192.png",
+      badge: "/assets/icons/badge-72.png",
       // Same tag replaces the earlier notification for the same thing, instead of stacking five
       // "in transit" updates for one parcel.
       tag: data.tag,

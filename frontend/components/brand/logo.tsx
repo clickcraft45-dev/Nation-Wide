@@ -21,7 +21,7 @@ import { LOGO_MARK } from "@/lib/constants/assets";
  */
 
 export type LogoVariant =
-  | "horizontal" // mark + "NationWide / LOGISTICS" side by side — navbars, sidebars
+  | "horizontal" // mark + "NationWide. / DELIVERING TRUST WORLDWIDE" side by side — navbars, sidebars
   | "icon" // mark only — compact spaces, app icon
   | "stacked" // mark above wordmark, centered — auth screens, splash
   | "compact" // mark + "NationWide" only, no subheading — tight mobile topbars
@@ -76,8 +76,7 @@ function NwMark({
     // the silhouette and the colour comes from background-color — that is the whole reason one
     // asset can be red, white or black. The element is decorative-with-a-name rather than an
     // image, hence role/aria-label in place of alt.
-    // ponytail: the PNG is the mask; the smaller AVIF is dropped because mask-image support for
-    // AVIF is not universal. Swap in an SVG mask if the mark's weight ever matters.
+    // The vector trace is the mask, so the mark is crisp at every size and pixel density.
     <span
       role="img"
       aria-label={LOGO_MARK.alt}
@@ -85,8 +84,8 @@ function NwMark({
       style={{
         width: size,
         height: size,
-        maskImage: `url(${LOGO_MARK.png})`,
-        WebkitMaskImage: `url(${LOGO_MARK.png})`,
+        maskImage: `url(${LOGO_MARK.svg})`,
+        WebkitMaskImage: `url(${LOGO_MARK.svg})`,
         maskSize: "contain",
         WebkitMaskSize: "contain",
         maskRepeat: "no-repeat",
@@ -102,15 +101,12 @@ export function Logo({
   variant = "horizontal",
   size = "md",
   tone: toneProp,
-  showTagline = false,
   className,
 }: {
   variant?: LogoVariant;
   size?: LogoSize;
   /** Override the ink — `reverse` on a dark surface, `mono` where colour would be wrong. */
   tone?: LogoTone;
-  /** Show the "Delivering trust worldwide" tagline — only meaningful on stacked/horizontal. */
-  showTagline?: boolean;
   className?: string;
 }) {
   const tone =
@@ -122,40 +118,22 @@ export function Logo({
     return <NwMark size={iconPx} tone={tone} className={className} />;
   }
 
+  // The wordmark as the artwork draws it: "Nation" heavy, "Wide" light, a brand-red full stop, and
+  // the tagline tracked out underneath. Set in type rather than placed as the PNG so it stays
+  // sharp at every size and can go white on the dark panels without losing the red stop.
   const wordmark = (
     <span className={cn("flex flex-col leading-none", variant === "stacked" && "items-center")}>
-      <span
-        className={cn(
-          "font-semibold tracking-tight",
-          WORDMARK_TEXT[size],
-          onDark ? "text-white" : "text-foreground",
-        )}
-      >
-        NationWide
+      <span className={cn("tracking-tight", WORDMARK_TEXT[size], onDark ? "text-white" : "text-foreground")}>
+        <span className="font-bold">Nation</span>
+        <span className="font-normal">Wide</span>
+        {/* The stop is brand red in every tone but mono, where colour is wrong by definition. */}
+        <span className={cn("font-bold", tone === "mono" ? "text-foreground" : "text-brand-red")}>.</span>
       </span>
       {variant !== "compact" && (
         <span
           className={cn(
-            "mt-0.5 font-semibold uppercase tracking-[0.22em]",
+            "mt-1 font-medium uppercase tracking-[0.18em]",
             SUBHEADING_TEXT[size],
-            // The eyebrow is the lockup's second voice, so it carries the brand red alongside the
-            // mark and leaves "NationWide" as plain ink. On the near-black panels red at 10px
-            // tracked out this far falls under contrast, so there it stays the panel's grey; in
-            // `mono` it stays neutral by definition.
-            onDark
-              ? "text-sidebar-foreground"
-              : tone === "brand"
-                ? "text-brand-red"
-                : "text-muted-foreground",
-          )}
-        >
-          Logistics
-        </span>
-      )}
-      {showTagline && (variant === "stacked" || size === "lg") && (
-        <span
-          className={cn(
-            "mt-1.5 text-xs font-normal",
             onDark ? "text-sidebar-foreground" : "text-muted-foreground",
           )}
         >

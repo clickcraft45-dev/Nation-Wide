@@ -15,6 +15,7 @@ import type { PickupRequestDto, QuoteDto, ShipmentTypeCode } from "@nationwide/s
 import { PartnerContact, PickupProgressBar } from "@/components/pickup-requests/pickup-status-pipeline";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { QuoteStatusBadge } from "@/components/ui/status-badge";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { cn } from "@/lib/utils/cn";
 
 const TYPE_ICON: Record<ShipmentTypeCode, LucideIcon> = {
@@ -92,12 +93,14 @@ export function QuoteSummaryCard({
   pickup,
   isAccepting,
   onAccept,
+  onDecline,
 }: {
   quote: QuoteDto;
   /** This quote's pickup request, once one exists — drives the progress bar. */
   pickup?: PickupRequestDto;
   isAccepting: boolean;
   onAccept: () => void;
+  onDecline: () => Promise<void>;
 }) {
   const Icon = TYPE_ICON[quote.shipmentType];
   const note = pickup ? null : noteFor(quote);
@@ -198,9 +201,23 @@ export function QuoteSummaryCard({
                 <ArrowRight className="h-3.5 w-3.5" aria-hidden />
               </Link>
             ) : quote.status === "QUOTED" ? (
-              <Button size="sm" isLoading={isAccepting} disabled={isAccepting} onClick={onAccept}>
-                Accept quote
-              </Button>
+              <div className="flex gap-2">
+                <ConfirmDialog
+                  title="Decline this quotation?"
+                  description="We won't ship this parcel. You can always request a new quote later."
+                  confirmLabel="Decline"
+                  variant="danger"
+                  onConfirm={onDecline}
+                  trigger={
+                    <Button size="sm" variant="secondary" disabled={isAccepting}>
+                      Decline
+                    </Button>
+                  }
+                />
+                <Button size="sm" isLoading={isAccepting} disabled={isAccepting} onClick={onAccept}>
+                  Accept quote
+                </Button>
+              </div>
             ) : quote.status === "PENDING_PICKUP_REQUEST" ? (
               <Link
                 href={`/pickup-request/${quote.id}`}

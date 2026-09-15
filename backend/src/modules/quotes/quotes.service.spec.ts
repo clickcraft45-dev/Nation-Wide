@@ -302,6 +302,38 @@ describe('QuotesService', () => {
     });
   });
 
+  describe('declineQuote', () => {
+    it('declines a sent quotation atomically', async () => {
+      prisma.quote.findUnique.mockResolvedValue({
+        ...savedQuote,
+        status: 'QUOTED',
+      });
+      await service.declineQuote('quote-1', 'customer-1');
+      expect(prisma.quote.updateMany).toHaveBeenCalledWith({
+        where: { id: 'quote-1', status: 'QUOTED' },
+        data: { status: 'REJECTED', rejectionReason: 'Declined by customer' },
+      });
+    });
+
+    it('refuses another customer', async () => {
+      prisma.quote.findUnique.mockResolvedValue({
+        ...savedQuote,
+        customerId: 'someone-else',
+        status: 'QUOTED',
+      });
+      await expect(
+        service.declineQuote('quote-1', 'customer-1'),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('refuses a quote that is no longer QUOTED', async () => {
+      prisma.quote.updateMany.mockResolvedValue({ count: 0 });
+      await expect(
+        service.declineQuote('quote-1', 'customer-1'),
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
+
   describe('acceptQuote', () => {
     it('rejects when the quote does not belong to the caller', async () => {
       prisma.quote.findUnique.mockResolvedValue({

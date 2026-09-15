@@ -41,6 +41,12 @@ export class AdminQuotesController {
     return data.map(toQuoteAdminDetailDto);
   }
 
+  // Registered ahead of :id so "counts" is never read as an id.
+  @Get('counts')
+  counts() {
+    return this.quotesService.countByStatus();
+  }
+
   @Get(':id')
   async findOne(@Param('id') id: string): Promise<QuoteAdminDetailDto> {
     const quote = await this.quotesService.findOneAdmin(id);

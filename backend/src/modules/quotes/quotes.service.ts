@@ -350,6 +350,12 @@ export class QuotesService {
   ): Promise<{ data: QuoteWithCustomer[]; total: number | null }> {
     const where: Prisma.QuoteWhereInput = {};
     if (query.status) where.status = query.status;
+    else if (query.statuses?.length) where.status = { in: query.statuses };
+    if (query.reviewReason) where.reviewReason = query.reviewReason;
+    if (query.quotedBefore)
+      where.quotedAt = { lt: new Date(query.quotedBefore) };
+    if (query.createdAfter)
+      where.createdAt = { gte: new Date(query.createdAfter) };
     if (query.search) {
       where.customer = {
         OR: [
@@ -370,6 +376,37 @@ export class QuotesService {
       paging ? this.prisma.quote.count({ where }) : Promise.resolve(null),
     ]);
     return { data, total };
+  }
+
+  /** How many quotes sit in each status — the counts on the admin list's tabs. */
+  async countByStatus(): Promise<Partial<Record<QuoteStatusCode, number>>> {
+    const rows = await this.prisma.quote.groupBy({
+      by: ['status'],
+      _count: { _all: true },
+    });
+    return Object.fromEntries(rows.map((r) => [r.status, r._count._all]));
+  }
+
+  // The customer saying no to an admin's quotation. Atomic on status, so a decline racing an
+  // accept (two tabs, a double tap) can never both land.
+  async declineQuote(
+    id: string,
+    customerId: string,
+  ): Promise<QuoteWithCustomer> {
+    const quote = await this.findOneOrThrow(id);
+    if (quote.customerId !== customerId) {
+      throw new ForbiddenException('This quote does not belong to you');
+    }
+    const declined = await this.prisma.quote.updateMany({
+      where: { id, status: 'QUOTED' },
+      data: { status: 'REJECTED', rejectionReason: 'Declined by customer' },
+    });
+    if (declined.count === 0) {
+      throw new BadRequestException(
+        `Only a sent quotation can be declined (current status: ${quote.status})`,
+      );
+    }
+    return this.findOneOrThrow(id);
   }
 
   findOneAdmin(id: string): Promise<QuoteWithCustomer> {

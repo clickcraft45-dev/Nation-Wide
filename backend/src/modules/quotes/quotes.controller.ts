@@ -72,6 +72,16 @@ export class QuotesController {
     return toQuoteDto(quote);
   }
 
+  @Post(':id/decline')
+  @Roles('CUSTOMER')
+  async decline(
+    @Param('id') id: string,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<QuoteDto> {
+    const quote = await this.quotesService.declineQuote(id, user.sub);
+    return toQuoteDto(quote);
+  }
+
   @Post(':id/select-option')
   @Roles('CUSTOMER')
   async selectOption(

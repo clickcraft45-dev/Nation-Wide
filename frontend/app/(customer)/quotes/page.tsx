@@ -1,15 +1,29 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { FileQuestion } from "lucide-react";
-import type { PickupRequestDto, QuoteDto } from "@nationwide/shared-types";
+import type { PickupRequestDto, QuoteDto, QuoteStatusCode } from "@nationwide/shared-types";
+import { TabSlider } from "@/components/ui/tab-slider";
 import { apiClient, errorMessage } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/page-state";
 import { useToast } from "@/components/ui/toast";
 import { QuoteSummaryCard } from "@/components/quote/quote-summary-card";
+
+type Tab = "all" | "action" | "review" | "pickups" | "orders" | "declined";
+
+// The same stages staff see, worded for the customer. "Needs you" first: those are the quotes
+// that sit still until the customer does something.
+const TABS: { value: Tab; label: string; statuses: QuoteStatusCode[] | null }[] = [
+  { value: "all", label: "All", statuses: null },
+  { value: "action", label: "Needs you", statuses: ["RATED", "QUOTED", "PENDING_PICKUP_REQUEST"] },
+  { value: "review", label: "Being priced", statuses: ["SUBMITTED", "NEEDS_MANUAL_REVIEW"] },
+  { value: "pickups", label: "Pickups", statuses: ["PICKUP_REQUESTED"] },
+  { value: "orders", label: "Orders", statuses: ["ACCEPTED"] },
+  { value: "declined", label: "Declined", statuses: ["REJECTED", "CANCELLED"] },
+];
 
 export default function CustomerQuotesPage() {
   const [quotes, setQuotes] = useState<QuoteDto[]>([]);
@@ -18,6 +32,7 @@ export default function CustomerQuotesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
+  const [tab, setTab] = useState<Tab>("all");
   const { showToast } = useToast();
 
   function load() {
@@ -60,6 +75,21 @@ export default function CustomerQuotesPage() {
     }
   }
 
+  async function decline(id: string) {
+    try {
+      await apiClient.post(`/quotes/${id}/decline`, {});
+      showToast({ variant: "success", title: "Quotation declined" });
+      load();
+    } catch (err) {
+      showToast({ variant: "error", title: errorMessage(err, "Couldn't decline this quotation.") });
+    }
+  }
+
+  const visible = useMemo(() => {
+    const statuses = TABS.find((t) => t.value === tab)?.statuses;
+    return statuses ? quotes.filter((q) => statuses.includes(q.status)) : quotes;
+  }, [quotes, tab]);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -99,14 +129,32 @@ export default function CustomerQuotesPage() {
       )}
 
       {!isLoading && !error && quotes.length > 0 && (
+        <TabSlider
+          ariaLabel="Filter quotes by stage"
+          tabs={TABS.map((t) => ({
+            value: t.value,
+            label: t.label,
+            count: t.statuses ? quotes.filter((q) => t.statuses!.includes(q.status)).length : quotes.length,
+          }))}
+          value={tab}
+          onChange={setTab}
+        />
+      )}
+
+      {!isLoading && !error && quotes.length > 0 && visible.length === 0 && (
+        <p className="py-8 text-center text-sm text-muted-foreground">Nothing here right now.</p>
+      )}
+
+      {!isLoading && !error && visible.length > 0 && (
         <div className="space-y-3">
-          {quotes.map((q) => (
+          {visible.map((q) => (
             <QuoteSummaryCard
               key={q.id}
               quote={q}
               pickup={q.status === "PICKUP_REQUESTED" ? pickups[q.id] : undefined}
               isAccepting={acceptingId === q.id}
               onAccept={() => void accept(q.id)}
+              onDecline={() => decline(q.id)}
             />
           ))}
         </div>
