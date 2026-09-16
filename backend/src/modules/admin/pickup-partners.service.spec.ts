@@ -44,7 +44,9 @@ describe('PickupPartnersService', () => {
     service = new PickupPartnersService(
       prisma as never,
       mail as never,
-      { get: jest.fn().mockReturnValue('https://nationwidelogistics.co') } as never,
+      {
+        get: jest.fn().mockReturnValue('https://nationwidelogistics.co'),
+      } as never,
     );
   });
 
@@ -73,7 +75,10 @@ describe('PickupPartnersService', () => {
     });
 
     it('generates a password and emails it when the admin supplies none', async () => {
-      await service.create({ email: 'new@nationwide.dev', name: 'New Partner' });
+      await service.create({
+        email: 'new@nationwide.dev',
+        name: 'New Partner',
+      });
 
       // Whatever was generated must be the same string that was hashed and the same string that
       // went out in the mail — a mismatch would create an account nobody can ever sign in to.

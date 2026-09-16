@@ -8,6 +8,10 @@ import { cn } from "@/lib/utils/cn";
 
 const INDIA = { lat: 20.5937, lng: 78.9629 };
 
+// Teardrop map pin, tip at (0,0) so the marker anchors on the exact coordinate.
+const PIN_PATH =
+  "M 0 0 C -3.5 -6 -9 -10 -9 -16.5 A 9 9 0 1 1 9 -16.5 C 9 -10 3.5 -6 0 0 Z M 0 -12 A 4.5 4.5 0 1 0 0 -21 A 4.5 4.5 0 1 0 0 -12 Z";
+
 export interface MapPoint {
   id: string;
   lat: number;
@@ -166,8 +170,9 @@ export function PickupsMap({
         position: { lat: point.lat, lng: point.lng },
         title: point.title,
         icon: {
-          path: google.maps.SymbolPath.BACKWARD_CLOSED_ARROW,
-          scale: 6,
+          path: PIN_PATH,
+          scale: 1.15,
+          anchor: new google.maps.Point(0, 0),
           fillColor: point.color ?? "#dc2626",
           fillOpacity: 1,
           strokeColor: "#ffffff",

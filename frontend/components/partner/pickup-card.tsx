@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { MapPin, Navigation, Phone, Scale } from "lucide-react";
+import { Clock, MapPin, Navigation, Phone, Scale } from "lucide-react";
 import type { PickupRequestDto } from "@nationwide/shared-types";
 import { apiClient, errorMessage } from "@/lib/api-client";
 import { PickupRequestStatusBadge } from "@/components/ui/status-badge";
@@ -16,6 +16,21 @@ function shipmentLabel(type: PickupRequestDto["shipmentType"]): string {
 /** A broadcast request no partner has taken yet — any partner may accept it. */
 export function isOpenRequest(pickup: PickupRequestDto): boolean {
   return pickup.status === "PENDING_ASSIGNMENT" && pickup.assignedPartnerId === null;
+}
+
+/**
+ * The step still owed on a pickup the partner already started at the door and then left without
+ * finishing — the status badge alone ("OUT FOR PICKUP") doesn't say what's left to do. Null once
+ * the pickup is finished, or before it was ever started.
+ */
+export function pendingStep(pickup: PickupRequestDto): string | null {
+  if (pickup.arrivedAt === null) return null;
+  if (pickup.status === "COMPLETED" || pickup.status === "CANCELLED" || pickup.status === "REJECTED") {
+    return null;
+  }
+  if (pickup.verifiedAt === null) return "Verification pending";
+  if (pickup.paymentCollectedAt === null) return "Payment pending";
+  return "Acceptance pending";
 }
 
 /**
@@ -73,6 +88,7 @@ export function PickupCard({ pickup, onClaimFailed }: { pickup: PickupRequestDto
   const amount = pickup.verifiedPrice ?? pickup.estimatedPrice;
   const href = `/partner/pickups/${pickup.id}`;
   const open = isOpenRequest(pickup);
+  const pending = pendingStep(pickup);
 
   function openDetail() {
     router.push(href);
@@ -122,6 +138,13 @@ export function PickupCard({ pickup, onClaimFailed }: { pickup: PickupRequestDto
           </a>
         </div>
       </div>
+
+      {pending && (
+        <p className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-warning-bg px-2.5 py-1 text-xs font-medium text-warning">
+          <Clock className="h-3.5 w-3.5" aria-hidden />
+          {pending} — tap to resume
+        </p>
+      )}
 
       <p className="mt-0.5 text-sm text-muted-foreground">
         {pickup.dropAtWarehouse

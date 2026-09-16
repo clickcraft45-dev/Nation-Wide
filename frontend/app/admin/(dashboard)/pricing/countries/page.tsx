@@ -17,6 +17,7 @@ import { EmptyState, ErrorState } from "@/components/ui/page-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CountryDialog } from "@/components/pricing/country-dialog";
+import { SpreadsheetActions } from "@/components/pricing/spreadsheet-actions";
 
 export default function PricingCountriesPage() {
   const [countries, setCountries] = useState<CountryDto[]>([]);
@@ -42,7 +43,8 @@ export default function PricingCountriesPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <SpreadsheetActions resource="countries" label="Countries" onImported={load} />
         <CountryDialog onSaved={() => load()} trigger={<Button size="sm">New country</Button>} />
       </div>
 

@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState, ErrorState } from "@/components/ui/page-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RateProviderDialog } from "@/components/pricing/rate-provider-dialog";
+import { SpreadsheetActions } from "@/components/pricing/spreadsheet-actions";
 
 export default function PricingProvidersPage() {
   const [providers, setProviders] = useState<RateProviderDto[]>([]);
@@ -36,11 +37,16 @@ export default function PricingProvidersPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">
           Pick a provider to manage its countries, weight categories, and rates.
         </p>
-        <RateProviderDialog onSaved={() => load()} trigger={<Button size="sm">New provider</Button>} />
+        <div className="flex flex-wrap items-center gap-2">
+          {/* The whole rate book in and out as one sheet — editing hundreds of bands in the
+              drill-down below is what the spreadsheet replaces. */}
+          <SpreadsheetActions resource="rate-cards" label="Rate cards" onImported={load} />
+          <RateProviderDialog onSaved={() => load()} trigger={<Button size="sm">New provider</Button>} />
+        </div>
       </div>
 
       {isLoading && (

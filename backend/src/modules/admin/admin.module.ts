@@ -9,6 +9,7 @@ import { AdminOrdersController } from './admin-orders.controller';
 import { AdminRateProvidersController } from './admin-rate-providers.controller';
 import { AdminPricingOverviewController } from './admin-pricing-overview.controller';
 import { AdminCountriesController } from './admin-countries.controller';
+import { AdminPricingSpreadsheetController } from './admin-pricing-spreadsheet.controller';
 import { AdminZonesController } from './admin-zones.controller';
 import { AdminRatesController } from './admin-rates.controller';
 import { AdminCompanySettingsController } from './admin-company-settings.controller';
@@ -51,6 +52,7 @@ import { MailModule } from '../mail/mail.module';
     AdminRateProvidersController,
     AdminPricingOverviewController,
     AdminCountriesController,
+    AdminPricingSpreadsheetController,
     AdminZonesController,
     AdminRatesController,
     AdminCompanySettingsController,

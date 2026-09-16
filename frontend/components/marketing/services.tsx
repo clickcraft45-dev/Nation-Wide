@@ -61,6 +61,8 @@ const SERVICES = [
 // Pointer position drives a glow and a tilt through CSS custom properties. Set directly on the
 // node rather than through state: this runs on every mousemove and must not re-render the list.
 function trackPointer(event: React.PointerEvent<HTMLButtonElement>) {
+  // Mouse only: on a phone a finger dragging to scroll the page would tilt every card it crosses.
+  if (event.pointerType !== "mouse") return;
   const card = event.currentTarget;
   const rect = card.getBoundingClientRect();
   const x = (event.clientX - rect.left) / rect.width;
@@ -91,16 +93,16 @@ export function MarketingServices() {
           description="Whatever you're sending, wherever it's going — we've got a service built for it."
         />
 
-        {/* Below sm the cards are a swipeable snap rail rather than a stack of four full-width
-            blocks — sideways is the natural gesture here and it keeps the section one screen tall.
-            From sm up it's the ordinary grid. */}
-        <div className="mt-12 -mx-6 flex snap-x snap-mandatory gap-5 overflow-x-auto px-6 pb-4 sm:mx-0 sm:grid sm:grid-cols-2 sm:gap-6 sm:overflow-visible sm:px-0 sm:pb-0 lg:grid-cols-4">
+        {/* One column on a phone, each card rising in as it scrolls into view — one by one. It used to
+            be a sideways snap rail, but Reveal watches vertical scroll, so cards parked off to the
+            right stayed invisible, and the sideways slide-in pushed the page wider than the screen. */}
+        <div className="mt-12 grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6 lg:grid-cols-4">
           {SERVICES.map((service, i) => (
             <Reveal
               key={service.title}
-              from={i % 2 === 0 ? "left" : "right"}
+              from="up"
+              // Short stagger so a desktop row lands left to right.
               delay={i * 90}
-              className="min-w-[78%] snap-start sm:min-w-0"
             >
               <button
                 onClick={() => gate("/quote")}
