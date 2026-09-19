@@ -175,6 +175,10 @@ model Customer {
   consentSource      String   @map("consent_source") // e.g. 'signup_form', 'staff_entry'
   /// S3 key of the customer's Aadhaar card photo, taken by the pickup partner at the door (customs
   /// asks for it on every export). Collected once and reused on later pickups unless replaced.
+  /// A business account: they sign in and book from the B2B portal instead of the consumer
+  /// screens, and staff can issue them a standing ordering link. Set by an admin invite only —
+  /// never self-served.
+  isB2b              Boolean   @default(false) @map("is_b2b")
   aadhaarKey         String?   @map("aadhaar_key")
   aadhaarUploadedAt  DateTime? @map("aadhaar_uploaded_at")
   createdAt          DateTime @default(now()) @map("created_at")
@@ -804,7 +808,6 @@ model AdminUser {
   pushSubscriptions          PushSubscription[]
   reviewedPartnerApplications PartnerApplication[] @relation("PartnerApplicationReviewedBy")
   createdB2bLinks             B2bLink[]            @relation("B2bLinkCreatedBy")
-  reviewedB2bRequests         B2bRequest[]         @relation("B2bRequestReviewedBy")
   approvedReviews             Review[]             @relation("ReviewApprovedBy")
 
   @@map("admin_users")
@@ -1366,40 +1369,6 @@ model SavedItem {
 
   @@unique([customerId, description])
   @@map("saved_items")
-}
-
-/// A business asking for a B2B account from the public site. Approving it creates (or reuses) the
-/// customer and issues their order link in one step — see B2bRequestsService.approve.
-///
-/// Deliberately NOT a customer record: anyone can submit this, and a row here grants nothing until
-/// a human approves it. Mirrors PartnerApplication, which guards account creation the same way.
-model B2bRequest {
-  id            String  @id @default(uuid())
-  companyName   String  @map("company_name")
-  contactName   String  @map("contact_name")
-  email         String
-  phone         String
-  /// Free text as the business described it, e.g. "40-60 parcels a month".
-  monthlyVolume String? @map("monthly_volume")
-  message       String?
-
-  status            PartnerApplicationStatus @default(PENDING)
-  reviewedByAdminId String?                  @map("reviewed_by_admin_id")
-  reviewedAt        DateTime?                @map("reviewed_at")
-  reviewNote        String?                  @map("review_note")
-  /// What approval produced — the audit link between a public submission and the account and link
-  /// it became.
-  createdCustomerId String?                  @map("created_customer_id")
-  createdB2bLinkId  String?                  @map("created_b2b_link_id")
-
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  reviewedBy AdminUser? @relation("B2bRequestReviewedBy", fields: [reviewedByAdminId], references: [id])
-
-  @@index([status, createdAt])
-  @@index([email])
-  @@map("b2b_requests")
 }
 
 /// A standing order-request link handed to a business customer: their staff open it and book

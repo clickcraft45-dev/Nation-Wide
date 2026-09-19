@@ -61,7 +61,12 @@ export class AuthController {
 
     return {
       accessToken,
-      user: { id: account.id, email: account.email, role: account.role },
+      user: {
+        id: account.id,
+        email: account.email,
+        role: account.role,
+        isB2b: account.isB2b,
+      },
     };
   }
 
@@ -147,7 +152,12 @@ export class AuthController {
 
     return {
       accessToken,
-      user: { id: account.id, email: account.email, role: account.role },
+      user: {
+        id: account.id,
+        email: account.email,
+        role: account.role,
+        isB2b: account.isB2b,
+      },
     };
   }
 

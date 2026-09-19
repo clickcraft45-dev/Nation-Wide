@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { UserCog } from "lucide-react";
+import { Trash2, UserCog } from "lucide-react";
 import type { PickupPartnerDto } from "@nationwide/shared-types";
 import { apiClient, errorMessage } from "@/lib/api-client";
 import {
@@ -17,6 +17,7 @@ import { EmptyState, ErrorState } from "@/components/ui/page-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { PickupPartnerDialog } from "@/components/pickup-partners/pickup-partner-dialog";
 
 export default function AdminPickupPartnersPage() {
@@ -41,6 +42,18 @@ export default function AdminPickupPartnersPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
   }, []);
+
+  async function remove(partner: PickupPartnerDto) {
+    try {
+      await apiClient.delete(`/admin/pickup-partners/${partner.id}`);
+      setPartners((prev) => prev.filter((p) => p.id !== partner.id));
+      showToast({ variant: "success", title: "Partner deleted" });
+    } catch (err) {
+      // The server refuses once they have pickups recorded, and says why — show that verbatim
+      // rather than a generic failure the admin cannot act on.
+      showToast({ variant: "error", title: errorMessage(err, "Couldn't delete this partner.") });
+    }
+  }
 
   async function toggleActive(partner: PickupPartnerDto) {
     try {
@@ -107,9 +120,25 @@ export default function AdminPickupPartnersPage() {
                   </Badge>
                 </TableCell>
                 <TableCell>
-                  <Button variant="secondary" size="sm" onClick={() => toggleActive(p)}>
-                    {p.isActive ? "Deactivate" : "Reactivate"}
-                  </Button>
+                  <div className="flex justify-end gap-2">
+                    <Button variant="secondary" size="sm" onClick={() => toggleActive(p)}>
+                      {p.isActive ? "Deactivate" : "Reactivate"}
+                    </Button>
+                    {/* Deleting is refused once they have pickups against them — that history is
+                        the record of who handled a customer's parcel and cash. */}
+                    <ConfirmDialog
+                      title={`Delete ${p.name ?? p.email}?`}
+                      description="Permanent, and only possible while they have no pickups recorded. Otherwise deactivate them — that ends every session and blocks sign-in while keeping the trail."
+                      confirmLabel="Delete partner"
+                      variant="danger"
+                      onConfirm={() => remove(p)}
+                      trigger={
+                        <Button variant="secondary" size="sm" aria-label={`Delete ${p.name ?? p.email}`}>
+                          <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                        </Button>
+                      }
+                    />
+                  </div>
                 </TableCell>
               </TableRow>
             ))}

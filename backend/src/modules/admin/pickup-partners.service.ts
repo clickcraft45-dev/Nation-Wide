@@ -1,4 +1,5 @@
 import {
+  ConflictException,
   BadRequestException,
   Injectable,
   Logger,
@@ -6,7 +7,7 @@ import {
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { ConfigService } from '@nestjs/config';
-import type { AdminUser } from '@prisma/client';
+import { Prisma, type AdminUser } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { MailService } from '../mail/mail.service';
 import { pickupPartnerCredentials } from '../mail/mail.templates';
@@ -86,6 +87,40 @@ export class PickupPartnersService {
     return this.prisma.adminUser.update({
       where: { id },
       data: dto,
+    });
+  }
+
+  /**
+   * Delete a partner outright. Only possible while nothing references them: the moment a partner
+   * has been assigned a pickup, confirmed one or taken a payment, that history is the record of
+   * who handled a customer's parcel and money, and Postgres refuses the delete (P2003). The
+   * answer then is deactivation, which ends their sessions and blocks sign-in while keeping the
+   * trail — the same rule AdminUsersService.remove applies to staff.
+   */
+  async remove(id: string, actorId: string): Promise<void> {
+    const partner = await this.findOneOrThrow(id);
+    try {
+      await this.prisma.adminUser.delete({ where: { id } });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2003'
+      ) {
+        throw new ConflictException(
+          'This partner has pickups recorded against them and cannot be deleted. Deactivate them instead — that ends every session and blocks sign-in, while keeping the record of what they collected.',
+        );
+      }
+      throw error;
+    }
+    await this.prisma.auditLog.create({
+      data: {
+        actorId,
+        action: 'PICKUP_PARTNER_DELETED',
+        entity: 'AdminUser',
+        entityId: id,
+        before: { email: partner.email, name: partner.name },
+        after: {},
+      },
     });
   }
 

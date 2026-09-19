@@ -18,7 +18,6 @@ import {
   User,
   Tag,
   ClipboardCheck,
-  Briefcase,
   ClipboardList,
   UserCog,
   ShieldCheck,
@@ -62,7 +61,6 @@ export const ADMIN_NAV_GROUPS: NavGroup[] = [
       { label: "Pickup Partners", href: "/admin/pickup-partners", icon: UserCog },
       { label: "Partner Applications", href: "/admin/partner-applications", icon: ClipboardCheck },
       { label: "Customers", href: "/admin/customers", icon: Users },
-      { label: "B2B Requests", href: "/admin/b2b-requests", icon: Briefcase, roles: ["ADMIN"] },
       // ADMIN-only, matching AdminUsersController: anything less lets a STAFF account promote
       // itself to ADMIN, which makes the role boundary decorative.
       { label: "Staff & Admins", href: "/admin/users", icon: ShieldCheck, roles: ["ADMIN"] },

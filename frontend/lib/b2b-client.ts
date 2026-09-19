@@ -1,4 +1,4 @@
-import { API_BASE_URL, ApiError } from "@/lib/api-client";
+import { API_BASE_URL, ApiError, apiClient } from "@/lib/api-client";
 
 /**
  * The B2B portal's own API client. The link token authenticates every call and travels in a
@@ -45,3 +45,15 @@ export function b2bClient(token: string) {
 }
 
 export type B2bClient = ReturnType<typeof b2bClient>;
+
+/**
+ * The same portal API for a signed-in business account: the ordinary session (JWT + refresh
+ * handling) carries it, so there is no token to pass. Shaped like b2bClient so the portal does not
+ * care which way its user got in.
+ */
+export const sessionB2bClient: B2bClient = {
+  get: (path) => apiClient.get(`/b2b${path}`),
+  post: (path, body) => apiClient.post(`/b2b${path}`, body),
+  patch: (path, body) => apiClient.patch(`/b2b${path}`, body),
+  delete: (path) => apiClient.delete(`/b2b${path}`),
+};

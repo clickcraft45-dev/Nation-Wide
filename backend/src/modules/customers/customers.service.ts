@@ -23,6 +23,8 @@ const PUBLIC_CUSTOMER_SELECT = {
   phone: true,
   email: true,
   address: true,
+  isB2b: true,
+  isActive: true,
   consentGivenAt: true,
   consentSource: true,
   createdAt: true,
@@ -94,6 +96,67 @@ export class CustomersService {
       throw new NotFoundException(`Customer ${id} not found`);
     }
     return customer;
+  }
+
+  /**
+   * Delete a customer outright. Only possible while nothing references them: an order, quote,
+   * invoice or receipt makes them part of a statutory record that must not vanish, and Postgres
+   * refuses the delete (P2003). Deactivation is the answer there — it blocks sign-in and takes
+   * them out of the booking screens while the history stays intact.
+   */
+  async remove(id: string, actorId: string): Promise<void> {
+    const customer = await this.findOne(id);
+    try {
+      await this.prisma.customer.delete({ where: { id } });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2003'
+      ) {
+        throw new ConflictException(
+          'This customer has orders or documents recorded against them and cannot be deleted. Deactivate them instead — that blocks sign-in and hides them from booking, while keeping their history.',
+        );
+      }
+      throw error;
+    }
+    await this.prisma.auditLog.create({
+      data: {
+        actorId,
+        action: 'CUSTOMER_DELETED',
+        entity: 'Customer',
+        entityId: id,
+        before: { name: customer.name, phone: customer.phone },
+        after: {},
+      },
+    });
+  }
+
+  /** Deactivating ends the session too: a live refresh token would outlast the block otherwise. */
+  async setActive(
+    id: string,
+    isActive: boolean,
+    actorId: string,
+  ): Promise<PublicCustomer> {
+    const existing = await this.findOne(id);
+    const updated = await this.prisma.customer.update({
+      where: { id },
+      data: {
+        isActive,
+        ...(isActive ? {} : { hashedRefreshToken: null }),
+      },
+      select: PUBLIC_CUSTOMER_SELECT,
+    });
+    await this.prisma.auditLog.create({
+      data: {
+        actorId,
+        action: isActive ? 'CUSTOMER_REACTIVATED' : 'CUSTOMER_DEACTIVATED',
+        entity: 'Customer',
+        entityId: id,
+        before: { isActive: existing.isActive },
+        after: { isActive },
+      },
+    });
+    return updated;
   }
 
   async update(id: string, dto: UpdateCustomerDto): Promise<PublicCustomer> {

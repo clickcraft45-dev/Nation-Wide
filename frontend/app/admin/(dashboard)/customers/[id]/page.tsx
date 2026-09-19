@@ -3,15 +3,18 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, Pencil, Package, CreditCard, Truck, StickyNote } from "lucide-react";
+import { ArrowLeft, Pencil, Package, CreditCard, Truck, StickyNote, Trash2 } from "lucide-react";
 import type { CustomerDto, OrderDto, PickupDto } from "@nationwide/shared-types";
-import { apiClient, ApiError } from "@/lib/api-client";
+import { apiClient, ApiError, errorMessage } from "@/lib/api-client";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ErrorState, EmptyState } from "@/components/ui/page-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TrackingStatusBadge, PaymentStatusBadge, PickupStatusBadge } from "@/components/ui/status-badge";
 import { EditCustomerDialog } from "@/components/customers/edit-customer-dialog";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { useToast } from "@/components/ui/toast";
+import { useRouter } from "next/navigation";
 import { B2bLinksCard } from "@/components/customers/b2b-links-card";
 
 export default function AdminCustomerProfilePage() {
@@ -21,6 +24,36 @@ export default function AdminCustomerProfilePage() {
   const [pickups, setPickups] = useState<PickupDto[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { showToast } = useToast();
+  const router = useRouter();
+
+  // Deactivating blocks sign-in and hides them from booking; deleting is only possible while they
+  // have no history at all, and the server says so plainly when they do.
+  async function setActive(isActive: boolean) {
+    try {
+      const updated = await apiClient.patch<CustomerDto>(
+        `/customers/${params.id}/active`,
+        { isActive },
+      );
+      setCustomer(updated);
+      showToast({
+        variant: "success",
+        title: isActive ? "Customer reactivated" : "Customer deactivated",
+      });
+    } catch (err) {
+      showToast({ variant: "error", title: errorMessage(err, "Couldn't update this customer.") });
+    }
+  }
+
+  async function remove() {
+    try {
+      await apiClient.delete(`/customers/${params.id}`);
+      showToast({ variant: "success", title: "Customer deleted" });
+      router.push("/admin/customers");
+    } catch (err) {
+      showToast({ variant: "error", title: errorMessage(err, "Couldn't delete this customer.") });
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -86,24 +119,64 @@ export default function AdminCustomerProfilePage() {
         <>
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-xl font-semibold text-foreground">{customer.name}</h1>
+              <h1 className="flex items-center gap-2 text-xl font-semibold text-foreground">
+                {customer.name}
+                {!customer.isActive && (
+                  <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                    Deactivated
+                  </span>
+                )}
+              </h1>
               <p className="text-sm text-muted-foreground">
                 Customer since {new Date(customer.createdAt).toLocaleDateString()}
               </p>
             </div>
-            <EditCustomerDialog
-              customer={customer}
-              onUpdated={setCustomer}
-              trigger={
-                <Button variant="secondary" size="sm">
-                  <Pencil className="h-3.5 w-3.5" aria-hidden />
-                  Edit
-                </Button>
-              }
-            />
+            <div className="flex flex-wrap gap-2">
+              <EditCustomerDialog
+                customer={customer}
+                onUpdated={setCustomer}
+                trigger={
+                  <Button variant="secondary" size="sm">
+                    <Pencil className="h-3.5 w-3.5" aria-hidden />
+                    Edit
+                  </Button>
+                }
+              />
+              {/* Deactivation is the usual answer: it blocks sign-in and takes them out of the
+                  booking screens while their orders and invoices stay intact. */}
+              <ConfirmDialog
+                title={customer.isActive ? `Deactivate ${customer.name}?` : `Reactivate ${customer.name}?`}
+                description={
+                  customer.isActive
+                    ? "They can no longer sign in, and staff will not see them when booking. Their orders, invoices and history are kept."
+                    : "They can sign in and be booked for again."
+                }
+                confirmLabel={customer.isActive ? "Deactivate" : "Reactivate"}
+                variant={customer.isActive ? "danger" : "primary"}
+                onConfirm={() => setActive(!customer.isActive)}
+                trigger={
+                  <Button variant="secondary" size="sm">
+                    {customer.isActive ? "Deactivate" : "Reactivate"}
+                  </Button>
+                }
+              />
+              <ConfirmDialog
+                title={`Delete ${customer.name}?`}
+                description="Permanent, and only possible while they have no orders or documents at all — the server refuses otherwise and tells you to deactivate instead."
+                confirmLabel="Delete customer"
+                variant="danger"
+                onConfirm={remove}
+                trigger={
+                  <Button variant="secondary" size="sm">
+                    <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                    Delete
+                  </Button>
+                }
+              />
+            </div>
           </div>
 
-          <B2bLinksCard customerId={params.id} />
+          <B2bLinksCard customer={customer} onCustomerChange={setCustomer} />
 
           <Card>
             <CardHeader>

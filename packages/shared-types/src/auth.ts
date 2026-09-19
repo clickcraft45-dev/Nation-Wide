@@ -6,6 +6,8 @@ export interface AuthUserDto {
   id: string;
   email: string;
   role: Role;
+  /** CUSTOMER only: a business account, which the login page sends to the B2B portal. */
+  isB2b?: boolean;
 }
 
 export interface LoginResponseDto {

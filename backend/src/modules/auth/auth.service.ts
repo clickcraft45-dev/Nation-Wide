@@ -33,6 +33,7 @@ interface AuthAccount {
   id: string;
   email: string;
   role: Role;
+  isB2b: boolean;
   passwordHash: string | null;
   hashedRefreshToken: string | null;
   isActive: boolean;
@@ -185,7 +186,10 @@ export class AuthService {
         consentSource: 'google_signup',
       },
     });
-    this.audit('GOOGLE_SIGNUP', { email: profile.email, accountId: customer.id });
+    this.audit('GOOGLE_SIGNUP', {
+      email: profile.email,
+      accountId: customer.id,
+    });
     return this.toAuthAccount(customer, 'CUSTOMER');
   }
 
@@ -196,12 +200,13 @@ export class AuthService {
    */
 
   async issueTokenPair(
-    account: Pick<AuthAccount, 'id' | 'email' | 'role'>,
+    account: Pick<AuthAccount, 'id' | 'email' | 'role'> & { isB2b?: boolean },
   ): Promise<TokenPair> {
     const payload: JwtPayload = {
       sub: account.id,
       email: account.email,
       role: account.role,
+      ...(account.isB2b ? { isB2b: true } : {}),
     };
 
     // A per-issuance jti keeps each refresh token unique even when issued within the
@@ -422,6 +427,7 @@ export class AuthService {
       passwordHash: string | null;
       hashedRefreshToken: string | null;
       isActive: boolean;
+      isB2b?: boolean;
     },
     role: Role,
   ): AuthAccount {
@@ -429,6 +435,7 @@ export class AuthService {
       id: record.id,
       email: record.email ?? '',
       role,
+      isB2b: Boolean(record.isB2b),
       passwordHash: record.passwordHash,
       hashedRefreshToken: record.hashedRefreshToken,
       isActive: record.isActive,

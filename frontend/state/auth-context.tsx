@@ -40,7 +40,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const res = await apiClient.post<{ accessToken: string }>("/auth/refresh", {});
       setAccessToken(res.accessToken);
       const decoded = decodeAccessToken(res.accessToken);
-      setUser(decoded ? { id: decoded.sub, email: decoded.email, role: decoded.role } : null);
+      setUser(
+        decoded
+          ? {
+              id: decoded.sub,
+              email: decoded.email,
+              role: decoded.role,
+              isB2b: decoded.isB2b,
+            }
+          : null,
+      );
       return res.accessToken;
     } catch {
       setAccessToken(null);

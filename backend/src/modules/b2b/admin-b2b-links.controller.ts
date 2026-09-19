@@ -1,7 +1,9 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
+  HttpCode,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -16,6 +18,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/types/jwt-payload.type';
 import { B2bLinksService, toB2bLinkDto } from './b2b-links.service';
+import { B2bAccountsService } from './b2b-accounts.service';
 
 class CreateB2bLinkDto {
   @IsString()
@@ -30,7 +33,32 @@ class CreateB2bLinkDto {
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('ADMIN')
 export class AdminB2bLinksController {
-  constructor(private readonly links: B2bLinksService) {}
+  constructor(
+    private readonly links: B2bLinksService,
+    private readonly accounts: B2bAccountsService,
+  ) {}
+
+  /**
+   * Invite this customer onto the B2B portal: marks them a business account and emails a link to
+   * set a password. The only way in — there is no public sign-up.
+   */
+  @Post('invite')
+  invite(
+    @Param('customerId', ParseUUIDPipe) customerId: string,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<{ email: string; expiresInMinutes: number }> {
+    return this.accounts.invite(customerId, user.sub);
+  }
+
+  /** Withdraw portal access, revoking their standing links with it. */
+  @Delete('access')
+  @HttpCode(204)
+  revokeAccess(
+    @Param('customerId', ParseUUIDPipe) customerId: string,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<void> {
+    return this.accounts.revokeAccess(customerId, user.sub);
+  }
 
   @Get()
   async findAll(

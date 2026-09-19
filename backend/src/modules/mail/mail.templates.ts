@@ -126,52 +126,50 @@ Review it: ${input.reviewUrl}`,
 }
 
 // ---------------------------------------------------------------------------
-// 1b. New B2B account request — internal alert to the operations inbox
+// 1b. B2B portal invitation — sent to the business by an admin
 // ---------------------------------------------------------------------------
 
-export interface B2bRequestEmailInput {
+export interface B2bInviteEmailInput {
   companyName: string;
-  contactName: string;
   email: string;
-  phone: string;
-  monthlyVolume?: string | null;
-  message?: string | null;
-  reviewUrl: string;
+  setPasswordUrl: string;
+  portalUrl: string;
+  expiresInDays: number;
 }
 
-export function b2bRequestReceived(
-  input: B2bRequestEmailInput,
-  to: string,
-): OutboundEmail {
-  const details = [
-    row('Company', escapeHtml(input.companyName)),
-    row('Contact', escapeHtml(input.contactName)),
-    row('Email', escapeHtml(input.email)),
-    row('Phone', escapeHtml(input.phone)),
-    input.monthlyVolume ? row('Volume', escapeHtml(input.monthlyVolume)) : '',
-    input.message ? row('Message', escapeHtml(input.message)) : '',
-  ].join('');
-
+/**
+ * The only way onto the B2B portal. Carries a set-password link, which is a password-reset grant
+ * (see B2bAccountsService) — so it expires, works once, and never contains a password.
+ */
+export function b2bInvite(input: B2bInviteEmailInput): OutboundEmail {
+  const company = escapeHtml(input.companyName);
   return {
-    to,
-    subject: `New B2B account request — ${input.companyName}`,
-    // Replying goes to the business, so ops can answer without copying the address out.
-    replyTo: input.email,
+    to: input.email,
+    subject: 'Your NationWide business account',
     html: shell(
-      'New B2B account request',
-      `<p style="${P}">A business asked for a NationWide account. Approving creates the customer and issues their order link.</p>
-       <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;margin:18px 0;">${details}</table>
-       ${button(input.reviewUrl, 'Review request')}
-       <p style="${MUTED}">You are receiving this because you are on the NationWide operations inbox.</p>`,
+      'Your business account is ready',
+      `<p style="${P}">Hello ${company},</p>
+       <p style="${P}">We have set up a NationWide business account for you. Choose a password to
+        activate it, then sign in to book pickups: many shipments in one collection, with your
+        addresses and regular contents saved for next time.</p>
+       ${button(input.setPasswordUrl, 'Set your password')}
+       <p style="${MUTED}">This link expires in ${input.expiresInDays} days and can be used once.
+        Afterwards, sign in any time at ${escapeHtml(input.portalUrl)}.</p>
+       <p style="${MUTED}">If you were not expecting this, ignore this email and nothing will
+        change.</p>`,
     ),
-    text: `New B2B account request
+    text: `Your NationWide business account
 
-Company: ${input.companyName}
-Contact: ${input.contactName}
-Email:   ${input.email}
-Phone:   ${input.phone}${input.monthlyVolume ? `\nVolume:  ${input.monthlyVolume}` : ''}${input.message ? `\nMessage: ${input.message}` : ''}
+Hello ${input.companyName},
 
-Review it: ${input.reviewUrl}`,
+We have set up a business account for you. Choose a password to activate it:
+
+${input.setPasswordUrl}
+
+This link expires in ${input.expiresInDays} days and can be used once. Afterwards, sign in at
+${input.portalUrl}.
+
+If you were not expecting this, ignore this email.`,
   };
 }
 

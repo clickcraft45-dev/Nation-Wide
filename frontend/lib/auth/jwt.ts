@@ -4,6 +4,8 @@ interface DecodedAccessToken {
   sub: string;
   email: string;
   role: Role;
+  /** CUSTOMER only: a business account, which decides where login lands them. */
+  isB2b?: boolean;
 }
 
 /**

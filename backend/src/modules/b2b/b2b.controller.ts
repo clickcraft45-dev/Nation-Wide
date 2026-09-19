@@ -29,7 +29,7 @@ import { QuotesService } from '../quotes/quotes.service';
 import { QuotePreviewQueryDto } from '../quotes/dto/quote-preview.dto';
 import { PickupRequestsService } from '../pickup-requests/pickup-requests.service';
 import { B2bCreateOrdersDto } from '../pickup-requests/dto/b2b-create-orders.dto';
-import { B2bTokenGuard, type B2bRequest } from './b2b-token.guard';
+import { B2bAccessGuard, type B2bRequest } from './b2b-access.guard';
 
 // Reachable by anyone holding the link, so every route is throttled. Booking writes rows and runs
 // the pricing engine once per shipment, so it is tighter than the reads.
@@ -37,13 +37,13 @@ const READ_THROTTLE = { default: { limit: 60, ttl: 60_000 } };
 const BOOK_THROTTLE = { default: { limit: 10, ttl: 60_000 } };
 
 /**
- * The B2B order portal: a business customer's despatch team booking shipments from a standing link
- * (see B2bLinksService), with no individual logins. Everything here is scoped to the customer the
- * token resolves to — the client never supplies a customer id, so one link can never reach
- * another business's data.
+ * The B2B order portal: a business booking shipments for itself. Reached either by signing in with
+ * a business account or through a standing link handed to a despatch desk — see B2bAccessGuard,
+ * which resolves both to one customer. Everything here is scoped to that customer; the client
+ * never supplies a customer id, so one caller can never reach another business's data.
  */
 @Controller('b2b')
-@UseGuards(B2bTokenGuard)
+@UseGuards(B2bAccessGuard)
 export class B2bController {
   constructor(
     private readonly pickupRequests: PickupRequestsService,

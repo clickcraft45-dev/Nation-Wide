@@ -65,9 +65,13 @@ function LoginPageInner() {
 
   useEffect(() => {
     if (isLoading || !user) return;
+    // A business account books from the B2B portal, not the consumer dashboard — the same
+    // role-based routing that already sends partners to their own app.
     const fallback =
       user.role === "CUSTOMER"
-        ? "/dashboard"
+        ? user.isB2b
+          ? "/b2b"
+          : "/dashboard"
         : user.role === "PICKUP_PARTNER"
           ? "/partner/requests"
           : "/admin/dashboard";

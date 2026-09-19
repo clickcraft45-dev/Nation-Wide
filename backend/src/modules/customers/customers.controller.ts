@@ -1,7 +1,9 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
+  HttpCode,
   Param,
   Patch,
   Post,
@@ -19,6 +21,12 @@ import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { QueryCustomersDto } from './dto/query-customers.dto';
 import type { JwtPayload } from '../auth/types/jwt-payload.type';
+import { IsBoolean } from 'class-validator';
+
+class SetCustomerActiveDto {
+  @IsBoolean()
+  isActive!: boolean;
+}
 
 @Controller('customers')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -67,6 +75,29 @@ export class CustomersController {
   @Roles('STAFF', 'ADMIN')
   findOne(@Param('id') id: string): Promise<PublicCustomer> {
     return this.customersService.findOne(id);
+  }
+
+  // Blocking or restoring access. Separate from update() because it is not an edit of their
+  // details — it ends their sessions, and it is what staff reach for instead of deleting.
+  @Patch(':id/active')
+  @Roles('STAFF', 'ADMIN')
+  setActive(
+    @Param('id') id: string,
+    @Body() dto: SetCustomerActiveDto,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<PublicCustomer> {
+    return this.customersService.setActive(id, dto.isActive, user.sub);
+  }
+
+  // ADMIN only, and refused outright once the customer has any history — see the service.
+  @Delete(':id')
+  @Roles('ADMIN')
+  @HttpCode(204)
+  remove(
+    @Param('id') id: string,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<void> {
+    return this.customersService.remove(id, user.sub);
   }
 
   @Patch(':id')

@@ -2,12 +2,8 @@ import { Module } from '@nestjs/common';
 import { B2bController } from './b2b.controller';
 import { AdminB2bLinksController } from './admin-b2b-links.controller';
 import { B2bLinksService } from './b2b-links.service';
-import { B2bRequestsService } from './b2b-requests.service';
-import {
-  AdminB2bRequestsController,
-  PublicB2bRequestsController,
-} from './b2b-requests.controller';
-import { B2bTokenGuard } from './b2b-token.guard';
+import { B2bAccountsService } from './b2b-accounts.service';
+import { B2bAccessGuard } from './b2b-access.guard';
 import { PickupRequestsModule } from '../pickup-requests/pickup-requests.module';
 import { CustomersModule } from '../customers/customers.module';
 import { PricingModule } from '../pricing/pricing.module';
@@ -22,16 +18,11 @@ import { MailModule } from '../mail/mail.module';
     CustomersModule,
     PricingModule,
     QuotesModule,
-    // The operations alert when a business asks for an account.
+    // The invite email that brings a business onto the portal.
     MailModule,
   ],
-  controllers: [
-    B2bController,
-    AdminB2bLinksController,
-    PublicB2bRequestsController,
-    AdminB2bRequestsController,
-  ],
-  providers: [B2bLinksService, B2bRequestsService, B2bTokenGuard],
-  exports: [B2bLinksService],
+  controllers: [B2bController, AdminB2bLinksController],
+  providers: [B2bLinksService, B2bAccountsService, B2bAccessGuard],
+  exports: [B2bLinksService, B2bAccountsService],
 })
 export class B2bModule {}

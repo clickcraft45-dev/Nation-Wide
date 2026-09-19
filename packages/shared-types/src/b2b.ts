@@ -22,40 +22,16 @@ export interface CreateB2bLinkDto {
   label: string;
 }
 
-/** A business asking for an account from the public site. Approving it issues their order link. */
-export interface B2bRequestDto {
-  id: string;
-  companyName: string;
-  contactName: string;
+/** What an admin gets back after inviting a business onto the portal. */
+export interface B2bInviteResultDto {
   email: string;
-  phone: string;
-  monthlyVolume: string | null;
-  message: string | null;
-  status: "PENDING" | "APPROVED" | "REJECTED";
-  reviewNote: string | null;
-  reviewedAt: string | null; // ISO 8601
-  createdCustomerId: string | null;
-  createdAt: string; // ISO 8601
-}
-
-export interface CreateB2bRequestDto {
-  companyName: string;
-  contactName: string;
-  email: string;
-  phone: string;
-  monthlyVolume?: string;
-  message?: string;
-}
-
-/** Approval hands back the new link — the only time its URL is ever shown. */
-export interface B2bRequestApprovalDto {
-  request: B2bRequestDto;
-  link: B2bLinkDto;
+  expiresInMinutes: number;
 }
 
 /** What the portal needs on open: who it belongs to, and everything reusable. */
 export interface B2bSessionDto {
   customerName: string;
+  /** The link's label, or "Signed in" when reached with a business account. */
   linkLabel: string;
   addressBook: AddressBookDto;
 }

@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Copy, Link2, ShieldOff } from "lucide-react";
-import type { B2bLinkDto } from "@nationwide/shared-types";
+import { Copy, Link2, Mail, ShieldOff } from "lucide-react";
+import type { B2bInviteResultDto, B2bLinkDto, CustomerDto } from "@nationwide/shared-types";
 import { apiClient, errorMessage } from "@/lib/api-client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Input, Label, FieldError } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
@@ -14,20 +15,58 @@ function when(iso: string): string {
 }
 
 /**
- * Standing order-request links for a business customer: their despatch team books shipments from
- * the link without individual logins.
+ * Everything that puts a business on the B2B portal.
  *
- * A link is shown ONCE, when it is created — only its hash is stored, so it can be replaced but
- * never re-read. Whoever holds it can place orders billed to this customer, which is why revoking
- * is right here next to it.
+ * Two ways in, both issued here and neither self-served: an invitation email that turns their
+ * customer account into a business login, and standing links for a despatch desk that keeps no
+ * logins. A link is shown ONCE, when created — only its hash is stored — and whoever holds it can
+ * place orders billed to this customer, which is why revoking sits right next to it.
  */
-export function B2bLinksCard({ customerId }: { customerId: string }) {
+export function B2bLinksCard({
+  customer,
+  onCustomerChange,
+}: {
+  customer: CustomerDto;
+  onCustomerChange: (next: CustomerDto) => void;
+}) {
+  const customerId = customer.id;
   const { showToast } = useToast();
   const [links, setLinks] = useState<B2bLinkDto[] | null>(null);
   const [label, setLabel] = useState("");
   const [created, setCreated] = useState<B2bLinkDto | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+  const [isInviting, setIsInviting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  async function invite() {
+    setError(null);
+    setIsInviting(true);
+    try {
+      const result = await apiClient.post<B2bInviteResultDto>(`${base}/invite`, {});
+      onCustomerChange({ ...customer, isB2b: true });
+      showToast({
+        variant: "success",
+        title: `Invitation sent to ${result.email}`,
+        description: "They set a password from the email, then sign in at the normal login.",
+      });
+    } catch (err) {
+      setError(errorMessage(err, "Couldn't send the invitation."));
+    } finally {
+      setIsInviting(false);
+    }
+  }
+
+  async function revokeAccess() {
+    setError(null);
+    try {
+      await apiClient.delete(`${base}/access`);
+      onCustomerChange({ ...customer, isB2b: false });
+      setLinks((all) => (all ?? []).map((l) => ({ ...l, revokedAt: l.revokedAt ?? new Date().toISOString() })));
+      showToast({ variant: "success", title: "Portal access withdrawn" });
+    } catch (err) {
+      setError(errorMessage(err, "Couldn't withdraw access."));
+    }
+  }
 
   const base = `/admin/customers/${customerId}/b2b-links`;
 
@@ -92,9 +131,51 @@ export function B2bLinksCard({ customerId }: { customerId: string }) {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
+        <div className="space-y-3 rounded-lg border border-border p-3">
+          <div>
+            <p className="text-sm font-medium text-foreground">
+              Business account {customer.isB2b && <span className="text-success">· active</span>}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Invite them to sign in and book from the B2B portal: many recipients per pickup,
+              reusing their saved addresses and items. They set their own password from the email.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              size="sm"
+              onClick={invite}
+              isLoading={isInviting}
+              disabled={!customer.email}
+            >
+              <Mail className="h-4 w-4" aria-hidden />
+              {customer.isB2b ? "Resend invitation" : "Invite to B2B portal"}
+            </Button>
+            {customer.isB2b && (
+              <ConfirmDialog
+                title="Withdraw portal access?"
+                description="They can no longer sign in to the B2B portal, and every standing link for them is revoked. Their orders and history are untouched."
+                confirmLabel="Withdraw access"
+                variant="danger"
+                onConfirm={revokeAccess}
+                trigger={
+                  <Button type="button" size="sm" variant="secondary">
+                    Withdraw access
+                  </Button>
+                }
+              />
+            )}
+          </div>
+          {!customer.email && (
+            <p className="text-xs text-warning">
+              Add an email address to this customer before inviting them.
+            </p>
+          )}
+        </div>
+
         <p className="text-sm text-muted-foreground">
-          Give this customer&apos;s team a link to book shipments themselves — many recipients per
-          pickup, reusing their saved addresses and items. No login needed, so treat it like a
+          Or hand a despatch desk a standing link — booking with no login at all. Treat it like a
           password and revoke it if it leaks.
         </p>
 
