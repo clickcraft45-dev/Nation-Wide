@@ -24,6 +24,7 @@ describe('CreatePickupRequestDto', () => {
     quoteId: '3f1c2b9e-8a4d-4c1e-9f2a-1b2c3d4e5f60',
     pickupContactName: 'Devi Ankana',
     pickupContactPhone: '1234567890',
+    items: [{ description: 'Books', quantity: 1, unitValue: 250 }],
   };
 
   it('accepts a warehouse drop-off with no pickup address', async () => {
@@ -58,10 +59,24 @@ describe('CreatePickupRequestDto', () => {
       }),
     ).toEqual(['recipient']);
   });
+
+  it('requires the contents', async () => {
+    expect(
+      await failedFields(CreatePickupRequestDto, {
+        ...base,
+        dropAtWarehouse: true,
+        items: [],
+      }),
+    ).toEqual(['items']);
+  });
 });
 
 describe('VerifyPickupRequestDto', () => {
-  const base = { verifiedWeightKg: 2.5, verifiedShipmentType: 'PACKAGE' };
+  const base = {
+    packages: [{ weightKg: 2.5, lengthCm: 30, widthCm: 20, heightCm: 10 }],
+    items: [{ description: 'Books', quantity: 1, unitValue: 250 }],
+    verifiedShipmentType: 'PACKAGE',
+  };
 
   it('requires the partner to confirm the recipient address', async () => {
     expect(await failedFields(VerifyPickupRequestDto, base)).toEqual([
@@ -76,5 +91,29 @@ describe('VerifyPickupRequestDto', () => {
         recipient: RECIPIENT,
       }),
     ).toEqual([]);
+  });
+});
+
+describe('box dimensions', () => {
+  const body = (pkg: object) => ({
+    packages: [pkg],
+    items: [{ description: 'Books', quantity: 1, unitValue: 250 }],
+    verifiedShipmentType: 'PACKAGE',
+    recipient: RECIPIENT,
+  });
+
+  it('may be left out entirely (a document envelope)', async () => {
+    expect(
+      await failedFields(VerifyPickupRequestDto, body({ weightKg: 0.2 })),
+    ).toEqual([]);
+  });
+
+  it('are all-or-nothing', async () => {
+    expect(
+      await failedFields(
+        VerifyPickupRequestDto,
+        body({ weightKg: 2, lengthCm: 30 }),
+      ),
+    ).toEqual(['packages']);
   });
 });

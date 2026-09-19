@@ -14,8 +14,10 @@ const SEED_ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD ?? 'ChangeMe123!';
 // has — ADMIN, PICKUP_PARTNER, CUSTOMER — can be signed into straight after a seed. Customers
 // authenticate off the customers table, not admin_users; AuthService.findAccountByEmail checks
 // admin_users first and falls through, so these emails must never collide with the two above.
-const SEED_CUSTOMER_EMAIL = process.env.SEED_CUSTOMER_EMAIL ?? 'customer@nationwide.dev';
-const SEED_CUSTOMER_PASSWORD = process.env.SEED_CUSTOMER_PASSWORD ?? 'ChangeMe123!';
+const SEED_CUSTOMER_EMAIL =
+  process.env.SEED_CUSTOMER_EMAIL ?? 'customer@nationwide.dev';
+const SEED_CUSTOMER_PASSWORD =
+  process.env.SEED_CUSTOMER_PASSWORD ?? 'ChangeMe123!';
 const SEED_CUSTOMER_PHONE = '+911234500000';
 
 async function main() {
@@ -44,7 +46,10 @@ async function main() {
     process.env.SEED_PICKUP_PARTNER_EMAIL ?? 'pickup@nationwide.com';
   const SEED_PICKUP_PARTNER_PASSWORD =
     process.env.SEED_PICKUP_PARTNER_PASSWORD ?? 'ChangeMe123!';
-  const pickupPartnerPasswordHash = await bcrypt.hash(SEED_PICKUP_PARTNER_PASSWORD, 10);
+  const pickupPartnerPasswordHash = await bcrypt.hash(
+    SEED_PICKUP_PARTNER_PASSWORD,
+    10,
+  );
 
   const pickupPartner = await prisma.adminUser.upsert({
     where: { email: SEED_PICKUP_PARTNER_EMAIL },
@@ -57,7 +62,9 @@ async function main() {
       phone: '+911234599999',
     },
   });
-  console.log(`Seeded pickup partner user: ${pickupPartner.email} (role: ${pickupPartner.role})`);
+  console.log(
+    `Seeded pickup partner user: ${pickupPartner.email} (role: ${pickupPartner.role})`,
+  );
 
   // Phase 6: real ICL Tracking API integration is live (verified end-to-end against
   // production), so this row points at ICLShippingProviderAdapter — see
@@ -92,7 +99,9 @@ async function main() {
       create: status,
     });
   }
-  console.log(`Seeded ${TRACKING_STATUSES.length} canonical tracking statuses.`);
+  console.log(
+    `Seeded ${TRACKING_STATUSES.length} canonical tracking statuses.`,
+  );
 
   // Local-dev-only demo data so the /track page has a real tracking number to look up.
   // Unlike the admin upsert above, this one backfills on update: the row predates the seeded
@@ -101,7 +110,11 @@ async function main() {
   const customerPasswordHash = await bcrypt.hash(SEED_CUSTOMER_PASSWORD, 10);
   const demoCustomer = await prisma.customer.upsert({
     where: { phone: SEED_CUSTOMER_PHONE },
-    update: { email: SEED_CUSTOMER_EMAIL, passwordHash: customerPasswordHash, isActive: true },
+    update: {
+      email: SEED_CUSTOMER_EMAIL,
+      passwordHash: customerPasswordHash,
+      isActive: true,
+    },
     create: {
       name: 'Demo Customer',
       phone: SEED_CUSTOMER_PHONE,
@@ -149,7 +162,9 @@ async function main() {
     },
   });
 
-  console.log(`Seeded demo shipment for local testing: ${demoInternalTrackingNumber}`);
+  console.log(
+    `Seeded demo shipment for local testing: ${demoInternalTrackingNumber}`,
+  );
 
   // Pricing engine (Section: Dynamic Shipping Quotation) — RateProvider is independent from
   // ShippingProvider above; it's pure admin-managed pricing data, no adapter class involved.
@@ -177,7 +192,9 @@ async function main() {
   ) as Array<{ code: string; name: string }>;
 
   const existingCountryCodes = new Set(
-    (await prisma.country.findMany({ select: { code: true } })).map((c) => c.code),
+    (await prisma.country.findMany({ select: { code: true } })).map(
+      (c) => c.code,
+    ),
   );
   const missingCountries = COUNTRIES.filter(
     (c) => !existingCountryCodes.has(c.code),
@@ -198,7 +215,11 @@ async function main() {
       email: SEED_PICKUP_PARTNER_EMAIL,
       password: SEED_PICKUP_PARTNER_PASSWORD,
     },
-    { role: 'CUSTOMER', email: SEED_CUSTOMER_EMAIL, password: SEED_CUSTOMER_PASSWORD },
+    {
+      role: 'CUSTOMER',
+      email: SEED_CUSTOMER_EMAIL,
+      password: SEED_CUSTOMER_PASSWORD,
+    },
   ]);
 
   await seedCompanySettings();
@@ -216,7 +237,9 @@ async function main() {
  * seed re-run must not quietly revert their correction.
  */
 async function seedCompanySettings() {
-  const existing = await prisma.companySettings.findFirst();
+  const existing =
+    (await prisma.companySettings.findFirst({ where: { isActive: true } })) ??
+    (await prisma.companySettings.findFirst());
   if (!existing) {
     const created = await prisma.companySettings.create({
       data: { ...REGISTERED_COMPANY },

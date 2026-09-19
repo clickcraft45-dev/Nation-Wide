@@ -8,6 +8,9 @@ export function toPickupPartnerDto(partner: AdminUser): PickupPartnerDto {
     name: partner.name,
     phone: partner.phone,
     isActive: partner.isActive,
+    lastLatitude: partner.lastLatitude,
+    lastLongitude: partner.lastLongitude,
+    locationUpdatedAt: partner.locationUpdatedAt?.toISOString() ?? null,
     createdAt: partner.createdAt.toISOString(),
   };
 }

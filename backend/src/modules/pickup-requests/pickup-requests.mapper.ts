@@ -1,4 +1,8 @@
-import type { PickupRequestDto } from '@nationwide/shared-types';
+import type {
+  ParcelPackageDto,
+  PickupRequestDto,
+  ShipmentItemDto,
+} from '@nationwide/shared-types';
 import type { PickupRequestWithDetails } from './pickup-requests.service';
 
 export function toPickupRequestDto(
@@ -28,6 +32,7 @@ export function toPickupRequestDto(
     pickupPostalCode: pickupRequest.pickupPostalCode,
     pickupLatitude: pickupRequest.pickupLatitude,
     pickupLongitude: pickupRequest.pickupLongitude,
+    pickupMapsUrl: pickupRequest.pickupMapsUrl,
     pickupDate: pickupRequest.pickupDate
       ? pickupRequest.pickupDate.toISOString().slice(0, 10)
       : null,
@@ -54,6 +59,14 @@ export function toPickupRequestDto(
     recipientVerifiedAt: pickupRequest.recipientVerifiedAt
       ? pickupRequest.recipientVerifiedAt.toISOString()
       : null,
+
+    packages: pickupRequest.quote.packages as ParcelPackageDto[] | null,
+    verifiedPackages: pickupRequest.verifiedPackages as
+      ParcelPackageDto[] | null,
+    items: pickupRequest.quote.items as ShipmentItemDto[] | null,
+    // Presence only. The photos themselves go out solely as short-lived links, on request.
+    aadhaarOnFile: pickupRequest.customer.aadhaarKey !== null,
+    parcelPhotoOnFile: pickupRequest.parcelPhotoKey !== null,
 
     status: pickupRequest.status,
 

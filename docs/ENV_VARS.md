@@ -11,7 +11,12 @@
 | `JWT_ACCESS_EXPIRES_IN` | Yes | `15m` | Any `ms`-parseable duration string |
 | `JWT_REFRESH_EXPIRES_IN` | Yes | `7d` | Any `ms`-parseable duration string |
 | `PORT` | No | `4000` | HTTP port the NestJS app listens on |
-| `FRONTEND_URL` | Yes | — | Used for CORS `origin` — must exactly match the deployed frontend's origin |
+| `FRONTEND_URL` | Yes | — | Used for CORS `origin` — a comma-separated ALLOW-LIST, so a preview domain can be permitted alongside production |
+| `PUBLIC_FRONTEND_URL` | No (recommended in prod) | first non-localhost entry of `FRONTEND_URL` | The ONE canonical public origin customer-facing links are built against: password resets, review invitations, and the B2B ordering link handed to a business. Set it explicitly wherever `FRONTEND_URL` lists more than one origin — see `common/config/public-urls.ts` |
+| `BREVO_API_KEY` | No (email is skipped without it) | unset | Brevo (Sendinblue) transactional-email key. Unset means every send is logged and skipped rather than failing — which is why a missing key is silent: password-reset emails, review invitations and the B2B-request alert simply never arrive |
+| `MAIL_FROM_EMAIL` | No | `no-reply@nationwidelogistics.co` | Envelope sender. Must be a sender/domain verified in Brevo or mail is rejected |
+| `MAIL_FROM_NAME` | No | `NationWide Logistics` | Display name on outbound mail |
+| `MAIL_OPS_INBOX` | No | falls back to `MAIL_FROM_EMAIL` | Where internal alerts land — new B2B account requests and pickup-partner applications. Set it to a monitored inbox; the default is a no-reply address nobody reads |
 | `TRACKING_PROVIDER_TIMEOUT_MS` | No | `6000` | Live carrier-API call timeout before falling back to last-known tracking data |
 | `TRACKING_CACHE_TTL_ACTIVE_SECONDS` | No | `300` | Redis TTL for tracking data on shipments not yet `DELIVERED` |
 | `TRACKING_CACHE_TTL_TERMINAL_SECONDS` | No | `86400` | Redis TTL for tracking data on `DELIVERED` shipments |

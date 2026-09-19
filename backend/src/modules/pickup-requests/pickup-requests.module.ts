@@ -8,6 +8,9 @@ import { ReceiptsModule } from '../receipts/receipts.module';
 import { PushModule } from '../push/push.module';
 import { PricingModule } from '../pricing/pricing.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { CustomersModule } from '../customers/customers.module';
+import { QuotesModule } from '../quotes/quotes.module';
+import { PartnerLocationController } from './partner-location.controller';
 
 @Module({
   imports: [
@@ -18,8 +21,15 @@ import { NotificationsModule } from '../notifications/notifications.module';
     InvoicesModule,
     ReceiptsModule,
     PushModule,
+    // The saved-contents library, and admin bookings pricing through the quote path.
+    CustomersModule,
+    QuotesModule,
   ],
-  controllers: [PickupRequestsController, PartnerPickupRequestsController],
+  controllers: [
+    PickupRequestsController,
+    PartnerPickupRequestsController,
+    PartnerLocationController,
+  ],
   providers: [PickupRequestsService],
   exports: [PickupRequestsService],
 })

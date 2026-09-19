@@ -12,6 +12,7 @@ import { ErrorState, EmptyState } from "@/components/ui/page-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TrackingStatusBadge, PaymentStatusBadge, PickupStatusBadge } from "@/components/ui/status-badge";
 import { EditCustomerDialog } from "@/components/customers/edit-customer-dialog";
+import { B2bLinksCard } from "@/components/customers/b2b-links-card";
 
 export default function AdminCustomerProfilePage() {
   const params = useParams<{ id: string }>();
@@ -101,6 +102,8 @@ export default function AdminCustomerProfilePage() {
               }
             />
           </div>
+
+          <B2bLinksCard customerId={params.id} />
 
           <Card>
             <CardHeader>

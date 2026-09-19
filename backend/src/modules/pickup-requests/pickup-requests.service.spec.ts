@@ -44,9 +44,20 @@ const basePickupRequest = {
   paymentMethod: null,
   collectedAmount: null,
   quote: { destCity: 'NYC', destState: 'NY', destCountry: 'United States' },
-  customer: { name: 'Jane', phone: '+911234567890' },
+  parcelPhotoKey: 'pickups/pr-1/parcel.jpg',
+  customer: {
+    name: 'Jane',
+    phone: '+911234567890',
+    aadhaarKey: 'kyc/aadhaar/customer-1/a.jpg',
+  },
   assignedPartner: { id: 'partner-1', name: 'Partner One', email: 'p1@nw.dev' },
 };
+
+const VERIFY_DTO = {
+  packages: [{ weightKg: 6 }],
+  items: [{ description: 'Books', quantity: 1, unitValue: 300 }],
+  verifiedShipmentType: 'PACKAGE',
+} as never;
 
 describe('PickupRequestsService', () => {
   let prisma: {
@@ -60,6 +71,7 @@ describe('PickupRequestsService', () => {
       count: jest.Mock;
     };
     adminUser: { findUnique: jest.Mock; findMany: jest.Mock };
+    customer: { findUnique: jest.Mock; update: jest.Mock };
     order: { update: jest.Mock };
     auditLog: { create: jest.Mock };
     $transaction: jest.Mock;
@@ -70,6 +82,9 @@ describe('PickupRequestsService', () => {
   let invoicesService: { generateForOrder: jest.Mock };
   let receiptsService: { issueAndSendQuietly: jest.Mock };
   let pushService: { sendToAdminUser: jest.Mock };
+  let addressBook: { remember: jest.Mock };
+  let quotesService: { create: jest.Mock };
+  let storage: { put: jest.Mock; delete: jest.Mock };
   let service: PickupRequestsService;
 
   beforeEach(() => {
@@ -92,6 +107,10 @@ describe('PickupRequestsService', () => {
           .fn()
           .mockResolvedValue({ id: 'partner-1', role: 'PICKUP_PARTNER' }),
         findMany: jest.fn().mockResolvedValue([]),
+      },
+      customer: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'customer-1' }),
+        update: jest.fn().mockResolvedValue(undefined),
       },
       order: { update: jest.fn().mockResolvedValue(undefined) },
       auditLog: { create: jest.fn().mockResolvedValue(undefined) },
@@ -123,6 +142,12 @@ describe('PickupRequestsService', () => {
       issueAndSendQuietly: jest.fn().mockResolvedValue(undefined),
     };
     pushService = { sendToAdminUser: jest.fn().mockResolvedValue(undefined) };
+    addressBook = { remember: jest.fn().mockResolvedValue(undefined) };
+    quotesService = { create: jest.fn() };
+    storage = {
+      put: jest.fn().mockResolvedValue(undefined),
+      delete: jest.fn().mockResolvedValue(undefined),
+    };
     service = new PickupRequestsService(
       prisma as never,
       ordersService as never,
@@ -131,6 +156,9 @@ describe('PickupRequestsService', () => {
       invoicesService as never,
       receiptsService as never,
       pushService as never,
+      addressBook as never,
+      quotesService as never,
+      storage as never,
     );
   });
 
@@ -174,6 +202,7 @@ describe('PickupRequestsService', () => {
           dropAtWarehouse: false,
           pickupContactName: 'Jane',
           pickupContactPhone: '+911234567890',
+          items: [{ description: 'Books', quantity: 2, unitValue: 300 }],
           pickupAddressLine1: '123 Main St',
           pickupCity: 'NYC',
           pickupState: 'NY',
@@ -197,6 +226,18 @@ describe('PickupRequestsService', () => {
         where: { id: 'quote-1', status: 'PENDING_PICKUP_REQUEST' },
         data: { status: 'PICKUP_REQUESTED' },
       });
+      // The contents land on the quote and in the customer's saved-items library.
+      expect(prisma.quote.update).toHaveBeenCalledWith({
+        where: { id: 'quote-1' },
+        data: {
+          items: [
+            { description: 'Books', quantity: 2, unitValue: 300, hsCode: null },
+          ],
+        },
+      });
+      expect(addressBook.remember).toHaveBeenCalledWith('customer-1', [
+        { description: 'Books', quantity: 2, unitValue: 300 },
+      ]);
       expect(notificationsService.enqueue).toHaveBeenCalledWith(
         'customer-1',
         'WHATSAPP',
@@ -218,6 +259,7 @@ describe('PickupRequestsService', () => {
             dropAtWarehouse: true,
             pickupContactName: 'Jane',
             pickupContactPhone: '+911234567890',
+            items: [{ description: 'Books', quantity: 2, unitValue: 300 }],
             pickupAddressLine1: '123 Main St',
             pickupCity: 'NYC',
             pickupState: 'NY',
@@ -243,6 +285,7 @@ describe('PickupRequestsService', () => {
           dropAtWarehouse: true,
           pickupContactName: 'Jane',
           pickupContactPhone: '+911234567890',
+          items: [{ description: 'Books', quantity: 2, unitValue: 300 }],
           pickupAddressLine1: '123 Main St',
           pickupCity: 'NYC',
           pickupState: 'NY',
@@ -274,6 +317,7 @@ describe('PickupRequestsService', () => {
           dropAtWarehouse: false,
           pickupContactName: 'Jane',
           pickupContactPhone: '+911234567890',
+          items: [{ description: 'Books', quantity: 2, unitValue: 300 }],
           pickupAddressLine1: '123 Main St',
           pickupCity: 'NYC',
           pickupState: 'NY',
@@ -304,6 +348,7 @@ describe('PickupRequestsService', () => {
           dropAtWarehouse: true,
           pickupContactName: 'Jane',
           pickupContactPhone: '+911234567890',
+          items: [{ description: 'Books', quantity: 2, unitValue: 300 }],
         },
         'customer-1',
       );
@@ -327,6 +372,347 @@ describe('PickupRequestsService', () => {
       await expect(
         service.findOneForPartner('pr-1', 'admin-1', true),
       ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('createForAdmin', () => {
+    const adminDto = {
+      customerId: 'customer-1',
+      submissionKey: 'key-1',
+      shipmentType: 'PACKAGE',
+      packages: [{ weightKg: 4 }],
+      items: [{ description: 'Books', quantity: 2, unitValue: 300 }],
+      destinationCountry: 'United States',
+      recipient: {
+        name: 'Sam',
+        phone: '+15550000000',
+        addressLine1: '1 Main St',
+        city: 'NYC',
+        state: 'NY',
+        postalCode: '10001',
+      },
+      pickupContactName: 'Jane',
+      pickupContactPhone: '+911234567890',
+      pickupAddressLine1: 'Flat 4, MG Road',
+      pickupCity: 'Hyderabad',
+      pickupState: 'Telangana',
+      pickupPostalCode: '500001',
+      pickupLatitude: 17.4,
+      pickupLongitude: 78.5,
+      pickupDate: '2026-09-18',
+      pickupTimeSlot: '09:00-12:00',
+      partnerId: 'partner-1',
+    };
+    const ratedQuote = {
+      id: 'quote-9',
+      status: 'RATED',
+      weightKg: 4,
+      rateQuoteOptions: [
+        {
+          id: 'opt-1',
+          rateProviderId: 'provider-1',
+          rateProvider: { name: 'FedEx' },
+          finalPrice: 900,
+          currency: 'INR',
+        },
+      ],
+    };
+
+    beforeEach(() => {
+      quotesService.create.mockResolvedValue(ratedQuote);
+      prisma.adminUser.findUnique.mockResolvedValue({
+        id: 'partner-1',
+        role: 'PICKUP_PARTNER',
+        isActive: true,
+      });
+      prisma.pickupRequest.create.mockResolvedValue(basePickupRequest);
+    });
+
+    it('commits the chosen carrier and assigns the partner in one go, without a broadcast', async () => {
+      await service.createForAdmin(
+        { ...adminDto, rateProviderId: 'provider-1' } as never,
+        'admin-1',
+      );
+
+      expect(quotesService.create).toHaveBeenCalledWith(
+        expect.objectContaining({ weightKg: 4, submissionKey: 'key-1' }),
+        'customer-1',
+      );
+      expect(prisma.quote.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: 'quote-9',
+          status: { in: ['RATED', 'NEEDS_MANUAL_REVIEW'] },
+        },
+        data: expect.objectContaining({
+          status: 'PICKUP_REQUESTED',
+          selectedOptionId: 'opt-1',
+          quotedAmount: 900,
+          destName: 'Sam',
+        }),
+      });
+      expect(prisma.pickupRequest.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            rateProviderId: 'provider-1',
+            estimatedPrice: 900,
+            assignedPartnerId: 'partner-1',
+            status: 'ASSIGNED',
+            pickupLatitude: 17.4,
+          }),
+        }),
+      );
+      expect(addressBook.remember).toHaveBeenCalledWith(
+        'customer-1',
+        adminDto.items,
+      );
+      // Only the assigned partner hears about it.
+      expect(prisma.adminUser.findMany).not.toHaveBeenCalled();
+      expect(pushService.sendToAdminUser).toHaveBeenCalledTimes(1);
+      expect(pushService.sendToAdminUser).toHaveBeenCalledWith(
+        'partner-1',
+        expect.anything(),
+      );
+    });
+
+    it('takes a staff-entered price when no carrier is chosen', async () => {
+      quotesService.create.mockResolvedValue({
+        ...ratedQuote,
+        status: 'NEEDS_MANUAL_REVIEW',
+        rateQuoteOptions: [],
+      });
+      await service.createForAdmin(
+        { ...adminDto, manualPrice: 1500 } as never,
+        'admin-1',
+      );
+      expect(prisma.pickupRequest.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            rateProviderId: null,
+            estimatedPrice: 1500,
+          }),
+        }),
+      );
+    });
+
+    it('needs exactly one of a carrier or a price', async () => {
+      await expect(
+        service.createForAdmin(adminDto as never, 'admin-1'),
+      ).rejects.toThrow(BadRequestException);
+      await expect(
+        service.createForAdmin(
+          {
+            ...adminDto,
+            rateProviderId: 'provider-1',
+            manualPrice: 5,
+          } as never,
+          'admin-1',
+        ),
+      ).rejects.toThrow(BadRequestException);
+      expect(quotesService.create).not.toHaveBeenCalled();
+    });
+
+    it('refuses a carrier that did not quote the shipment', async () => {
+      await expect(
+        service.createForAdmin(
+          { ...adminDto, rateProviderId: 'provider-x' } as never,
+          'admin-1',
+        ),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.pickupRequest.create).not.toHaveBeenCalled();
+    });
+
+    it('refuses an unknown or inactive partner before creating anything', async () => {
+      prisma.adminUser.findUnique.mockResolvedValue({
+        id: 'partner-1',
+        role: 'PICKUP_PARTNER',
+        isActive: false,
+      });
+      await expect(
+        service.createForAdmin(
+          { ...adminDto, rateProviderId: 'provider-1' } as never,
+          'admin-1',
+        ),
+      ).rejects.toThrow(NotFoundException);
+      expect(quotesService.create).not.toHaveBeenCalled();
+    });
+
+    it('returns the existing pickup on a retried submit', async () => {
+      quotesService.create.mockResolvedValue({
+        ...ratedQuote,
+        status: 'PICKUP_REQUESTED',
+      });
+      await service.createForAdmin(
+        { ...adminDto, rateProviderId: 'provider-1' } as never,
+        'admin-1',
+      );
+      expect(prisma.pickupRequest.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('createBatchForCustomer (B2B portal)', () => {
+    const pickup = {
+      pickupContactName: 'Despatch desk',
+      pickupContactPhone: '+919876500099',
+      pickupAddressLine1: 'Gate 2, Industrial Estate',
+      pickupCity: 'Hyderabad',
+      pickupState: 'Telangana',
+      pickupPostalCode: '500001',
+      pickupDate: '2026-09-20',
+      pickupTimeSlot: '09:00-12:00',
+    };
+    const order = (recipientName: string, country: string) => ({
+      recipient: {
+        name: recipientName,
+        phone: '+15550000000',
+        addressLine1: '1 Main St',
+        city: 'NYC',
+        state: 'NY',
+        postalCode: '10001',
+      },
+      destinationCountry: country,
+      shipmentType: 'PACKAGE',
+      packages: [{ weightKg: 2 }],
+      items: [{ description: 'Books', quantity: 1, unitValue: 300 }],
+    });
+    const ratedQuote = {
+      id: 'quote-9',
+      status: 'RATED',
+      weightKg: 2,
+      rateQuoteOptions: [
+        {
+          id: 'opt-dhl',
+          rateProviderId: 'provider-dhl',
+          rateProvider: { name: 'DHL' },
+          finalPrice: 1200,
+          currency: 'INR',
+        },
+        {
+          id: 'opt-fedex',
+          rateProviderId: 'provider-1',
+          rateProvider: { name: 'FedEx' },
+          finalPrice: 900,
+          currency: 'INR',
+        },
+      ],
+    };
+
+    beforeEach(() => {
+      quotesService.create.mockResolvedValue(ratedQuote);
+      prisma.pickupRequest.create.mockResolvedValue(basePickupRequest);
+      prisma.adminUser.findMany.mockResolvedValue([
+        { id: 'partner-1' },
+        { id: 'partner-2' },
+      ]);
+    });
+
+    it('books every shipment against one pickup and broadcasts each to partners', async () => {
+      const results = await service.createBatchForCustomer('customer-1', {
+        submissionKey: 'batch-1',
+        pickup,
+        orders: [order('Sam', 'United States'), order('Ana', 'Germany')],
+      } as never);
+
+      expect(results.map((r) => r.status)).toEqual(['BOOKED', 'BOOKED']);
+      expect(prisma.pickupRequest.create).toHaveBeenCalledTimes(2);
+      // Each shipment is its own quote, keyed off the batch so a retry converges.
+      expect(quotesService.create).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({ submissionKey: 'batch-1:0' }),
+        'customer-1',
+      );
+      expect(quotesService.create).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({ submissionKey: 'batch-1:1' }),
+        'customer-1',
+      );
+      // One pickup address for the whole batch.
+      for (const call of prisma.pickupRequest.create.mock.calls) {
+        const { data } = call[0] as { data: Record<string, unknown> };
+        expect(data).toEqual(
+          expect.objectContaining({ pickupCity: 'Hyderabad' }),
+        );
+        // Left unassigned: a broadcast request any partner can claim.
+        expect(data).not.toHaveProperty('assignedPartnerId');
+        expect(data).not.toHaveProperty('status');
+      }
+      // Two partners × two shipments, and a single message to the customer.
+      expect(pushService.sendToAdminUser).toHaveBeenCalledTimes(4);
+      expect(notificationsService.enqueue).toHaveBeenCalledTimes(1);
+      expect(addressBook.remember).toHaveBeenCalledTimes(2);
+    });
+
+    it('takes the cheapest carrier when the customer did not pick one', async () => {
+      await service.createBatchForCustomer('customer-1', {
+        submissionKey: 'batch-2',
+        pickup,
+        orders: [order('Sam', 'United States')],
+      } as never);
+
+      expect(prisma.quote.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            selectedOptionId: 'opt-fedex',
+            quotedAmount: 900,
+          }),
+        }),
+      );
+    });
+
+    it('records an unpriced shipment for staff instead of dispatching it', async () => {
+      quotesService.create.mockResolvedValue({
+        ...ratedQuote,
+        status: 'NEEDS_MANUAL_REVIEW',
+        rateQuoteOptions: [],
+      });
+
+      const results = await service.createBatchForCustomer('customer-1', {
+        submissionKey: 'batch-3',
+        pickup,
+        orders: [order('Sam', 'Antarctica')],
+      } as never);
+
+      expect(results[0]).toMatchObject({
+        status: 'NEEDS_PRICING',
+        quoteId: 'quote-9',
+        pickupRequestId: null,
+      });
+      expect(prisma.pickupRequest.create).not.toHaveBeenCalled();
+      expect(pushService.sendToAdminUser).not.toHaveBeenCalled();
+    });
+
+    it('refuses a carrier that does not quote the shipment', async () => {
+      await expect(
+        service.createBatchForCustomer('customer-1', {
+          submissionKey: 'batch-4',
+          pickup,
+          orders: [
+            { ...order('Sam', 'United States'), rateProviderId: 'provider-x' },
+          ],
+        } as never),
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('saveAadhaar', () => {
+    const photo = { buffer: Buffer.from('x'), mimetype: 'image/jpeg' } as never;
+
+    it('replaces the customer photo and deletes the old one', async () => {
+      await service.saveAadhaar('pr-1', photo, 'partner-1');
+      expect(storage.put).toHaveBeenCalledWith(
+        expect.stringMatching(/^kyc\/aadhaar\/customer-1\/.+\.jpg$/),
+        expect.any(Buffer),
+        'image/jpeg',
+      );
+      expect(storage.delete).toHaveBeenCalledWith(
+        'kyc/aadhaar/customer-1/a.jpg',
+      );
+    });
+
+    it("is refused on a pickup that is not this partner's", async () => {
+      await expect(
+        service.saveAadhaar('pr-1', photo, 'someone-else'),
+      ).rejects.toThrow(NotFoundException);
+      expect(storage.put).not.toHaveBeenCalled();
     });
   });
 
@@ -508,7 +894,11 @@ describe('PickupRequestsService', () => {
       await expect(
         service.verify(
           'pr-1',
-          { verifiedWeightKg: 6, verifiedShipmentType: 'PACKAGE' } as never,
+          {
+            packages: [{ weightKg: 6 }],
+            items: [{ description: 'Books', quantity: 1, unitValue: 300 }],
+            verifiedShipmentType: 'PACKAGE',
+          } as never,
           'partner-1',
         ),
       ).rejects.toThrow(BadRequestException);
@@ -517,7 +907,11 @@ describe('PickupRequestsService', () => {
     it('persists the verified weight/price and moves to VERIFICATION_PENDING', async () => {
       await service.verify(
         'pr-1',
-        { verifiedWeightKg: 6, verifiedShipmentType: 'PACKAGE' } as never,
+        {
+          packages: [{ weightKg: 6 }],
+          items: [{ description: 'Books', quantity: 1, unitValue: 300 }],
+          verifiedShipmentType: 'PACKAGE',
+        } as never,
         'partner-1',
       );
       expect(prisma.pickupRequest.update).toHaveBeenCalledWith(
@@ -537,12 +931,56 @@ describe('PickupRequestsService', () => {
       );
     });
 
+    it('prices the volumetric weight when the box is bigger than it is heavy', async () => {
+      await service.verify(
+        'pr-1',
+        {
+          // 50x40x30 / 5000 = 12 kg volumetric, against 5 kg on the scale.
+          packages: [{ weightKg: 5, lengthCm: 50, widthCm: 40, heightCm: 30 }],
+          items: [{ description: 'Books', quantity: 1, unitValue: 300 }],
+          verifiedShipmentType: 'PACKAGE',
+        } as never,
+        'partner-1',
+      );
+      expect(pricingEngineService.computeQuotesForRequest).toHaveBeenCalledWith(
+        expect.objectContaining({ weightKg: 12 }),
+      );
+      expect(prisma.pickupRequest.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ verifiedWeightKg: 12 }),
+        }),
+      );
+    });
+
+    it("refuses to verify until the customer's Aadhaar and a parcel photo are on file", async () => {
+      prisma.pickupRequest.findUnique.mockResolvedValue({
+        ...basePickupRequest,
+        customer: { ...basePickupRequest.customer, aadhaarKey: null },
+      });
+      await expect(
+        service.verify('pr-1', VERIFY_DTO, 'partner-1'),
+      ).rejects.toThrow(/Aadhaar/);
+
+      prisma.pickupRequest.findUnique.mockResolvedValue({
+        ...basePickupRequest,
+        parcelPhotoKey: null,
+      });
+      await expect(
+        service.verify('pr-1', VERIFY_DTO, 'partner-1'),
+      ).rejects.toThrow(/photo/);
+      expect(prisma.pickupRequest.update).not.toHaveBeenCalled();
+    });
+
     it('throws when no rate is available for the corrected weight (never fabricates a price)', async () => {
       pricingEngineService.computeQuotesForRequest.mockResolvedValue([]);
       await expect(
         service.verify(
           'pr-1',
-          { verifiedWeightKg: 999, verifiedShipmentType: 'PACKAGE' } as never,
+          {
+            packages: [{ weightKg: 999 }],
+            items: [{ description: 'Books', quantity: 1, unitValue: 300 }],
+            verifiedShipmentType: 'PACKAGE',
+          } as never,
           'partner-1',
         ),
       ).rejects.toThrow(BadRequestException);
@@ -555,7 +993,11 @@ describe('PickupRequestsService', () => {
       });
       await service.verify(
         'pr-1',
-        { verifiedWeightKg: 6, verifiedShipmentType: 'PACKAGE' } as never,
+        {
+          packages: [{ weightKg: 6 }],
+          items: [{ description: 'Books', quantity: 1, unitValue: 300 }],
+          verifiedShipmentType: 'PACKAGE',
+        } as never,
         'partner-1',
       );
       expect(prisma.pickupRequest.update).toHaveBeenCalledWith(
@@ -578,7 +1020,8 @@ describe('PickupRequestsService', () => {
       await service.verify(
         'pr-1',
         {
-          verifiedWeightKg: 6,
+          packages: [{ weightKg: 6 }],
+          items: [{ description: 'Books', quantity: 1, unitValue: 300 }],
           verifiedShipmentType: 'PACKAGE',
           verifiedPrice: 1250,
         } as never,
@@ -599,7 +1042,8 @@ describe('PickupRequestsService', () => {
         service.verify(
           'pr-1',
           {
-            verifiedWeightKg: 6,
+            packages: [{ weightKg: 6 }],
+            items: [{ description: 'Books', quantity: 1, unitValue: 300 }],
             verifiedShipmentType: 'PACKAGE',
             verifiedPrice: 1,
           } as never,
@@ -617,7 +1061,11 @@ describe('PickupRequestsService', () => {
       await expect(
         service.verify(
           'pr-1',
-          { verifiedWeightKg: 6, verifiedShipmentType: 'PACKAGE' } as never,
+          {
+            packages: [{ weightKg: 6 }],
+            items: [{ description: 'Books', quantity: 1, unitValue: 300 }],
+            verifiedShipmentType: 'PACKAGE',
+          } as never,
           'partner-1',
         ),
       ).rejects.toThrow(BadRequestException);

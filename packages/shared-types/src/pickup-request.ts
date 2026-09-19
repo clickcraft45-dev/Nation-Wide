@@ -1,5 +1,6 @@
 import type { ShipmentTypeCode, PickupTimeSlot } from "./quote";
 import type { PaymentMethodCode } from "./order";
+import type { ParcelPackageDto, ShipmentItemDto } from "./parcel";
 
 // The new pre-order self-service record — created once a customer has picked a carrier and
 // submitted pickup logistics, and lives entirely BEFORE any Order exists. Assigned to a
@@ -23,6 +24,10 @@ export interface PickupPartnerDto {
   name: string | null;
   phone: string | null;
   isActive: boolean;
+  /** Where the partner's phone last reported from (fetched once per app session). */
+  lastLatitude: number | null;
+  lastLongitude: number | null;
+  locationUpdatedAt: string | null; // ISO 8601
   createdAt: string; // ISO 8601
 }
 
@@ -59,6 +64,47 @@ export interface CreatePickupRequestDto {
   pickupDate?: string; // ISO 8601 date-only
   pickupTimeSlot?: PickupTimeSlot;
   pickupInstructions?: string;
+  /** Required: carriers will not move a parcel without declared contents. */
+  items: ShipmentItemDto[];
+}
+
+/** Staff booking a pickup on a customer's behalf, assigned straight to a partner. */
+export interface AdminCreatePickupOrderDto {
+  customerId: string;
+  submissionKey: string;
+  shipmentType: ShipmentTypeCode;
+  packages: ParcelPackageDto[];
+  items: ShipmentItemDto[];
+  destinationCountry: string;
+  recipient: Omit<PickupRecipientDto, "addressLine2"> & { addressLine2?: string };
+  pickupContactName: string;
+  pickupContactPhone: string;
+  pickupAddressLine1: string;
+  pickupAddressLine2?: string;
+  pickupCity: string;
+  pickupState: string;
+  pickupPostalCode: string;
+  pickupLatitude?: number;
+  pickupLongitude?: number;
+  pickupMapsUrl?: string;
+  pickupDate: string;
+  pickupTimeSlot: PickupTimeSlot;
+  pickupInstructions?: string;
+  /** The carrier picked from the price preview. Omit and give manualPrice when none is rated. */
+  rateProviderId?: string;
+  manualPrice?: number;
+  partnerId: string;
+}
+
+export interface ResolvedMapsUrlDto {
+  latitude: number | null;
+  longitude: number | null;
+}
+
+/** Short-lived links to the KYC/parcel photos — only ever fetched on demand, never embedded. */
+export interface PickupDocumentsDto {
+  aadhaarUrl: string | null;
+  parcelPhotoUrl: string | null;
 }
 
 export interface PickupRecipientDto {
@@ -99,6 +145,8 @@ export interface PickupRequestDto {
   /** Where the customer dropped the pin — null for a typed-in address. */
   pickupLatitude: number | null;
   pickupLongitude: number | null;
+  /** A Google Maps link staff pasted when booking; used for navigation when there is no pin. */
+  pickupMapsUrl: string | null;
   pickupDate: string | null; // ISO 8601 date-only
   pickupTimeSlot: PickupTimeSlot | null;
   pickupInstructions: string | null;
@@ -112,6 +160,14 @@ export interface PickupRequestDto {
   // down at pickup. The partner confirms (or fills) it during verification.
   recipient: PickupRecipientDto | null;
   recipientVerifiedAt: string | null; // ISO 8601
+
+  /** The boxes as booked, and as measured at the door (null until verified). */
+  packages: ParcelPackageDto[] | null;
+  verifiedPackages: ParcelPackageDto[] | null;
+  items: ShipmentItemDto[] | null;
+  /** The customer's Aadhaar is already on file — reused unless the partner replaces it. */
+  aadhaarOnFile: boolean;
+  parcelPhotoOnFile: boolean;
 
   status: PickupRequestStatusCode;
 
@@ -155,6 +211,7 @@ export interface PickupRequestDto {
 export interface QueryPickupRequestsDto {
   status?: PickupRequestStatusCode;
   search?: string;
+  orderId?: string;
 }
 
 export interface AssignPartnerDto {
@@ -177,7 +234,9 @@ export interface RecalculatePreviewDto {
 // Persists the verification — the server re-runs the pricing engine itself from these inputs
 // rather than trusting a client-echoed price from the recalculate preview.
 export interface VerifyPickupRequestDto {
-  verifiedWeightKg: number;
+  /** Measured at the door; the server prices their chargeable weight. */
+  packages: ParcelPackageDto[];
+  items: ShipmentItemDto[];
   verifiedShipmentType: ShipmentTypeCode;
   /**
    * Only for a pickup with no rate provider — one whose quote could not be priced because no

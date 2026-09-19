@@ -2,12 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Check, MapPinned, Minus, Phone, Plus } from "lucide-react";
-import type {
-  PickupRequestDto,
-  RecalculatePreviewDto,
-  PaymentMethodCode,
-  ShipmentTypeCode,
+import { ArrowLeft, Check, MapPinned, Phone } from "lucide-react";
+import {
+  chargeableWeightKg,
+  type PickupDocumentsDto,
+  type PickupRequestDto,
+  type RecalculatePreviewDto,
+  type PaymentMethodCode,
+  type ShipmentTypeCode,
 } from "@nationwide/shared-types";
 import { apiClient, ApiError, errorMessage } from "@/lib/api-client";
 import { Card, CardContent } from "@/components/ui/card";
@@ -31,8 +33,21 @@ import {
   type RecipientForm,
 } from "@/components/quote/recipient-fields";
 import { isOpenRequest, mapsUrl, useClaimPickup } from "@/components/partner/pickup-card";
-
-const WEIGHT_STEP_KG = 0.5;
+import {
+  PackagesEditor,
+  packagesFrom,
+  toPackagesPayload,
+  validatePackages,
+  type PackageForm,
+} from "@/components/shipment/packages-editor";
+import {
+  ItemsEditor,
+  itemsFrom,
+  toItemsPayload,
+  validateItems,
+  type ItemForm,
+} from "@/components/shipment/items-editor";
+import { PhotoCapture } from "@/components/shipment/photo-capture";
 const PARTNER_PAYMENT_METHODS: { value: PaymentMethodCode; label: string }[] = [
   { value: "CASH", label: "Cash" },
   { value: "UPI", label: "UPI" },
@@ -72,8 +87,10 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
   const [isArriving, setIsArriving] = useState(false);
   const { claim, isClaiming } = useClaimPickup();
 
-  // Verification form state.
-  const [verifiedWeightKg, setVerifiedWeightKg] = useState("");
+  // Verification form state. The boxes are weighed and measured one by one; the price follows
+  // their chargeable weight (the greater of actual and volumetric, per box).
+  const [boxes, setBoxes] = useState<PackageForm[]>(() => packagesFrom(null));
+  const [items, setItems] = useState<ItemForm[]>(() => itemsFrom(null));
   const [verifiedShipmentType, setVerifiedShipmentType] = useState<ShipmentTypeCode>("PACKAGE");
   const [verificationNotes, setVerificationNotes] = useState("");
   // Only used when this pickup has no rate provider to compute from — see needsManualPrice.
@@ -83,7 +100,10 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
   const [isRecalculating, setIsRecalculating] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
   const [verifyError, setVerifyError] = useState<string | null>(null);
-  const debouncedWeight = useDebouncedValue(verifiedWeightKg, 500);
+  const requireDimensions = verifiedShipmentType !== "DOCUMENT";
+  const packagesProblem = validatePackages(boxes, requireDimensions);
+  const chargeableKg = packagesProblem ? 0 : chargeableWeightKg(toPackagesPayload(boxes));
+  const debouncedWeight = useDebouncedValue(chargeableKg, 500);
 
   // Payment form state.
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethodCode>("CASH");
@@ -122,7 +142,8 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
       .then((res) => {
         setPickup(res);
         setRecipient(recipientFrom(res.recipient));
-        setVerifiedWeightKg(String(res.verifiedWeightKg ?? res.estimatedWeightKg));
+        setBoxes(packagesFrom(res.verifiedPackages ?? res.packages, res.verifiedWeightKg ?? res.estimatedWeightKg));
+        setItems(itemsFrom(res.items));
         setVerifiedShipmentType(res.verifiedShipmentType ?? res.shipmentType);
       })
       .catch((err) => {
@@ -143,7 +164,7 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
   // is a preview only, nothing is persisted until "Confirm Verification".
   useEffect(() => {
     if (!pickup || pickup.arrivedAt === null || pickup.verifiedAt) return;
-    const weightKg = Number(debouncedWeight);
+    const weightKg = debouncedWeight;
     if (!weightKg || weightKg <= 0) {
       // Dropping a now-stale preview when the inputs stop being valid — one render, not a loop.
       // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -172,11 +193,17 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedWeight, verifiedShipmentType, pickup?.id]);
 
-  function adjustWeight(delta: number) {
-    setVerifiedWeightKg((prev) => {
-      const next = Math.max(0.01, Math.round(((Number(prev) || 0) + delta) * 100) / 100);
-      return String(next);
-    });
+  async function uploadPhoto(kind: "aadhaar" | "parcel-photo", file: File) {
+    const form = new FormData();
+    form.append("file", file);
+    const updated = await apiClient.postForm<PickupRequestDto>(`${api}/${id}/${kind}`, form);
+    setPickup(updated);
+    showToast({ variant: "success", title: kind === "aadhaar" ? "Aadhaar saved" : "Parcel photo saved" });
+  }
+
+  async function documentUrl(kind: keyof PickupDocumentsDto): Promise<string | null> {
+    const docs = await apiClient.get<PickupDocumentsDto>(`${api}/${id}/documents`);
+    return docs[kind];
   }
 
   async function handleArrive() {
@@ -201,9 +228,13 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
   }
 
   async function handleVerify() {
-    const weightKg = Number(verifiedWeightKg);
-    if (!weightKg || weightKg <= 0) {
-      setVerifyError("Enter a valid weight.");
+    if (packagesProblem) {
+      setVerifyError(packagesProblem);
+      return;
+    }
+    const itemsProblem = validateItems(items);
+    if (itemsProblem) {
+      setVerifyError(itemsProblem);
       return;
     }
     const price = Number(manualPrice);
@@ -223,7 +254,8 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
       const updated = await apiClient.patch<PickupRequestDto>(
         `${api}/${id}/verify`,
         {
-          verifiedWeightKg: weightKg,
+          packages: toPackagesPayload(boxes),
+          items: toItemsPayload(items),
           verifiedShipmentType,
           // Sent only on the no-rate path — the server rejects it outright anywhere else rather
           // than letting the phone name the price on a rate-carded shipment.
@@ -235,9 +267,10 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
       setPickup(updated);
       showToast({ variant: "success", title: "Parcel verified" });
     } catch (err) {
+      // A 400 carries the server's own reason (no rate for this weight, a missing photo, …).
       setVerifyError(
         err instanceof ApiError && err.status === 400
-          ? "No rate is available for this weight/type — this needs manual review."
+          ? errorMessage(err, "This parcel couldn't be verified.")
           : "Unable to connect. Your verification was not saved — please try again.",
       );
     } finally {
@@ -396,7 +429,11 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
                         Customer&apos;s pin: {pickup.pickupLatitude.toFixed(6)}, {pickup.pickupLongitude.toFixed(6)}
                       </p>
                     ) : (
-                      <p className="mt-1 text-xs text-warning">No map pin — navigating by the typed address.</p>
+                      <p className="mt-1 text-xs text-warning">
+                        {pickup.pickupMapsUrl
+                          ? "No map pin — navigating by the Google Maps link from the booking."
+                          : "No map pin — navigating by the typed address."}
+                      </p>
                     )}
                   </>
                 )}
@@ -427,6 +464,14 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
                     : `${pickup.destCountry} — take the address down at pickup`}
                 </p>
               </div>
+              {pickup.items && pickup.items.length > 0 && (
+                <div>
+                  <p className="text-xs text-muted-foreground">Contents</p>
+                  <p className="font-medium text-foreground">
+                    {pickup.items.map((i) => `${i.quantity} × ${i.description}`).join(", ")}
+                  </p>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-3 border-t border-border pt-3">
                 <div>
                   <p className="text-xs text-muted-foreground">Shipment Type</p>
@@ -434,7 +479,10 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Declared Weight</p>
-                  <p className="font-medium text-foreground">{pickup.estimatedWeightKg}kg</p>
+                  <p className="font-medium text-foreground">
+                    {pickup.estimatedWeightKg}kg
+                    {pickup.packages && pickup.packages.length > 1 ? ` · ${pickup.packages.length} boxes` : ""}
+                  </p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Carrier</p>
@@ -500,33 +548,14 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
                   </div>
 
                   <div>
-                    <Label>Verified Weight (kg)</Label>
-                    <div className="mt-1.5 flex items-center gap-3">
-                      <button
-                        type="button"
-                        aria-label="Decrease weight"
-                        onClick={() => adjustWeight(-WEIGHT_STEP_KG)}
-                        className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-border text-foreground active:bg-muted"
-                      >
-                        <Minus className="h-5 w-5" aria-hidden />
-                      </button>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        min="0.01"
-                        value={verifiedWeightKg}
-                        onChange={(e) => setVerifiedWeightKg(e.target.value)}
-                        className="h-12 flex-1 text-center text-lg font-semibold"
-                        aria-label="Verified weight in kg"
+                    <Label>Weigh and measure each box</Label>
+                    <div className="mt-1.5">
+                      <PackagesEditor
+                        value={boxes}
+                        onChange={setBoxes}
+                        requireDimensions={requireDimensions}
+                        idPrefix="verified-box"
                       />
-                      <button
-                        type="button"
-                        aria-label="Increase weight"
-                        onClick={() => adjustWeight(WEIGHT_STEP_KG)}
-                        className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-border text-foreground active:bg-muted"
-                      >
-                        <Plus className="h-5 w-5" aria-hidden />
-                      </button>
                     </div>
                   </div>
 
@@ -611,6 +640,44 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
               </Card>
 
               <Card>
+                <CardContent className="space-y-3 pt-5">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">Contents</p>
+                    <p className="text-xs text-muted-foreground">
+                      Check against what is actually in the box — carriers declare these to customs.
+                    </p>
+                  </div>
+                  <ItemsEditor value={items} onChange={setItems} />
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="space-y-3 pt-5">
+                  <p className="text-sm font-medium text-foreground">Photos</p>
+                  <PhotoCapture
+                    title="Customer's Aadhaar card"
+                    hint={
+                      pickup.aadhaarOnFile
+                        ? "Already on file from an earlier pickup — replace it only if it has changed."
+                        : "Photograph the front of the card. It is kept for the customer's future pickups."
+                    }
+                    onFileLabel="Take Aadhaar photo"
+                    hasFile={pickup.aadhaarOnFile}
+                    onFile={(file) => uploadPhoto("aadhaar", file)}
+                    getViewUrl={() => documentUrl("aadhaarUrl")}
+                  />
+                  <PhotoCapture
+                    title="Parcel photo"
+                    hint="The packed box, with any labels visible."
+                    onFileLabel="Take parcel photo"
+                    hasFile={pickup.parcelPhotoOnFile}
+                    onFile={(file) => uploadPhoto("parcel-photo", file)}
+                    getViewUrl={() => documentUrl("parcelPhotoUrl")}
+                  />
+                </CardContent>
+              </Card>
+
+              <Card>
                 <CardContent className="space-y-4 pt-5">
                   <div>
                     <p className="text-sm font-medium text-foreground">
@@ -647,10 +714,20 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
                 className="w-full"
                 onClick={handleVerify}
                 isLoading={isVerifying}
-                disabled={!parcelPhysicallyChecked || !recipientConfirmed}
+                disabled={
+                  !parcelPhysicallyChecked ||
+                  !recipientConfirmed ||
+                  !pickup.aadhaarOnFile ||
+                  !pickup.parcelPhotoOnFile
+                }
               >
                 Confirm Verification
               </Button>
+              {(!pickup.aadhaarOnFile || !pickup.parcelPhotoOnFile) && (
+                <p className="text-center text-xs text-muted-foreground">
+                  Add the Aadhaar and parcel photos to continue.
+                </p>
+              )}
             </>
           )}
 

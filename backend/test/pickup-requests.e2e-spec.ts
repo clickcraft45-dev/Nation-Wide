@@ -40,6 +40,13 @@ function pickupDateInWindow(): string {
   return d.toISOString().slice(0, 10);
 }
 
+// The boxes and contents a partner confirms at the door. 20x20x20 cm is 1.6 kg volumetric, below
+// every weight used here, so the chargeable weight stays the weight on the scale.
+const verifyBody = (weightKg: number) => ({
+  packages: [{ weightKg, lengthCm: 20, widthCm: 20, heightCm: 20 }],
+  items: [{ description: 'Books', quantity: 2, unitValue: 300 }],
+});
+
 describe('Pickup Requests (e2e)', () => {
   let app: INestApplication<App>;
   let prisma: PrismaService;
@@ -143,6 +150,9 @@ describe('Pickup Requests (e2e)', () => {
         phone: TEST_CUSTOMER_PHONE,
         consentSource: 'staff_entry',
         consentGivenAt: new Date(),
+        // Verification needs the customer's Aadhaar on file; the upload itself needs S3, which
+        // this suite does not have, so the key is seeded directly.
+        aadhaarKey: 'e2e/kyc/aadhaar.jpg',
       },
     });
     customerId = customer.id;
@@ -350,6 +360,7 @@ describe('Pickup Requests (e2e)', () => {
           dropAtWarehouse: false,
           pickupContactName: 'Jane Doe',
           pickupContactPhone: '+919876500099',
+          items: [{ description: 'Books', quantity: 2, unitValue: 300 }],
           pickupAddressLine1: '789 Pickup Lane',
           pickupCity: 'Hyderabad',
           pickupState: 'TG',
@@ -450,12 +461,19 @@ describe('Pickup Requests (e2e)', () => {
       });
       expect(stillPending!.verifiedAt).toBeNull();
 
+      // The parcel photo is an S3 upload in real use; seeded directly here, like the Aadhaar.
+      await prisma.pickupRequest.update({
+        where: { id: pickupRequest.id },
+        data: { parcelPhotoKey: 'e2e/parcel.jpg' },
+      });
+
       // Persist the verification — the server re-runs the pricing engine itself.
       const verifyRes = await request(app.getHttpServer())
         .patch(`/api/v1/partner/pickup-requests/${pickupRequest.id}/verify`)
         .set('Authorization', `Bearer ${partnerAccessToken}`)
         .send({
-          verifiedWeightKg: 6,
+          packages: [{ weightKg: 6, lengthCm: 20, widthCm: 20, heightCm: 20 }],
+          items: [{ description: 'Books', quantity: 2, unitValue: 300 }],
           verifiedShipmentType: 'PARCEL',
           verificationNotes: 'Heavier than quoted',
         })
@@ -534,7 +552,7 @@ describe('Pickup Requests (e2e)', () => {
       await request(app.getHttpServer())
         .patch(`/api/v1/partner/pickup-requests/${pickupRequest.id}/verify`)
         .set('Authorization', `Bearer ${partnerAccessToken}`)
-        .send({ verifiedWeightKg: 7, verifiedShipmentType: 'PARCEL' })
+        .send({ ...verifyBody(7), verifiedShipmentType: 'PARCEL' })
         .expect(400);
     },
   );
@@ -555,6 +573,7 @@ describe('Pickup Requests (e2e)', () => {
         dropAtWarehouse: true,
         pickupContactName: 'Jane Doe',
         pickupContactPhone: '+919876500099',
+        items: [{ description: 'Books', quantity: 2, unitValue: 300 }],
         pickupAddressLine1: '789 Pickup Lane',
         pickupCity: 'Hyderabad',
         pickupState: 'TG',
@@ -571,18 +590,22 @@ describe('Pickup Requests (e2e)', () => {
     await request(app.getHttpServer())
       .patch(`/api/v1/partner/pickup-requests/${pickupRequest.id}/verify`)
       .set('Authorization', `Bearer ${partnerAccessToken}`)
-      .send({ verifiedWeightKg: 5, verifiedShipmentType: 'PARCEL' })
+      .send({ ...verifyBody(5), verifiedShipmentType: 'PARCEL' })
       .expect(400);
 
     await request(app.getHttpServer())
       .patch(`/api/v1/partner/pickup-requests/${pickupRequest.id}/arrive`)
       .set('Authorization', `Bearer ${partnerAccessToken}`)
       .expect(200);
+    await prisma.pickupRequest.update({
+      where: { id: pickupRequest.id },
+      data: { parcelPhotoKey: 'e2e/parcel.jpg' },
+    });
 
     await request(app.getHttpServer())
       .patch(`/api/v1/partner/pickup-requests/${pickupRequest.id}/verify`)
       .set('Authorization', `Bearer ${partnerAccessToken}`)
-      .send({ verifiedWeightKg: 5, verifiedShipmentType: 'PARCEL' })
+      .send({ ...verifyBody(5), verifiedShipmentType: 'PARCEL' })
       .expect(200);
   });
 
@@ -604,6 +627,7 @@ describe('Pickup Requests (e2e)', () => {
         dropAtWarehouse: true,
         pickupContactName: 'Jane Doe',
         pickupContactPhone: '+919876500099',
+        items: [{ description: 'Books', quantity: 2, unitValue: 300 }],
         pickupAddressLine1: '789 Pickup Lane',
         pickupCity: 'Hyderabad',
         pickupState: 'TG',

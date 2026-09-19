@@ -1,9 +1,10 @@
 "use client";
 
-import { type ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { LogOut } from "lucide-react";
 import { NotificationsBell } from "@/components/pwa/notifications-bell";
+import { apiClient } from "@/lib/api-client";
 import type { AuthUserDto } from "@nationwide/shared-types";
 import { useAuth } from "@/state/auth-context";
 import { PARTNER_NAV_ITEMS, findNavItemForPath } from "@/lib/nav-config";
@@ -24,6 +25,26 @@ export function PartnerMobileShell({
   const router = useRouter();
   const { logout } = useAuth();
   const current = findNavItemForPath(pathname, PARTNER_NAV_ITEMS);
+
+  // Report where this phone is, once per app session — not tracking — so staff assigning a pickup
+  // by hand can see who is nearby. A refused permission or a failed request is simply skipped.
+  useEffect(() => {
+    try {
+      if (sessionStorage.getItem("nw-location-reported") || !("geolocation" in navigator)) return;
+      sessionStorage.setItem("nw-location-reported", "1");
+    } catch {
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => {
+        apiClient
+          .patch("/partner/me/location", { latitude: coords.latitude, longitude: coords.longitude })
+          .catch(() => {});
+      },
+      () => {},
+      { enableHighAccuracy: false, timeout: 15_000, maximumAge: 5 * 60_000 },
+    );
+  }, []);
 
   async function handleLogout() {
     await logout();

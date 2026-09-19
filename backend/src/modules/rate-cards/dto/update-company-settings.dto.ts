@@ -7,6 +7,12 @@ import {
 } from 'class-validator';
 
 export class UpdateCompanySettingsDto {
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(80)
+  name?: string;
+
   // Validated in shape, not merely in length: a typo'd GSTIN is copied verbatim onto every
   // invoice issued thereafter, and those are immutable once issued. Two digits of state code,
   // ten-character PAN, entity number, 'Z', then a checksum character.
@@ -73,9 +79,10 @@ export class UpdateCompanySettingsDto {
   @MaxLength(300)
   address?: string;
 
+  // One term per line; the invoice prints them as a numbered list.
   @IsOptional()
   @IsString()
-  @MaxLength(4000)
+  @MaxLength(8000)
   termsAndConditions?: string;
 
   @IsOptional()

@@ -2,11 +2,12 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { CompanySettingsDto } from "@nationwide/shared-types";
-import { apiClient } from "@/lib/api-client";
+import { apiClient, errorMessage } from "@/lib/api-client";
 import { useToast } from "@/components/ui/toast";
 import { Dialog, DialogContent, DialogClose } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input, Label, FieldError } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/select";
 import { cn } from "@/lib/utils/cn";
 
 const API_ORIGIN = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000/api/v1").replace(
@@ -18,6 +19,7 @@ const textareaClass =
   "glass-field w-full rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 interface FormState {
+  name: string;
   companyName: string;
   tagline: string;
   primaryColor: string;
@@ -39,6 +41,7 @@ interface FormState {
 
 function formFromSettings(settings: CompanySettingsDto): FormState {
   return {
+    name: settings.name,
     companyName: settings.companyName,
     tagline: settings.tagline ?? "",
     primaryColor: settings.primaryColor,
@@ -61,9 +64,10 @@ function formFromSettings(settings: CompanySettingsDto): FormState {
   };
 }
 
-// These fields automatically populate every future generated Rate Card PDF (see
-// RateCardDataService/classic-template.tsx on the backend) — there is nothing per-PDF to
-// re-enter once set here.
+// Document brand templates. Several can be saved (e.g. one per trading name, or different T&C for
+// export customers); the ACTIVE one brands every tax invoice, receipt and rate card generated from
+// then on. Issued documents never change. Editing a template does not make it active — switching
+// is its own explicit action.
 export function CompanySettingsDialog({
   trigger,
   onSaved,
@@ -72,7 +76,10 @@ export function CompanySettingsDialog({
   onSaved?: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [templates, setTemplates] = useState<CompanySettingsDto[]>([]);
   const [settings, setSettings] = useState<CompanySettingsDto | null>(null);
+  const [newName, setNewName] = useState<string | null>(null);
+  const [busy, setBusy] = useState<"create" | "activate" | "delete" | null>(null);
   const [form, setForm] = useState<FormState | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -86,21 +93,104 @@ export function CompanySettingsDialog({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsLoading(true);
     apiClient
-      .get<CompanySettingsDto>("/admin/company-settings")
-      .then((s) => {
-        setSettings(s);
-        setForm(formFromSettings(s));
+      .get<CompanySettingsDto[]>("/admin/company-settings/templates")
+      .then((all) => {
+        setTemplates(all);
+        select(all.find((t) => t.isActive) ?? all[0]);
       })
+      .catch((err) => setError(errorMessage(err, "Couldn't load the brand templates.")))
       .finally(() => setIsLoading(false));
   }, [open]);
 
+  function select(template: CompanySettingsDto) {
+    setSettings(template);
+    setForm(formFromSettings(template));
+    setNewName(null);
+    setError(null);
+  }
+
+  // Keeps the switcher's list in step with whatever the server just returned for one template.
+  function replaceTemplate(updated: CompanySettingsDto) {
+    setTemplates((all) => all.map((t) => (t.id === updated.id ? updated : t)));
+    setSettings(updated);
+  }
+
+  async function createTemplate() {
+    if (!newName?.trim() || !settings) return;
+    setBusy("create");
+    setError(null);
+    try {
+      // Starts as a copy of the template on screen, so only what differs needs changing.
+      const created = await apiClient.post<CompanySettingsDto>("/admin/company-settings/templates", {
+        name: newName.trim(),
+        copyFromId: settings.id,
+      });
+      setTemplates((all) => [...all, created]);
+      select(created);
+      showToast({ variant: "success", title: `Template "${created.name}" created` });
+    } catch (err) {
+      setError(errorMessage(err, "Couldn't create the template."));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function activateTemplate() {
+    if (!settings) return;
+    setBusy("activate");
+    setError(null);
+    try {
+      const activated = await apiClient.post<CompanySettingsDto>(
+        `/admin/company-settings/templates/${settings.id}/activate`,
+        {},
+      );
+      setTemplates((all) =>
+        all.map((t) => (t.id === activated.id ? activated : { ...t, isActive: false })),
+      );
+      setSettings(activated);
+      showToast({
+        variant: "success",
+        title: `Now using "${activated.name}"`,
+        description: "New invoices, receipts and rate cards use this template.",
+      });
+      onSaved?.();
+    } catch (err) {
+      setError(errorMessage(err, "Couldn't switch templates."));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function deleteTemplate() {
+    if (!settings || settings.isActive) return;
+    if (!window.confirm(`Delete the template "${settings.name}"? This can't be undone.`)) return;
+    setBusy("delete");
+    setError(null);
+    try {
+      await apiClient.delete(`/admin/company-settings/templates/${settings.id}`);
+      const remaining = templates.filter((t) => t.id !== settings.id);
+      setTemplates(remaining);
+      select(remaining.find((t) => t.isActive) ?? remaining[0]);
+      showToast({ variant: "success", title: "Template deleted" });
+    } catch (err) {
+      setError(errorMessage(err, "Couldn't delete the template."));
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form) return;
+    if (!form || !settings) return;
+    if (!form.name.trim()) {
+      setError("Give the template a name.");
+      return;
+    }
     setError(null);
     setIsSubmitting(true);
     try {
-      const saved = await apiClient.patch<CompanySettingsDto>("/admin/company-settings", {
+      const saved = await apiClient.patch<CompanySettingsDto>(`/admin/company-settings/templates/${settings.id}`, {
+        name: form.name.trim(),
         companyName: form.companyName.trim(),
         tagline: form.tagline.trim() || undefined,
         primaryColor: form.primaryColor.trim(),
@@ -119,12 +209,15 @@ export function CompanySettingsDialog({
         legalDisclaimer: form.legalDisclaimer.trim() || undefined,
         restrictedItemsNotice: form.restrictedItemsNotice.trim() || undefined,
       });
-      setSettings(saved);
-      showToast({ variant: "success", title: "Document brand settings saved" });
+      replaceTemplate(saved);
+      showToast({
+        variant: "success",
+        title: `Template "${saved.name}" saved`,
+        description: saved.isActive ? "New documents use these details." : "Switch to it to start using it.",
+      });
       onSaved?.();
-      setOpen(false);
-    } catch {
-      setError("Couldn't save settings. Please try again.");
+    } catch (err) {
+      setError(errorMessage(err, "Couldn't save the template. Please try again."));
     } finally {
       setIsSubmitting(false);
     }
@@ -132,17 +225,17 @@ export function CompanySettingsDialog({
 
   async function handleLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file || !settings) return;
     setIsUploadingLogo(true);
     setError(null);
     try {
       const formData = new FormData();
       formData.append("logo", file);
       const saved = await apiClient.postForm<CompanySettingsDto>(
-        "/admin/company-settings/logo",
+        `/admin/company-settings/templates/${settings.id}/logo`,
         formData,
       );
-      setSettings(saved);
+      replaceTemplate(saved);
       showToast({ variant: "success", title: "Logo updated" });
     } catch {
       setError("Couldn't upload the logo. Use a PNG, JPEG, or WebP under 5MB.");
@@ -159,17 +252,101 @@ export function CompanySettingsDialog({
       <span onClick={() => setOpen(true)}>{trigger}</span>
       {open && (
         <DialogContent
-          title="Document Brand Settings"
-          description="Brand, company and legal details for every future rate card and tax invoice."
+          title="Document Brand Templates"
+          description="Brand, company, GST and T&C details for tax invoices, receipts and rate cards."
         >
           {isLoading || !form ? (
             <p className="text-sm text-muted-foreground">Loading…</p>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
-              <p className="text-xs text-muted-foreground">
-                Applies to every future generated rate card and tax invoice automatically. New
-                documents use these details, while issued documents remain unchanged.
-              </p>
+              <div className="space-y-3 rounded-lg border border-border p-3">
+                <div className="flex flex-wrap items-end gap-2">
+                  <div className="min-w-48 flex-1 space-y-1.5">
+                    <Label htmlFor="cs-template">Template</Label>
+                    <NativeSelect
+                      id="cs-template"
+                      value={settings?.id ?? ""}
+                      onChange={(e) => {
+                        const next = templates.find((t) => t.id === e.target.value);
+                        if (next) select(next);
+                      }}
+                    >
+                      {templates.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name}
+                          {t.isActive ? " (in use)" : ""}
+                        </option>
+                      ))}
+                    </NativeSelect>
+                  </div>
+                  {settings && !settings.isActive && (
+                    <>
+                      <Button type="button" size="sm" onClick={activateTemplate} isLoading={busy === "activate"}>
+                        Use this template
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="danger"
+                        onClick={deleteTemplate}
+                        isLoading={busy === "delete"}
+                      >
+                        Delete
+                      </Button>
+                    </>
+                  )}
+                  {newName === null && (
+                    <Button type="button" size="sm" variant="secondary" onClick={() => setNewName("")}>
+                      + New template
+                    </Button>
+                  )}
+                </div>
+                {newName !== null && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Input
+                      aria-label="New template name"
+                      placeholder="e.g. Export customers"
+                      value={newName}
+                      autoFocus
+                      className="min-w-48 flex-1"
+                      onChange={(e) => setNewName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          void createTemplate();
+                        }
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={createTemplate}
+                      isLoading={busy === "create"}
+                      disabled={!newName.trim()}
+                    >
+                      Create
+                    </Button>
+                    <Button type="button" size="sm" variant="ghost" onClick={() => setNewName(null)}>
+                      Cancel
+                    </Button>
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  {settings?.isActive
+                    ? "This template is in use: new invoices, receipts and rate cards are generated with it."
+                    : "Not in use. Edit and save freely, then choose “Use this template” to switch."}{" "}
+                  A new template starts as a copy of the one shown. Issued documents never change.
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="cs-template-name">Template name</Label>
+                <Input
+                  id="cs-template-name"
+                  value={form.name}
+                  onChange={(e) => setForm((f) => f && { ...f, name: e.target.value })}
+                />
+              </div>
 
               <div className="space-y-1.5">
                 <Label>Company Logo</Label>
@@ -337,9 +514,14 @@ export function CompanySettingsDialog({
 
               <div className="space-y-1.5">
                 <Label htmlFor="cs-terms">Terms & Conditions</Label>
+                <p className="text-xs text-muted-foreground">
+                  One term per line — printed as a numbered list on every tax invoice and rate card
+                  made with this template.
+                </p>
                 <textarea
                   id="cs-terms"
-                  rows={2}
+                  rows={7}
+                  placeholder={"Goods are carried at the owner's risk.\nClaims must be raised within 7 days of delivery.\nPrices include applicable GST."}
                   className={textareaClass}
                   value={form.termsAndConditions}
                   onChange={(e) => setForm((f) => f && { ...f, termsAndConditions: e.target.value })}
@@ -391,11 +573,11 @@ export function CompanySettingsDialog({
               <div className="flex justify-end gap-2 pt-2">
                 <DialogClose asChild>
                   <Button type="button" variant="secondary" size="sm">
-                    Cancel
+                    Close
                   </Button>
                 </DialogClose>
                 <Button type="submit" size="sm" isLoading={isSubmitting}>
-                  Save Settings
+                  Save template
                 </Button>
               </div>
             </form>

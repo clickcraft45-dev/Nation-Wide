@@ -1,5 +1,7 @@
 import type {
   CustomerRateQuoteOptionDto,
+  ParcelPackageDto,
+  ShipmentItemDto,
   PickupTimeSlot,
   QuoteAdminDetailDto,
   QuoteDto,
@@ -59,6 +61,8 @@ function toQuoteDtoBase<TOption>(
     shipmentType: quote.shipmentType,
     weightKg: quote.weightKg,
     description: quote.description,
+    packages: quote.packages as ParcelPackageDto[] | null,
+    items: quote.items as ShipmentItemDto[] | null,
     // Null on the new customer self-service flow (pickup logistics live on PickupRequest
     // instead) — originName is the sole discriminator since all origin fields go null together.
     origin: quote.originName

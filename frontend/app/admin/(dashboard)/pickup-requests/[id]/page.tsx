@@ -6,6 +6,9 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import type { PickupRequestDto, PaymentMethodCode } from "@nationwide/shared-types";
 import { apiClient, errorMessage } from "@/lib/api-client";
+import { useToast } from "@/components/ui/toast";
+import { PartnerPicker } from "@/components/shipment/partner-picker";
+import { ParcelContentsCard } from "@/components/shipment/parcel-contents-card";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -29,6 +32,26 @@ export default function AdminPickupRequestDetailPage() {
   const [pickup, setPickup] = useState<PickupRequestDto | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { showToast } = useToast();
+  const [reassignTo, setReassignTo] = useState<string | null>(null);
+  const [isAssigning, setIsAssigning] = useState(false);
+
+  async function assign() {
+    if (!reassignTo || !pickup) return;
+    setIsAssigning(true);
+    try {
+      const updated = await apiClient.patch<PickupRequestDto>(`/admin/pickup-requests/${pickup.id}/assign`, {
+        partnerId: reassignTo,
+      });
+      setPickup(updated);
+      setReassignTo(null);
+      showToast({ variant: "success", title: `Assigned to ${updated.assignedPartnerName}` });
+    } catch (err) {
+      showToast({ variant: "error", title: errorMessage(err, "Couldn't assign the partner.") });
+    } finally {
+      setIsAssigning(false);
+    }
+  }
 
   function load() {
     setIsLoading(true);
@@ -99,8 +122,36 @@ export default function AdminPickupRequestDetailPage() {
               .
             </p>
           )}
+          {/* Hand-assign or reassign until the partner is at the door. Warehouse drop-offs are
+              worked by staff, never a partner. */}
+          {!pickup.dropAtWarehouse && !pickup.arrivedAt && ["PENDING_ASSIGNMENT", "ASSIGNED", "SCHEDULED"].includes(pickup.status) && (
+            <div className="space-y-2 border-t border-border pt-3">
+              <p className="text-sm font-medium text-foreground">
+                {pickup.assignedPartnerId ? "Reassign" : "Assign"} partner
+              </p>
+              <PartnerPicker
+                value={reassignTo}
+                onChange={setReassignTo}
+                pickup={
+                  pickup.pickupLatitude != null && pickup.pickupLongitude != null
+                    ? { lat: pickup.pickupLatitude, lng: pickup.pickupLongitude }
+                    : null
+                }
+              />
+              <Button
+                size="sm"
+                onClick={assign}
+                isLoading={isAssigning}
+                disabled={!reassignTo || reassignTo === pickup.assignedPartnerId}
+              >
+                Assign
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
+
+      <ParcelContentsCard pickup={pickup} />
 
       <Card>
         <CardHeader>
@@ -115,6 +166,19 @@ export default function AdminPickupRequestDetailPage() {
                 : `${pickup.pickupAddressLine1}${pickup.pickupAddressLine2 ? `, ${pickup.pickupAddressLine2}` : ""}, ${pickup.pickupCity}, ${pickup.pickupState} ${pickup.pickupPostalCode}`}
             </p>
           </div>
+          {pickup.pickupMapsUrl && (
+            <div className="sm:col-span-2">
+              <p className="text-muted-foreground">Google Maps link</p>
+              <a
+                href={pickup.pickupMapsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="break-all font-medium text-primary hover:underline"
+              >
+                {pickup.pickupMapsUrl}
+              </a>
+            </div>
+          )}
           {!pickup.dropAtWarehouse && (
             <div>
               <p className="text-muted-foreground">Scheduled</p>

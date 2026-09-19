@@ -6,9 +6,11 @@ import {
   Patch,
   Post,
   Query,
+  UploadedFile,
   UseGuards,
 } from '@nestjs/common';
 import type {
+  PickupDocumentsDto,
   PickupPartnerDashboardSummaryDto,
   PickupRequestDto,
   RecalculatePreviewDto,
@@ -26,6 +28,7 @@ import { VerifyPickupRequestDto } from './dto/verify-pickup-request.dto';
 import { CollectPaymentDto } from './dto/collect-payment.dto';
 import { AcceptParcelDto } from './dto/accept-parcel.dto';
 import { RejectParcelDto } from './dto/reject-parcel.dto';
+import { PhotoUpload, requireFile } from './image-upload';
 
 // Pickup Partner (field executive) surface — everything a partner can do once assigned a pickup:
 // view it, recalculate/verify the parcel's real weight against the pricing engine, collect
@@ -65,6 +68,48 @@ export class PartnerPickupRequestsController {
     const pickupRequest =
       await this.pickupRequestsService.findOneVisibleToPartner(id, user.sub);
     return toPickupRequestDto(pickupRequest);
+  }
+
+  // Photos taken at the door: the customer's Aadhaar (kept on the customer, reused next time) and
+  // the parcel itself. Both are required before verification.
+  @Post(':id/aadhaar')
+  @PhotoUpload()
+  async uploadAadhaar(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<PickupRequestDto> {
+    return toPickupRequestDto(
+      await this.pickupRequestsService.saveAadhaar(
+        id,
+        requireFile(file),
+        user.sub,
+      ),
+    );
+  }
+
+  @Post(':id/parcel-photo')
+  @PhotoUpload()
+  async uploadParcelPhoto(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<PickupRequestDto> {
+    return toPickupRequestDto(
+      await this.pickupRequestsService.saveParcelPhoto(
+        id,
+        requireFile(file),
+        user.sub,
+      ),
+    );
+  }
+
+  @Get(':id/documents')
+  documents(
+    @Param('id') id: string,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<PickupDocumentsDto> {
+    return this.pickupRequestsService.documents(id, user.sub);
   }
 
   // Accepting an open, broadcast request — first partner to claim it gets it.

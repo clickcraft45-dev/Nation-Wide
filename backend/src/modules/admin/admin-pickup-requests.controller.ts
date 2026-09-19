@@ -6,12 +6,16 @@ import {
   Patch,
   Post,
   Query,
+  UploadedFile,
   UseGuards,
 } from '@nestjs/common';
 import type {
+  PickupDocumentsDto,
   PickupRequestDto,
   RecalculatePreviewDto,
+  ResolvedMapsUrlDto,
 } from '@nationwide/shared-types';
+import { IsString, MaxLength } from 'class-validator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -26,6 +30,15 @@ import { VerifyPickupRequestDto } from '../pickup-requests/dto/verify-pickup-req
 import { CollectPaymentDto } from '../pickup-requests/dto/collect-payment.dto';
 import { AcceptParcelDto } from '../pickup-requests/dto/accept-parcel.dto';
 import { RejectParcelDto } from '../pickup-requests/dto/reject-parcel.dto';
+import { AdminCreatePickupOrderDto } from '../pickup-requests/dto/admin-create-pickup-order.dto';
+import { PhotoUpload, requireFile } from '../pickup-requests/image-upload';
+import { resolveMapsUrl } from '../pickup-requests/maps-url';
+
+class ResolveMapsUrlDto {
+  @IsString()
+  @MaxLength(2000)
+  url!: string;
+}
 
 // Admin oversight of the pre-order pickup-request pipeline — assign/reassign a Pickup Partner,
 // monitor progress, review verification/payment history. The verification/payment/acceptance
@@ -46,10 +59,79 @@ export class AdminPickupRequestsController {
     return pickupRequests.map(toPickupRequestDto);
   }
 
+  // Staff booking a pickup for a customer (phone-in / walk-in), assigned straight to a partner.
+  @Post()
+  async create(
+    @Body() dto: AdminCreatePickupOrderDto,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<PickupRequestDto> {
+    return toPickupRequestDto(
+      await this.pickupRequestsService.createForAdmin(dto, user.sub),
+    );
+  }
+
+  // Turns a pasted Google Maps link into a pin, so staff can check it before booking. Registered
+  // ahead of :id routes; only Google's own hosts are ever fetched (see maps-url.ts).
+  @Post('resolve-maps-url')
+  async resolveMapsUrl(
+    @Body() dto: ResolveMapsUrlDto,
+  ): Promise<ResolvedMapsUrlDto> {
+    const resolved = await resolveMapsUrl(dto.url);
+    return {
+      latitude: resolved?.latitude ?? null,
+      longitude: resolved?.longitude ?? null,
+    };
+  }
+
   @Get(':id')
   async findOne(@Param('id') id: string): Promise<PickupRequestDto> {
     const pickupRequest = await this.pickupRequestsService.findOne(id);
     return toPickupRequestDto(pickupRequest);
+  }
+
+  // Photos taken at the door: the customer's Aadhaar (kept on the customer, reused next time) and
+  // the parcel itself. Uploads are warehouse drop-offs only (the service enforces it);
+  // the documents link works on any pickup, so staff can review what a partner collected.
+  @Post(':id/aadhaar')
+  @PhotoUpload()
+  async uploadAadhaar(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<PickupRequestDto> {
+    return toPickupRequestDto(
+      await this.pickupRequestsService.saveAadhaar(
+        id,
+        requireFile(file),
+        user.sub,
+        true,
+      ),
+    );
+  }
+
+  @Post(':id/parcel-photo')
+  @PhotoUpload()
+  async uploadParcelPhoto(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<PickupRequestDto> {
+    return toPickupRequestDto(
+      await this.pickupRequestsService.saveParcelPhoto(
+        id,
+        requireFile(file),
+        user.sub,
+        true,
+      ),
+    );
+  }
+
+  @Get(':id/documents')
+  documents(
+    @Param('id') id: string,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<PickupDocumentsDto> {
+    return this.pickupRequestsService.documents(id, user.sub, true);
   }
 
   @Patch(':id/assign')

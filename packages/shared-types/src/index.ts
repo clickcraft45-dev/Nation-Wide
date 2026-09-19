@@ -14,3 +14,5 @@ export * from "./invoice";
 export * from "./receipt";
 export * from "./whatsapp";
 export * from "./registered-company";
+export * from "./parcel";
+export * from "./b2b";

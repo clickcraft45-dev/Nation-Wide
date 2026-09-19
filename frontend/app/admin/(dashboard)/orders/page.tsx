@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { ArrowUpDown, Package, Plus } from "lucide-react";
 import type { OrderDto, CustomerDto, ShippingProviderDto } from "@nationwide/shared-types";
@@ -21,7 +22,6 @@ import {
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/page-state";
 import { OrderStatusBadge, TrackingStatusBadge } from "@/components/ui/status-badge";
-import { CreateOrderDialog } from "@/components/orders/create-order-dialog";
 
 type SortKey = "id" | "customer" | "status" | "createdAt";
 type SortDir = "asc" | "desc";
@@ -163,17 +163,13 @@ export default function AdminOrdersPage() {
             {total} total order{total === 1 ? "" : "s"}
           </p>
         </div>
-        <CreateOrderDialog
-          customers={customers}
-          providers={providers}
-          onCreated={load}
-          trigger={
-            <Button>
-              <Plus className="h-4 w-4" aria-hidden />
-              Create Order
-            </Button>
-          }
-        />
+        {/* Books a pickup for a customer and assigns a partner; the order follows at pickup. */}
+        <Link href="/admin/orders/new">
+          <Button>
+            <Plus className="h-4 w-4" aria-hidden />
+            Create Order
+          </Button>
+        </Link>
       </div>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">

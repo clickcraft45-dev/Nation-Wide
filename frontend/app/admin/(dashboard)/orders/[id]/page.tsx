@@ -7,6 +7,7 @@ import { ArrowLeft, MapPin, User } from "lucide-react";
 import type {
   OrderDto,
   CustomerDto,
+  PickupRequestDto,
   ShippingProviderDto,
 } from "@nationwide/shared-types";
 import { apiClient, ApiError } from "@/lib/api-client";
@@ -16,12 +17,15 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { OrderStatusBadge } from "@/components/ui/status-badge";
 import { ShipmentAwbCard } from "@/components/orders/shipment-awb-card";
 import { OrderTrackingPanel } from "@/components/orders/order-tracking-panel";
+import { ParcelContentsCard } from "@/components/shipment/parcel-contents-card";
 
 export default function AdminOrderDetailPage() {
   const params = useParams<{ id: string }>();
   const [order, setOrder] = useState<OrderDto | null>(null);
   const [customer, setCustomer] = useState<CustomerDto | null>(null);
   const [providers, setProviders] = useState<ShippingProviderDto[]>([]);
+  // The pickup this order was created from — its boxes and contents are what the carrier asks for.
+  const [pickup, setPickup] = useState<PickupRequestDto | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -41,13 +45,16 @@ export default function AdminOrderDetailPage() {
       .then(async (orderRes) => {
         if (cancelled) return;
         setOrder(orderRes);
-        const [customerRes, providersRes] = await Promise.all([
+        const [customerRes, providersRes, pickupsRes] = await Promise.all([
           apiClient.get<CustomerDto>(`/customers/${orderRes.customerId}`),
           apiClient.get<ShippingProviderDto[]>("/shipping-providers"),
+          // Older orders (and ones created outside the pickup flow) have none — not an error.
+          apiClient.get<PickupRequestDto[]>(`/admin/pickup-requests?orderId=${orderRes.id}`).catch(() => []),
         ]);
         if (cancelled) return;
         setCustomer(customerRes);
         setProviders(providersRes);
+        setPickup(pickupsRes[0] ?? null);
       })
       .catch((err) => {
         if (cancelled) return;
@@ -134,6 +141,8 @@ export default function AdminOrderDetailPage() {
                   )}
                 </CardContent>
               </Card>
+
+              {pickup && <ParcelContentsCard pickup={pickup} showPickupLink />}
 
               <Card>
                 <CardHeader>

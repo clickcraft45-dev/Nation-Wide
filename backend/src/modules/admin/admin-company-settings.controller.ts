@@ -2,7 +2,11 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
+  HttpCode,
+  Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   UploadedFile,
@@ -11,6 +15,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
+import type { CompanySettings } from '@prisma/client';
 import type { CompanySettingsDto } from '@nationwide/shared-types';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -20,39 +25,11 @@ import type { JwtPayload } from '../auth/types/jwt-payload.type';
 import { CompanySettingsService } from '../rate-cards/company-settings.service';
 import { toCompanySettingsDto } from '../rate-cards/company-settings.mapper';
 import { UpdateCompanySettingsDto } from '../rate-cards/dto/update-company-settings.dto';
+import { CreateBrandTemplateDto } from '../rate-cards/dto/create-brand-template.dto';
 
-// ADMIN only — branding/legal text feeds directly into customer-distributed documents.
-@Controller('admin/company-settings')
-@UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('ADMIN')
-export class AdminCompanySettingsController {
-  constructor(
-    private readonly companySettingsService: CompanySettingsService,
-  ) {}
-
-  @Get()
-  async get(): Promise<CompanySettingsDto> {
-    const settings = await this.companySettingsService.get();
-    return toCompanySettingsDto(
-      settings,
-      await this.companySettingsService.logoUrl(settings),
-    );
-  }
-
-  @Patch()
-  async update(
-    @Body() dto: UpdateCompanySettingsDto,
-    @CurrentUser() user: JwtPayload,
-  ): Promise<CompanySettingsDto> {
-    const settings = await this.companySettingsService.update(dto, user.sub);
-    return toCompanySettingsDto(
-      settings,
-      await this.companySettingsService.logoUrl(settings),
-    );
-  }
-
-  @Post('logo')
-  @UseInterceptors(
+// Shared by both logo routes.
+const LogoUpload = () =>
+  UseInterceptors(
     FileInterceptor('logo', {
       // memoryStorage, not diskStorage: the file goes straight to S3 (see
       // CompanySettingsService.saveLogo). The 5 MB cap below is what makes buffering safe.
@@ -73,7 +50,34 @@ export class AdminCompanySettingsController {
         callback(null, true);
       },
     }),
-  )
+  );
+
+// ADMIN only — branding/legal text feeds directly into customer-distributed documents.
+// The routes without an id act on the ACTIVE brand template (what new documents use); the
+// templates/* routes manage the saved templates themselves.
+@Controller('admin/company-settings')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('ADMIN')
+export class AdminCompanySettingsController {
+  constructor(
+    private readonly companySettingsService: CompanySettingsService,
+  ) {}
+
+  @Get()
+  async get(): Promise<CompanySettingsDto> {
+    return this.toDto(await this.companySettingsService.get());
+  }
+
+  @Patch()
+  async update(
+    @Body() dto: UpdateCompanySettingsDto,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<CompanySettingsDto> {
+    return this.toDto(await this.companySettingsService.update(dto, user.sub));
+  }
+
+  @Post('logo')
+  @LogoUpload()
   async uploadLogo(
     @UploadedFile() file: Express.Multer.File,
     @CurrentUser() user: JwtPayload,
@@ -81,7 +85,77 @@ export class AdminCompanySettingsController {
     if (!file) {
       throw new BadRequestException('No logo file provided');
     }
-    const settings = await this.companySettingsService.saveLogo(file, user.sub);
+    return this.toDto(
+      await this.companySettingsService.saveLogo(file, user.sub),
+    );
+  }
+
+  @Get('templates')
+  async listTemplates(): Promise<CompanySettingsDto[]> {
+    const templates = await this.companySettingsService.list();
+    return Promise.all(templates.map((t) => this.toDto(t)));
+  }
+
+  @Post('templates')
+  async createTemplate(
+    @Body() dto: CreateBrandTemplateDto,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<CompanySettingsDto> {
+    return this.toDto(
+      await this.companySettingsService.create(
+        dto.name,
+        dto.copyFromId,
+        user.sub,
+      ),
+    );
+  }
+
+  @Patch('templates/:id')
+  async updateTemplate(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateCompanySettingsDto,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<CompanySettingsDto> {
+    return this.toDto(
+      await this.companySettingsService.update(dto, user.sub, id),
+    );
+  }
+
+  // Switch which template new documents use. Already-issued documents are unaffected.
+  @Post('templates/:id/activate')
+  @HttpCode(200)
+  async activateTemplate(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<CompanySettingsDto> {
+    return this.toDto(await this.companySettingsService.activate(id, user.sub));
+  }
+
+  @Delete('templates/:id')
+  @HttpCode(204)
+  deleteTemplate(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<void> {
+    return this.companySettingsService.remove(id, user.sub);
+  }
+
+  @Post('templates/:id/logo')
+  @LogoUpload()
+  async uploadTemplateLogo(
+    @Param('id', ParseUUIDPipe) id: string,
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<CompanySettingsDto> {
+    if (!file) {
+      throw new BadRequestException('No logo file provided');
+    }
+    return this.toDto(
+      await this.companySettingsService.saveLogo(file, user.sub, id),
+    );
+  }
+
+  private async toDto(settings: CompanySettings): Promise<CompanySettingsDto> {
     return toCompanySettingsDto(
       settings,
       await this.companySettingsService.logoUrl(settings),

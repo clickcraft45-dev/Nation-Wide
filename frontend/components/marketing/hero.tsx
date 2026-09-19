@@ -4,6 +4,7 @@ import { useRef } from "react";
 import { motion, useReducedMotion, useScroll, useSpring, useTransform } from "motion/react";
 import {
   ArrowRight,
+  Building2,
   ChevronDown,
   MapPin,
   Radar,
@@ -202,6 +203,20 @@ export function MarketingHero() {
               <a href="#how-it-works">How it works</a>
             </LiquidButton>
           </div>
+
+          {/* Businesses that ship regularly want an account, not a one-off quote — this is the
+              one line above the fold that says so, and it lands on the request form. */}
+          <a
+            href="#business"
+            className="group inline-flex animate-slide-in-left items-center gap-1.5 text-sm text-muted-foreground [animation-delay:640ms] hover:text-foreground"
+          >
+            <Building2 className="h-4 w-4 text-primary" aria-hidden />
+            Shipping for a business?
+            <span className="font-medium text-foreground underline underline-offset-4">
+              Request an account
+            </span>
+            <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" aria-hidden />
+          </a>
 
           <div className="flex animate-slide-in-left flex-wrap justify-center gap-2 pt-1 [animation-delay:680ms]">
             {HIGHLIGHTS.map((item) => (

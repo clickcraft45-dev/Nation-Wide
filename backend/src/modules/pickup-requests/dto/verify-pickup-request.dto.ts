@@ -13,13 +13,24 @@ import {
   type ShipmentTypeCode,
 } from '@nationwide/shared-types';
 import { RecipientAddressDto } from './recipient-address.dto';
+import {
+  ItemsList,
+  PackagesList,
+  ParcelPackageDto,
+  ShipmentItemDto,
+} from '../../../common/dto/parcel.dto';
 
 // Persists the verification — the server re-runs the pricing engine itself from these inputs
 // (never trusts a client-echoed price from the earlier stateless recalculate() preview).
 export class VerifyPickupRequestDto {
-  @IsNumber({ maxDecimalPlaces: 2 })
-  @IsPositive()
-  verifiedWeightKg!: number;
+  // The boxes as weighed and measured at the door. verifiedWeightKg is derived from them — the
+  // greater of actual and volumetric weight per box — never sent by the client.
+  @PackagesList()
+  packages!: ParcelPackageDto[];
+
+  // What is actually in the box, confirmed with the customer.
+  @ItemsList()
+  items!: ShipmentItemDto[];
 
   @IsIn(SHIPMENT_TYPES)
   verifiedShipmentType!: ShipmentTypeCode;

@@ -48,6 +48,17 @@ const PAPER = '#f7f7f8';
 const LINE = '#dde1e6';
 const BRAND_FALLBACK = '#7f1020';
 
+/**
+ * The T&C as the admin typed them — one term per line — ready to number. A number the admin typed
+ * themselves ("1.", "2)", "-") is stripped so the list is never numbered twice.
+ */
+export function termLines(text: string): string[] {
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.replace(/^\s*(?:\d+[.)]|[-*•])\s*/, '').trim())
+    .filter(Boolean);
+}
+
 function brandColor(value: string | null | undefined): string {
   return value && /^#[0-9a-f]{6}$/i.test(value) ? value : BRAND_FALLBACK;
 }
@@ -532,11 +543,13 @@ export async function renderTaxInvoice(
         ? h(View, { key: 'notes', style: s.notes }, [
             branding.termsAndConditions
               ? h(View, { key: 'terms', style: s.note }, [
-                  h(Text, { key: 'h', style: s.label }, 'Terms'),
-                  h(
-                    Text,
-                    { key: 'v', style: s.foot },
-                    branding.termsAndConditions,
+                  h(Text, { key: 'h', style: s.label }, 'Terms & Conditions'),
+                  ...termLines(branding.termsAndConditions).map((term, i) =>
+                    h(
+                      Text,
+                      { key: `t${i}`, style: s.foot },
+                      `${i + 1}. ${term}`,
+                    ),
                   ),
                 ])
               : null,

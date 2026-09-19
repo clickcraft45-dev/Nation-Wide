@@ -18,6 +18,7 @@ import {
   type PickupTimeSlot,
 } from '@nationwide/shared-types';
 import { RecipientAddressDto } from './recipient-address.dto';
+import { ItemsList, ShipmentItemDto } from '../../../common/dto/parcel.dto';
 
 const needsPickupAddress = (o: CreatePickupRequestDto) => !o.dropAtWarehouse;
 
@@ -99,4 +100,8 @@ export class CreatePickupRequestDto {
   @ValidateNested()
   @Type(() => RecipientAddressDto)
   recipient?: RecipientAddressDto;
+
+  // Required: carriers will not move a parcel without declared contents.
+  @ItemsList()
+  items!: ShipmentItemDto[];
 }

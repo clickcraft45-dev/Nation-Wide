@@ -126,6 +126,56 @@ Review it: ${input.reviewUrl}`,
 }
 
 // ---------------------------------------------------------------------------
+// 1b. New B2B account request — internal alert to the operations inbox
+// ---------------------------------------------------------------------------
+
+export interface B2bRequestEmailInput {
+  companyName: string;
+  contactName: string;
+  email: string;
+  phone: string;
+  monthlyVolume?: string | null;
+  message?: string | null;
+  reviewUrl: string;
+}
+
+export function b2bRequestReceived(
+  input: B2bRequestEmailInput,
+  to: string,
+): OutboundEmail {
+  const details = [
+    row('Company', escapeHtml(input.companyName)),
+    row('Contact', escapeHtml(input.contactName)),
+    row('Email', escapeHtml(input.email)),
+    row('Phone', escapeHtml(input.phone)),
+    input.monthlyVolume ? row('Volume', escapeHtml(input.monthlyVolume)) : '',
+    input.message ? row('Message', escapeHtml(input.message)) : '',
+  ].join('');
+
+  return {
+    to,
+    subject: `New B2B account request — ${input.companyName}`,
+    // Replying goes to the business, so ops can answer without copying the address out.
+    replyTo: input.email,
+    html: shell(
+      'New B2B account request',
+      `<p style="${P}">A business asked for a NationWide account. Approving creates the customer and issues their order link.</p>
+       <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;margin:18px 0;">${details}</table>
+       ${button(input.reviewUrl, 'Review request')}
+       <p style="${MUTED}">You are receiving this because you are on the NationWide operations inbox.</p>`,
+    ),
+    text: `New B2B account request
+
+Company: ${input.companyName}
+Contact: ${input.contactName}
+Email:   ${input.email}
+Phone:   ${input.phone}${input.monthlyVolume ? `\nVolume:  ${input.monthlyVolume}` : ''}${input.message ? `\nMessage: ${input.message}` : ''}
+
+Review it: ${input.reviewUrl}`,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // 2. Forgot password
 // ---------------------------------------------------------------------------
 
@@ -242,7 +292,10 @@ export function pickupPartnerCredentials(
   const details = [
     row('Name', name),
     row('Email', escapeHtml(input.email)),
-    row('Password', `<code style="font-family:monospace;font-size:14px;">${escapeHtml(input.password)}</code>`),
+    row(
+      'Password',
+      `<code style="font-family:monospace;font-size:14px;">${escapeHtml(input.password)}</code>`,
+    ),
   ].join('');
 
   return {

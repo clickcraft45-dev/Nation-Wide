@@ -264,8 +264,13 @@ async function main() {
 
   // ---- customers (consignors), matched on name first so an existing customer is reused
   const existing = await prisma.customer.findMany({
-    select: { id: true, name: true },
+    select: { id: true, name: true, phone: true },
   });
+  // Phone is unique, and two consignors in the book share a number often enough that a plain
+  // create() dies on the second one. Matching on phone first reuses that customer instead.
+  const customerByPhone = new Map(
+    existing.filter((c) => c.phone).map((c) => [c.phone, c.id]),
+  );
   const customerByName = new Map(
     existing.map((c) => [c.name.trim().toUpperCase(), c.id]),
   );
@@ -273,6 +278,13 @@ async function main() {
     const key = name.toUpperCase();
     if (customerByName.has(key)) continue;
     const row = rows.find((r) => r.consignor === name && r.consignorPhone);
+    const sharedId = row?.consignorPhone
+      ? customerByPhone.get(row.consignorPhone)
+      : undefined;
+    if (sharedId) {
+      customerByName.set(key, sharedId);
+      continue;
+    }
     const created = await prisma.customer.create({
       data: {
         name,
@@ -287,6 +299,7 @@ async function main() {
       },
     });
     customerByName.set(key, created.id);
+    if (created.phone) customerByPhone.set(created.phone, created.id);
   }
 
   // ---- orders + shipments + tracking numbers

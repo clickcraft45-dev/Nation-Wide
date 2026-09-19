@@ -17,6 +17,7 @@ import { MailModule } from './modules/mail/mail.module';
 import { ReviewsModule } from './modules/reviews/reviews.module';
 import { PartnerApplicationsModule } from './modules/partner-applications/partner-applications.module';
 import { CustomersModule } from './modules/customers/customers.module';
+import { B2bModule } from './modules/b2b/b2b.module';
 import { OrdersModule } from './modules/orders/orders.module';
 import { ShipmentsModule } from './modules/shipments/shipments.module';
 import { ProviderIntegrationModule } from './modules/provider-integration/provider-integration.module';
@@ -44,6 +45,7 @@ import { ReceiptsModule } from './modules/receipts/receipts.module';
     AdminModule,
     PartnerApplicationsModule,
     CustomersModule,
+    B2bModule,
     ShipmentsModule,
     OrdersModule,
     ProviderIntegrationModule,

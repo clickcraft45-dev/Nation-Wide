@@ -173,6 +173,10 @@ model Customer {
   isActive           Boolean  @default(true) @map("is_active")
   consentGivenAt     DateTime @map("consent_given_at") // DPDP Act: when the customer consented to data collection
   consentSource      String   @map("consent_source") // e.g. 'signup_form', 'staff_entry'
+  /// S3 key of the customer's Aadhaar card photo, taken by the pickup partner at the door (customs
+  /// asks for it on every export). Collected once and reused on later pickups unless replaced.
+  aadhaarKey         String?   @map("aadhaar_key")
+  aadhaarUploadedAt  DateTime? @map("aadhaar_uploaded_at")
   createdAt          DateTime @default(now()) @map("created_at")
   updatedAt          DateTime @updatedAt @map("updated_at")
 
@@ -184,6 +188,8 @@ model Customer {
   receipts       Receipt[]
   pushSubscriptions PushSubscription[]
   reviews        Review[]
+  savedItems     SavedItem[]
+  b2bLinks       B2bLink[]
 
   @@map("customers")
 }
@@ -237,8 +243,16 @@ model Quote {
   customerId String @map("customer_id")
 
   shipmentType ShipmentTypeCode @map("shipment_type")
+  // Chargeable weight: when boxes are given this is derived from them (see chargeableWeightKg in
+  // shared-types), so it is always the figure the price was computed against.
   weightKg     Float          @map("weight_kg")
   description  String?
+  /// The boxes: [{ weightKg, lengthCm?, widthCm?, heightCm? }]. One box is a normal order, several
+  /// a bulk one. Null on quotes created before dimensions were collected.
+  packages     Json?
+  /// What is inside, as a carrier's commercial invoice asks for it:
+  /// [{ description, quantity, unitValue, hsCode? }]. Null until the customer/admin/partner adds it.
+  items        Json?
 
   // Nullable — the new customer self-service flow (see PickupRequest) no longer collects these at
   // quote-creation time; pickup logistics move to PickupRequest instead. Still populated (and
@@ -389,6 +403,9 @@ model PickupRequest {
   /// the door rather than to the middle of a PIN code. Null for a typed-in address.
   pickupLatitude     Float?    @map("pickup_latitude")
   pickupLongitude    Float?    @map("pickup_longitude")
+  /// A Google Maps link staff pasted when booking on the customer's behalf. The partner opens it
+  /// directly when it could not be resolved to coordinates.
+  pickupMapsUrl      String?   @map("pickup_maps_url")
   pickupDate         DateTime? @map("pickup_date") // null when dropAtWarehouse
   pickupTimeSlot     String?   @map("pickup_time_slot") // null when dropAtWarehouse
   pickupInstructions String?   @map("pickup_instructions")
@@ -407,6 +424,10 @@ model PickupRequest {
   verifiedWeightKg     Float?          @map("verified_weight_kg")
   verifiedShipmentType ShipmentTypeCode? @map("verified_shipment_type")
   verifiedPrice        Float?          @map("verified_price")
+  /// The boxes as measured at the door; verifiedWeightKg is their chargeable weight.
+  verifiedPackages     Json?             @map("verified_packages")
+  /// S3 key of the photo the partner took of the parcel at pickup.
+  parcelPhotoKey       String?           @map("parcel_photo_key")
   // The pricing engine computes the whole 7-step breakdown to arrive at verifiedPrice, and until
   // invoicing existed only the total was kept. A tax invoice has to state the taxable value and
   // the tax actually charged, and re-deriving those at invoice time would re-price against
@@ -759,6 +780,11 @@ model AdminUser {
   // generically useful for any AdminUser going forward.
   name               String?
   phone              String?
+  // PICKUP_PARTNER only: where the partner's phone was when they last opened the app — fetched once
+  // per session, not tracked, so staff can pick someone nearby when assigning a pickup by hand.
+  lastLatitude       Float?    @map("last_latitude")
+  lastLongitude      Float?    @map("last_longitude")
+  locationUpdatedAt  DateTime? @map("location_updated_at")
   createdAt          DateTime  @default(now()) @map("created_at")
   updatedAt          DateTime  @updatedAt @map("updated_at")
 
@@ -777,6 +803,8 @@ model AdminUser {
   recordedReceipts           Receipt[]          @relation("ReceiptRecordedBy")
   pushSubscriptions          PushSubscription[]
   reviewedPartnerApplications PartnerApplication[] @relation("PartnerApplicationReviewedBy")
+  createdB2bLinks             B2bLink[]            @relation("B2bLinkCreatedBy")
+  reviewedB2bRequests         B2bRequest[]         @relation("B2bRequestReviewedBy")
   approvedReviews             Review[]             @relation("ReviewApprovedBy")
 
   @@map("admin_users")
@@ -853,11 +881,18 @@ model AuditLog {
 // Rate Card Generator
 // ---------------------------------------------------------------------------
 
-/// Singleton — the service always reads/creates the single row. Branding/contact/legal-text
-/// config that automatically populates every generated Rate Card PDF; never hardcoded in the
-/// template itself so changing it here affects every future generation without a deploy.
+/// A document brand template: branding, contact, GST identity and legal text (T&C included) for
+/// generated tax invoices, receipts and rate cards. Admins keep several and switch between them;
+/// exactly one is active at a time and CompanySettingsService.get() returns it, so every document
+/// generator reads "the current brand" without knowing templates exist. Issued documents are
+/// frozen at issue time, so switching only affects documents generated afterwards.
 model CompanySettings {
   id                    String   @id @default(uuid())
+  /// The admin's label for this template, e.g. "Default" or "Export customers".
+  name                  String   @default("Default")
+  /// Defaults true only so the pre-existing single row becomes the active template on migrate;
+  /// the service creates new templates inactive and switches atomically.
+  isActive              Boolean  @default(true) @map("is_active")
   companyName           String   @default("NationWide")
   tagline               String?
   // S3 object key, e.g. "uploads/company-logos/<settings-id>/<uuid>.png". The PDF renderers
@@ -1314,4 +1349,87 @@ model RemoteArea {
   @@index([rateProviderId, countryName])
   @@index([source])
   @@map("remote_areas")
+}
+
+/// A customer's reusable shipment content ("Cotton shirts", HS 6205, Rs.500) — remembered every time
+/// one is shipped so the next booking can pick it instead of retyping, and editable/deletable.
+model SavedItem {
+  id          String   @id @default(uuid())
+  customerId  String   @map("customer_id")
+  description String
+  hsCode      String?  @map("hs_code")
+  unitValue   Float    @map("unit_value")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@unique([customerId, description])
+  @@map("saved_items")
+}
+
+/// A business asking for a B2B account from the public site. Approving it creates (or reuses) the
+/// customer and issues their order link in one step — see B2bRequestsService.approve.
+///
+/// Deliberately NOT a customer record: anyone can submit this, and a row here grants nothing until
+/// a human approves it. Mirrors PartnerApplication, which guards account creation the same way.
+model B2bRequest {
+  id            String  @id @default(uuid())
+  companyName   String  @map("company_name")
+  contactName   String  @map("contact_name")
+  email         String
+  phone         String
+  /// Free text as the business described it, e.g. "40-60 parcels a month".
+  monthlyVolume String? @map("monthly_volume")
+  message       String?
+
+  status            PartnerApplicationStatus @default(PENDING)
+  reviewedByAdminId String?                  @map("reviewed_by_admin_id")
+  reviewedAt        DateTime?                @map("reviewed_at")
+  reviewNote        String?                  @map("review_note")
+  /// What approval produced — the audit link between a public submission and the account and link
+  /// it became.
+  createdCustomerId String?                  @map("created_customer_id")
+  createdB2bLinkId  String?                  @map("created_b2b_link_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  reviewedBy AdminUser? @relation("B2bRequestReviewedBy", fields: [reviewedByAdminId], references: [id])
+
+  @@index([status, createdAt])
+  @@index([email])
+  @@map("b2b_requests")
+}
+
+/// A standing order-request link handed to a business customer: their staff open it and book
+/// shipments without individual logins.
+///
+/// The link IS the credential, so this stores a SHA-256 of the token and never the token itself —
+/// the same rule as PasswordResetToken and Review: a leak of this table must not hand anyone the
+/// ability to order in a customer's name. It is shown to the admin once, at creation, and can be
+/// revoked at any time (revokedAt), which is the only way to withdraw access.
+///
+/// Deliberately NOT a login: it grants exactly one capability — request pickups for THIS customer,
+/// reusing their saved addresses and items. It can neither read their invoices nor change their
+/// account.
+model B2bLink {
+  id         String @id @default(uuid())
+  customerId String @map("customer_id")
+  /// What this link is for, e.g. "Bengaluru warehouse" — several may exist per customer so one
+  /// team's link can be revoked without cutting off the rest.
+  label      String
+
+  tokenHash String @unique @map("token_hash")
+
+  createdByAdminId String    @map("created_by_admin_id")
+  lastUsedAt       DateTime? @map("last_used_at")
+  revokedAt        DateTime? @map("revoked_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  customer  Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  createdBy AdminUser @relation("B2bLinkCreatedBy", fields: [createdByAdminId], references: [id])
+
+  @@index([customerId])
+  @@map("b2b_links")
 }

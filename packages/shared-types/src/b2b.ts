@@ -1,0 +1,120 @@
+import type { AddressBookDto, ParcelPackageDto, ShipmentItemDto } from "./parcel";
+import type { PickupRecipientDto } from "./pickup-request";
+import type { PickupTimeSlot, ShipmentTypeCode } from "./quote";
+
+/**
+ * A standing order-request link for a business customer. The token is returned exactly once, when
+ * the link is created — afterwards only its hash is stored, so a lost link is replaced, not
+ * recovered.
+ */
+export interface B2bLinkDto {
+  id: string;
+  label: string;
+  customerId: string;
+  lastUsedAt: string | null; // ISO 8601
+  revokedAt: string | null; // ISO 8601
+  createdAt: string; // ISO 8601
+  /** Only on the create response. Show it once, then it is gone. */
+  url?: string;
+}
+
+export interface CreateB2bLinkDto {
+  label: string;
+}
+
+/** A business asking for an account from the public site. Approving it issues their order link. */
+export interface B2bRequestDto {
+  id: string;
+  companyName: string;
+  contactName: string;
+  email: string;
+  phone: string;
+  monthlyVolume: string | null;
+  message: string | null;
+  status: "PENDING" | "APPROVED" | "REJECTED";
+  reviewNote: string | null;
+  reviewedAt: string | null; // ISO 8601
+  createdCustomerId: string | null;
+  createdAt: string; // ISO 8601
+}
+
+export interface CreateB2bRequestDto {
+  companyName: string;
+  contactName: string;
+  email: string;
+  phone: string;
+  monthlyVolume?: string;
+  message?: string;
+}
+
+/** Approval hands back the new link — the only time its URL is ever shown. */
+export interface B2bRequestApprovalDto {
+  request: B2bRequestDto;
+  link: B2bLinkDto;
+}
+
+/** What the portal needs on open: who it belongs to, and everything reusable. */
+export interface B2bSessionDto {
+  customerName: string;
+  linkLabel: string;
+  addressBook: AddressBookDto;
+}
+
+export interface B2bOrderInputDto {
+  recipient: Omit<PickupRecipientDto, "addressLine2"> & { addressLine2?: string };
+  destinationCountry: string;
+  shipmentType: ShipmentTypeCode;
+  packages: ParcelPackageDto[];
+  items: ShipmentItemDto[];
+  /** Omitted: the cheapest carrier that quotes the shipment. */
+  rateProviderId?: string;
+}
+
+export interface B2bCreateOrdersDto {
+  submissionKey: string;
+  pickup: {
+    pickupContactName: string;
+    pickupContactPhone: string;
+    pickupAddressLine1: string;
+    pickupAddressLine2?: string;
+    pickupCity: string;
+    pickupState: string;
+    pickupPostalCode: string;
+    pickupLatitude?: number;
+    pickupLongitude?: number;
+    pickupMapsUrl?: string;
+    pickupDate: string; // ISO 8601 date-only
+    pickupTimeSlot: PickupTimeSlot;
+    pickupInstructions?: string;
+  };
+  orders: B2bOrderInputDto[];
+}
+
+/**
+ * One shipment's outcome. NEEDS_PRICING means no rate card covers that route or weight: the
+ * request is recorded and priced by staff rather than dispatched at a price nobody set.
+ */
+export interface B2bOrderResultDto {
+  index: number;
+  recipientName: string;
+  destinationCountry: string;
+  status: "BOOKED" | "NEEDS_PRICING";
+  quoteId: string;
+  pickupRequestId: string | null;
+  carrier: string | null;
+  price: number | null;
+  currency: string | null;
+}
+
+/** A shipment already requested through the link, for the portal's own history list. */
+export interface B2bRequestSummaryDto {
+  id: string;
+  status: string;
+  recipientName: string | null;
+  destinationCountry: string;
+  pickupDate: string | null;
+  price: number;
+  currency: string;
+  carrier: string | null;
+  createdAt: string; // ISO 8601
+}

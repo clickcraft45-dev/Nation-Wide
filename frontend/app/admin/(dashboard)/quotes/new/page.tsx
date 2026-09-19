@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { UserRound } from "lucide-react";
 import type {
   CountryDto,
+  ParcelPackageDto,
   CustomerDto,
   QuoteAdminDetailDto,
   QuotePreviewOptionDto,
@@ -59,6 +60,7 @@ export default function AdminNewQuotePage() {
   const [step, setStep] = useState<WizardStep>("customer");
   const [destination, setDestination] = useState<CountryDto | null>(null);
   const [weightKg, setWeightKg] = useState<number | null>(null);
+  const [packages, setPackages] = useState<ParcelPackageDto[] | null>(null);
   const [shipmentType, setShipmentType] = useState<ShipmentTypeCode | null>(null);
   const [preview, setPreview] = useState<QuotePreviewResultDto | null>(null);
   const [selectedOption, setSelectedOption] = useState<QuotePreviewOptionDto | null>(null);
@@ -127,9 +129,10 @@ export default function AdminNewQuotePage() {
     setStep("destination");
   }
 
-  async function handleWeightSubmit(value: number, type: ShipmentTypeCode) {
+  async function handleWeightSubmit(value: number, type: ShipmentTypeCode, boxes: ParcelPackageDto[]) {
     if (!destination) return;
     setWeightKg(value);
+    setPackages(boxes);
     setShipmentType(type);
     setSelectedOption(null);
     setStep("loading");
@@ -165,6 +168,7 @@ export default function AdminNewQuotePage() {
         customerId: customer.id,
         shipmentType: payload.shipmentType,
         weightKg,
+        packages: packages ?? undefined,
         description: payload.description,
         origin: payload.origin,
         destination: payload.destination,

@@ -22,6 +22,7 @@ import {
   QuoteDestinationDto,
   QuoteOriginAddressDto,
 } from './quote-address.dto';
+import { PackagesList, ParcelPackageDto } from '../../../common/dto/parcel.dto';
 
 export class CreateQuoteDto {
   @IsIn(SHIPMENT_TYPES)
@@ -34,6 +35,12 @@ export class CreateQuoteDto {
   @IsPositive()
   @Max(1000)
   weightKg!: number;
+
+  // The boxes, with dimensions. When present the quote is priced on their chargeable weight (the
+  // greater of actual and volumetric, per box) and weightKg above is overwritten with it.
+  @IsOptional()
+  @PackagesList()
+  packages?: ParcelPackageDto[];
 
   @IsOptional()
   @IsString()

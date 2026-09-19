@@ -3,6 +3,8 @@ import { CompanySettingsService } from './company-settings.service';
 
 const EXISTING_SETTINGS = {
   id: 'settings-1',
+  name: 'Default',
+  isActive: true,
   companyName: 'NationWide',
   logoPath: null,
   primaryColor: '#4F46E5',
@@ -25,9 +27,14 @@ describe('CompanySettingsService', () => {
   let prisma: {
     companySettings: {
       findFirst: jest.Mock;
+      findUnique: jest.Mock;
       create: jest.Mock;
       update: jest.Mock;
+      updateMany: jest.Mock;
+      delete: jest.Mock;
+      count: jest.Mock;
     };
+    $transaction: jest.Mock;
     auditLog: { create: jest.Mock };
   };
   let service: CompanySettingsService;
@@ -36,9 +43,15 @@ describe('CompanySettingsService', () => {
     prisma = {
       companySettings: {
         findFirst: jest.fn(),
+        findUnique: jest.fn(),
         create: jest.fn(),
         update: jest.fn(),
+        updateMany: jest.fn(),
+        delete: jest.fn(),
+        // No other template shares a logo unless a test says so.
+        count: jest.fn().mockResolvedValue(0),
       },
+      $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
       auditLog: { create: jest.fn() },
     };
     storage = {
@@ -102,6 +115,92 @@ describe('CompanySettingsService', () => {
         }),
       });
       expect(result).toBe(updated);
+    });
+  });
+
+  describe('brand templates', () => {
+    const OTHER = {
+      ...EXISTING_SETTINGS,
+      id: 'settings-2',
+      name: 'Export',
+      isActive: false,
+    };
+
+    it('get() returns the active template', async () => {
+      prisma.companySettings.findFirst.mockResolvedValue(EXISTING_SETTINGS);
+      await service.get();
+      expect(prisma.companySettings.findFirst).toHaveBeenCalledWith({
+        where: { isActive: true },
+      });
+    });
+
+    it('creates a new template as an inactive copy of the active one', async () => {
+      prisma.companySettings.findFirst.mockResolvedValue({
+        ...EXISTING_SETTINGS,
+        termsAndConditions: 'Goods at owner risk',
+      });
+      prisma.companySettings.create.mockResolvedValue(OTHER);
+
+      await service.create('  Export  ', undefined, 'admin-1');
+
+      expect(prisma.companySettings.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          name: 'Export',
+          isActive: false,
+          termsAndConditions: 'Goods at owner risk',
+        }),
+      });
+      const data = (
+        prisma.companySettings.create.mock.calls[0] as [
+          { data: Record<string, unknown> },
+        ]
+      )[0].data;
+      expect(data).not.toHaveProperty('id');
+    });
+
+    it('switches the active template atomically', async () => {
+      prisma.companySettings.findUnique.mockResolvedValue(OTHER);
+      prisma.companySettings.findFirst.mockResolvedValue(EXISTING_SETTINGS);
+      prisma.companySettings.update.mockResolvedValue({
+        ...OTHER,
+        isActive: true,
+      });
+
+      const result = await service.activate('settings-2', 'admin-1');
+
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      expect(prisma.companySettings.updateMany).toHaveBeenCalledWith({
+        where: { isActive: true },
+        data: { isActive: false },
+      });
+      expect(prisma.companySettings.update).toHaveBeenCalledWith({
+        where: { id: 'settings-2' },
+        data: { isActive: true, updatedByAdminId: 'admin-1' },
+      });
+      expect(result.isActive).toBe(true);
+    });
+
+    it('refuses to delete the template in use', async () => {
+      prisma.companySettings.findUnique.mockResolvedValue(EXISTING_SETTINGS);
+      await expect(service.remove('settings-1', 'admin-1')).rejects.toThrow(
+        /in use/,
+      );
+      expect(prisma.companySettings.delete).not.toHaveBeenCalled();
+    });
+
+    it('keeps a logo object another template still uses', async () => {
+      prisma.companySettings.findUnique.mockResolvedValue({
+        ...OTHER,
+        logoPath: 'uploads/company-logos/settings-1/shared.png',
+      });
+      prisma.companySettings.count.mockResolvedValue(1);
+
+      await service.remove('settings-2', 'admin-1');
+
+      expect(prisma.companySettings.delete).toHaveBeenCalledWith({
+        where: { id: 'settings-2' },
+      });
+      expect(storage.delete).not.toHaveBeenCalled();
     });
   });
 

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import type {
   CountryDto,
+  ParcelPackageDto,
   CustomerDto,
   CustomerRateQuoteOptionDto,
   QuoteDto,
@@ -47,6 +48,7 @@ export default function GetQuotePage() {
   const [step, setStep] = useState<WizardStep>("destination");
   const [destination, setDestination] = useState<CountryDto | null>(null);
   const [weightKg, setWeightKg] = useState<number | null>(null);
+  const [packages, setPackages] = useState<ParcelPackageDto[] | null>(null);
   const [shipmentType, setShipmentType] = useState<ShipmentTypeCode | null>(null);
   const [preview, setPreview] = useState<QuotePreviewResultDto | null>(null);
   const [selectedOption, setSelectedOption] = useState<QuotePreviewOptionDto | null>(null);
@@ -96,9 +98,10 @@ export default function GetQuotePage() {
             : "manual-review"
         : null;
 
-  async function handleWeightSubmit(value: number, type: ShipmentTypeCode) {
+  async function handleWeightSubmit(value: number, type: ShipmentTypeCode, boxes: ParcelPackageDto[]) {
     if (!destination) return;
     setWeightKg(value);
+    setPackages(boxes);
     setShipmentType(type);
     setSelectedOption(null);
     setStep("loading");
@@ -142,6 +145,7 @@ export default function GetQuotePage() {
       const quote = await apiClient.post<QuoteDto>("/quotes", {
         shipmentType: payload.shipmentType,
         weightKg,
+        packages: packages ?? undefined,
         description: payload.description,
         destination: payload.destination,
         submissionKey,
@@ -262,7 +266,7 @@ export default function GetQuotePage() {
         <div className="space-y-4">
           <WeightStep
             destination={destination}
-            initialWeightKg={weightKg}
+            initialPackages={packages}
             initialShipmentType={shipmentType}
             onChangeDestination={handleChangeDestination}
             onSubmit={handleWeightSubmit}

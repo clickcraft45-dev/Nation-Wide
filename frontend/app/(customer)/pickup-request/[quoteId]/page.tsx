@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, CheckCircle2 } from "lucide-react";
-import type { QuoteDto } from "@nationwide/shared-types";
+import type { AddressBookDto, QuoteDto, SavedItemDto } from "@nationwide/shared-types";
 import { apiClient, errorMessage, fieldErrors } from "@/lib/api-client";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,14 @@ import {
   type RecipientErrors,
   type RecipientForm,
 } from "@/components/quote/recipient-fields";
+import { SavedRecipients } from "@/components/shipment/saved-recipients";
+import {
+  ItemsEditor,
+  itemsFrom,
+  toItemsPayload,
+  validateItems,
+  type ItemForm,
+} from "@/components/shipment/items-editor";
 
 const TIME_SLOTS = [
   { value: "09:00-12:00", label: "9:00 AM – 12:00 PM" },
@@ -83,6 +91,12 @@ export default function PickupRequestPage() {
   const [addRecipient, setAddRecipient] = useState(false);
   const [recipient, setRecipient] = useState<RecipientForm>(emptyRecipient);
   const [recipientErrors, setRecipientErrors] = useState<RecipientErrors>({});
+  const [savedRecipients, setSavedRecipients] = useState<AddressBookDto["recipients"]>([]);
+
+  // What is in the parcel — required, and remembered for next time.
+  const [items, setItems] = useState<ItemForm[]>(() => itemsFrom(null));
+  const [savedItems, setSavedItems] = useState<SavedItemDto[]>([]);
+  const [itemsError, setItemsError] = useState<string | null>(null);
 
   const [errors, setErrors] = useState<FormErrors>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -93,9 +107,12 @@ export default function PickupRequestPage() {
     let cancelled = false;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsLoading(true);
-    apiClient
-      .get<QuoteDto[]>("/quotes/me")
-      .then((quotes) => {
+    Promise.all([
+      apiClient.get<QuoteDto[]>("/quotes/me"),
+      // A missing address book only means nothing is prefilled — never a reason to block booking.
+      apiClient.get<AddressBookDto>("/customers/me/address-book").catch(() => null),
+    ])
+      .then(([quotes, book]) => {
         if (cancelled) return;
         const found = quotes.find((q) => q.id === params.quoteId);
         if (!found) {
@@ -113,6 +130,29 @@ export default function PickupRequestPage() {
           setAddRecipient(true);
         }
         if (found.status === "PICKUP_REQUESTED") setSubmitted(true);
+        if (found.items?.length) setItems(itemsFrom(found.items));
+        if (book) {
+          setSavedItems(book.savedItems);
+          setSavedRecipients(book.recipients.filter((r) => r.country === found.destination.country));
+          // Where they shipped from last time — shown filled in, and simply overwritten if it has
+          // changed; whatever is submitted becomes next time's default.
+          const last = book.lastPickup;
+          if (last) {
+            setPickupContactName(last.contactName);
+            setPickupContactPhone(last.contactPhone);
+            // Line 1 was saved as "house, street" (see fullLine1); split it back the same way.
+            const [house, ...street] = last.addressLine1.split(", ");
+            setPickupHouse(street.length ? house : "");
+            setPickupAddressLine1(street.length ? street.join(", ") : house);
+            setPickupAddressLine2(last.addressLine2 ?? "");
+            setPickupCity(last.city);
+            setPickupState(last.state);
+            setPickupPostalCode(last.postalCode);
+            if (last.latitude != null && last.longitude != null) {
+              setPickupLocation({ lat: last.latitude, lng: last.longitude });
+            }
+          }
+        }
       })
       .catch((err) => {
         if (cancelled) return;
@@ -195,9 +235,15 @@ export default function PickupRequestPage() {
       if (!pickupTimeSlot) next.pickupTimeSlot = "Choose a time slot.";
     }
     const nextRecipientErrors = addRecipient ? validateRecipient(recipient) : {};
+    const nextItemsError = validateItems(items);
     setErrors(next);
     setRecipientErrors(nextRecipientErrors);
-    return Object.keys(next).length === 0 && Object.keys(nextRecipientErrors).length === 0;
+    setItemsError(nextItemsError);
+    return (
+      Object.keys(next).length === 0 &&
+      Object.keys(nextRecipientErrors).length === 0 &&
+      !nextItemsError
+    );
   }
 
   /**
@@ -251,6 +297,7 @@ export default function PickupRequestPage() {
                 : {}),
             }),
         recipient: addRecipient ? toRecipientPayload(recipient) : undefined,
+        items: toItemsPayload(items),
       });
       setSubmitted(true);
     } catch (err) {
@@ -515,6 +562,12 @@ export default function PickupRequestPage() {
               </span>
             </label>
             {addRecipient && (
+              <SavedRecipients
+                recipients={savedRecipients}
+                onPick={(r) => setRecipient(recipientFrom(r))}
+              />
+            )}
+            {addRecipient && (
               <RecipientFields
                 value={recipient}
                 onChange={setRecipient}
@@ -524,6 +577,32 @@ export default function PickupRequestPage() {
                 idPrefix="recipient"
               />
             )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>What&apos;s inside</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="mb-3 text-xs text-muted-foreground">
+              Carriers need the contents and their value for customs. Items you ship are saved for
+              next time.
+            </p>
+            {/* aria-invalid lets focusFirstError scroll here like any other field. */}
+            <div aria-invalid={Boolean(itemsError)} tabIndex={-1}>
+              <ItemsEditor
+                value={items}
+                onChange={(next) => {
+                  setItems(next);
+                  setItemsError(null);
+                }}
+                savedItems={savedItems}
+                onSavedItemsChange={setSavedItems}
+                libraryBase="/customers/me"
+                error={itemsError}
+              />
+            </div>
           </CardContent>
         </Card>
 

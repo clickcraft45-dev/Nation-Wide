@@ -2,8 +2,11 @@ import type { ShipmentTypeCode } from "./quote";
 
 // Branding/contact/legal text that automatically populates every generated Rate Card PDF —
 // singleton, never per-provider or per-template.
+/** One document brand template. Exactly one isActive; new documents use that one. */
 export interface CompanySettingsDto {
   id: string;
+  name: string;
+  isActive: boolean;
   companyName: string;
   tagline: string | null;
   logoUrl: string | null; // short-lived presigned S3 URL; re-fetch rather than caching it
@@ -27,7 +30,14 @@ export interface CompanySettingsDto {
   updatedAt: string; // ISO 8601
 }
 
+export interface CreateBrandTemplateDto {
+  name: string;
+  /** Start from this template; defaults to a copy of the active one. */
+  copyFromId?: string;
+}
+
 export interface UpdateCompanySettingsDto {
+  name?: string;
   gstin?: string;
   legalName?: string;
   stateName?: string;

@@ -41,6 +41,8 @@ export function mapsUrl(pickup: PickupRequestDto): string {
   if (pickup.pickupLatitude != null && pickup.pickupLongitude != null) {
     return `https://www.google.com/maps/dir/?api=1&destination=${pickup.pickupLatitude},${pickup.pickupLongitude}`;
   }
+  // Staff pasted a Maps link that had no coordinates in it — the link itself is the best target.
+  if (pickup.pickupMapsUrl) return pickup.pickupMapsUrl;
   const address = [
     pickup.pickupAddressLine1,
     pickup.pickupAddressLine2,

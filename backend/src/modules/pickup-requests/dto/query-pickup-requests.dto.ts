@@ -1,4 +1,4 @@
-import { IsIn, IsOptional, IsString } from 'class-validator';
+import { IsIn, IsOptional, IsString, IsUUID } from 'class-validator';
 import {
   PICKUP_REQUEST_STATUSES,
   type PickupRequestStatusCode,
@@ -12,4 +12,9 @@ export class QueryPickupRequestsDto {
   @IsOptional()
   @IsString()
   search?: string;
+
+  // The pickup an order was created from (admin order detail).
+  @IsOptional()
+  @IsUUID()
+  orderId?: string;
 }

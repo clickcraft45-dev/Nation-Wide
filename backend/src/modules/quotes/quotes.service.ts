@@ -12,7 +12,9 @@ import {
   type QuoteReviewReasonCode,
   type QuoteStatusCode,
 } from '@nationwide/shared-types';
+import { chargeableWeightKg } from '@nationwide/shared-types';
 import { PrismaService } from '../../database/prisma.service';
+import { cleanPackages } from '../../common/dto/parcel.dto';
 import { resolvePagination } from '../../common/utils/pagination.util';
 import { OrdersService } from '../orders/orders.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -67,9 +69,14 @@ export class QuotesService {
       );
     }
 
+    // Never trust a client-computed weight when the boxes themselves are here.
+    const weightKg = dto.packages
+      ? chargeableWeightKg(dto.packages)
+      : dto.weightKg;
+
     const manualReviewReason = this.classifyManualReview(
       dto.shipmentType,
-      dto.weightKg,
+      weightKg,
     );
     let status: QuoteStatusCode = manualReviewReason
       ? 'NEEDS_MANUAL_REVIEW'
@@ -84,7 +91,7 @@ export class QuotesService {
       computedOptions = await this.pricingEngineService.computeQuotesForRequest(
         {
           destinationCountryName: dto.destination.country,
-          weightKg: dto.weightKg,
+          weightKg,
           shipmentType: dto.shipmentType,
         },
       );
@@ -108,7 +115,8 @@ export class QuotesService {
         data: {
           customerId,
           shipmentType: dto.shipmentType,
-          weightKg: dto.weightKg,
+          weightKg,
+          packages: dto.packages ? cleanPackages(dto.packages) : undefined,
           description: dto.description ?? null,
           // origin is omitted entirely by the new customer self-service wizard — pickup
           // logistics move to PickupRequest instead (see CreatePickupRequestDto). The admin

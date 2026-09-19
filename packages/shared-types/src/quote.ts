@@ -1,4 +1,5 @@
 import type { RateQuoteOptionDto } from "./pricing";
+import type { ParcelPackageDto, ShipmentItemDto } from "./parcel";
 
 export const SHIPMENT_TYPES = ["DOCUMENT", "PARCEL", "PACKAGE", "OTHER"] as const;
 export type ShipmentTypeCode = (typeof SHIPMENT_TYPES)[number];
@@ -109,8 +110,11 @@ export interface QuoteDto {
   id: string;
   customerId: string;
   shipmentType: ShipmentTypeCode;
+  /** Chargeable weight — derived from `packages` whenever they were given. */
   weightKg: number;
   description: string | null;
+  packages: ParcelPackageDto[] | null;
+  items: ShipmentItemDto[] | null;
   // Null on the new customer self-service flow — pickup logistics live on PickupRequest instead
   // (see pickup-request.ts). Still populated by the legacy admin manual-quote flow.
   origin: QuoteOriginAddressDto | null;
@@ -151,6 +155,8 @@ export interface QuoteAdminDetailDto extends Omit<QuoteDto, "rateQuoteOptions" |
 export interface CreateQuoteDto {
   shipmentType: ShipmentTypeCode;
   weightKg: number;
+  /** When given, the server prices on their chargeable weight instead of weightKg. */
+  packages?: ParcelPackageDto[];
   description?: string;
   // Only the country is required; the recipient may be filled in later (see QuoteDestinationDto).
   destination: Partial<Omit<QuoteAddressDto, "country">> & { country: string };

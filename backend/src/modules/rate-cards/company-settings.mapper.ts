@@ -12,6 +12,8 @@ export function toCompanySettingsDto(
 ): CompanySettingsDto {
   return {
     id: settings.id,
+    name: settings.name,
+    isActive: settings.isActive,
     companyName: settings.companyName,
     tagline: settings.tagline,
     logoUrl,
