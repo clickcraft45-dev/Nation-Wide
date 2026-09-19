@@ -75,7 +75,9 @@ container recreation and a full redeploy.
 
 7. **Run the release steps once** against the database:
    ```bash
-   docker compose exec backend npx prisma migrate deploy --schema backend/prisma/schema.prisma
+   # The container's WORKDIR is /app/backend, so the schema path is relative to THAT, not the
+   # repo root — `--schema backend/prisma/schema.prisma` fails with "file or directory not found".
+   docker compose exec backend npx prisma migrate deploy --schema prisma/schema.prisma
    docker compose exec backend npm run db:seed --workspace=backend
    ```
    `migrate deploy` (not `migrate dev`) is the production-safe command: it applies the committed
@@ -175,7 +177,10 @@ Migrations are **not** run automatically by the backend container on startup —
 explicit deploy step, before starting new backend instances:
 
 ```bash
+# From the repo root on your machine:
 npx prisma migrate deploy --schema backend/prisma/schema.prisma
+# Inside the deployed container, where WORKDIR is /app/backend:
+docker compose exec backend npx prisma migrate deploy --schema prisma/schema.prisma
 ```
 
 `migrate deploy` (not `migrate dev`) is the production-safe command: it applies pending
