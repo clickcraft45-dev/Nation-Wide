@@ -9,6 +9,11 @@ import {
 } from 'class-validator';
 
 export class SaveItemDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  category?: string;
+
   @IsString()
   @MinLength(1)
   @MaxLength(200)

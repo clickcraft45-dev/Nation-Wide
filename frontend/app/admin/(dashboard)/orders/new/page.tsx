@@ -3,19 +3,16 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Link2, UserRound } from "lucide-react";
-import {
-  chargeableWeightKg,
-  type AddressBookDto,
-  type AdminCreatePickupOrderDto,
-  type CountryDto,
-  type CustomerDto,
-  type PickupRequestDto,
-  type PickupTimeSlot,
-  type QuotePreviewResultDto,
-  type ResolvedMapsUrlDto,
-  type SavedItemDto,
-  type ShipmentTypeCode,
+import { ArrowLeft, CheckCircle2, Clock, Link2, Plus, UserRound } from "lucide-react";
+import type {
+  AddressBookDto,
+  B2bOrderResultDto,
+  CountryDto,
+  CustomerDto,
+  PickupTimeSlot,
+  QuotePreviewResultDto,
+  ResolvedMapsUrlDto,
+  SavedItemDto,
 } from "@nationwide/shared-types";
 import { apiClient, errorMessage } from "@/lib/api-client";
 import { googleMapsEnabled, type PickedAddress } from "@/lib/google-maps";
@@ -31,42 +28,24 @@ import { PincodeInput } from "@/components/ui/pincode-input";
 import { DateField } from "@/components/ui/date-field";
 import { MapPinField } from "@/components/ui/map-pin-picker";
 import {
-  RecipientFields,
-  emptyRecipient,
-  recipientFrom,
   toRecipientPayload,
   validateRecipient,
   type RecipientErrors,
-  type RecipientForm,
 } from "@/components/quote/recipient-fields";
-import {
-  PackagesEditor,
-  packagesFrom,
-  toPackagesPayload,
-  validatePackages,
-  type PackageForm,
-} from "@/components/shipment/packages-editor";
-import {
-  ItemsEditor,
-  itemsFrom,
-  toItemsPayload,
-  validateItems,
-  type ItemForm,
-} from "@/components/shipment/items-editor";
-import { SavedRecipients } from "@/components/shipment/saved-recipients";
+import { validatePackages } from "@/components/shipment/packages-editor";
+import { toItemsPayload, validateItems } from "@/components/shipment/items-editor";
 import { PartnerPicker } from "@/components/shipment/partner-picker";
+import {
+  ShipmentCard,
+  newShipment,
+  shipmentPackages,
+  type ShipmentDraft,
+} from "@/components/shipment/shipment-card";
 
 const TIME_SLOTS: { value: PickupTimeSlot; label: string }[] = [
   { value: "09:00-12:00", label: "9:00 AM – 12:00 PM" },
   { value: "12:00-15:00", label: "12:00 PM – 3:00 PM" },
   { value: "15:00-18:00", label: "3:00 PM – 6:00 PM" },
-];
-
-const SHIPMENT_TYPES: { value: ShipmentTypeCode; label: string }[] = [
-  { value: "PACKAGE", label: "Package" },
-  { value: "PARCEL", label: "Parcel" },
-  { value: "DOCUMENT", label: "Document" },
-  { value: "OTHER", label: "Other" },
 ];
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
@@ -100,11 +79,13 @@ const emptyPickup: PickupForm = {
 };
 
 /**
- * Staff booking a pickup for a customer — a phone call or a walk-in — and handing it to a partner
- * they choose. For an existing customer, the last pickup address and their past recipients and
- * contents are filled in and can be overwritten; whatever is booked becomes next time's default.
- * The order itself is still created when the partner completes the pickup, exactly as for a
- * customer's own booking.
+ * Staff booking for a customer — a phone call or a walk-in — handed to a partner they choose.
+ *
+ * One collection, as many delivery addresses as the customer has, each with its own boxes and its
+ * own contents: a business sending sarees to one address and dupattas to another books it once.
+ * Their last pickup address, past recipients and the goods last sent to each are filled in and can
+ * be overwritten; whatever is booked becomes next time's default. Each order is still created when
+ * the partner completes the pickup, exactly as for a customer's own booking.
  */
 export default function AdminNewOrderPage() {
   const router = useRouter();
@@ -127,21 +108,12 @@ export default function AdminNewOrderPage() {
   const [isResolvingLink, setIsResolvingLink] = useState(false);
   const [linkNote, setLinkNote] = useState<string | null>(null);
   const [savedRecipients, setSavedRecipients] = useState<AddressBookDto["recipients"]>([]);
-  const [destinationCountry, setDestinationCountry] = useState("");
-  const [recipient, setRecipient] = useState<RecipientForm>(emptyRecipient);
-  const [recipientErrors, setRecipientErrors] = useState<RecipientErrors>({});
-  const [shipmentType, setShipmentType] = useState<ShipmentTypeCode>("PACKAGE");
-  const [boxes, setBoxes] = useState<PackageForm[]>(() => packagesFrom(null));
-  const [items, setItems] = useState<ItemForm[]>(() => itemsFrom(null));
   const [savedItems, setSavedItems] = useState<SavedItemDto[]>([]);
-
-  // --- Price & partner ---
-  const [preview, setPreview] = useState<QuotePreviewResultDto | null>(null);
-  const [pricedFor, setPricedFor] = useState<string | null>(null);
-  const [isPricing, setIsPricing] = useState(false);
-  const [rateProviderId, setRateProviderId] = useState<string | "manual" | null>(null);
-  const [manualPrice, setManualPrice] = useState("");
+  const [shipments, setShipments] = useState<ShipmentDraft[]>([newShipment()]);
+  const [shipmentErrors, setShipmentErrors] = useState<Record<string, string>>({});
+  const [recipientErrors, setRecipientErrors] = useState<Record<string, RecipientErrors>>({});
   const [partnerId, setPartnerId] = useState<string | null>(null);
+  const [results, setResults] = useState<B2bOrderResultDto[] | null>(null);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -254,32 +226,8 @@ export default function AdminNewOrderPage() {
     }
   }
 
-  // The price is only valid for the exact destination, type and weight it was fetched for.
-  const packagesProblem = validatePackages(boxes, shipmentType !== "DOCUMENT");
-  const chargeable = packagesProblem ? null : chargeableWeightKg(toPackagesPayload(boxes));
-  const priceKey = JSON.stringify([destinationCountry, shipmentType, chargeable]);
-  const priceIsCurrent = preview !== null && pricedFor === priceKey;
-
-  async function getPrices() {
-    const next: Record<string, string> = {};
-    if (!destinationCountry) next.destinationCountry = "Choose the destination country.";
-    if (packagesProblem) next.packages = packagesProblem;
-    setErrors((e) => ({ ...e, ...next, price: "" }));
-    if (Object.keys(next).length > 0 || chargeable === null) return;
-
-    setIsPricing(true);
-    try {
-      const result = await apiClient.get<QuotePreviewResultDto>(
-        `/quotes/preview?destinationCountry=${encodeURIComponent(destinationCountry)}&weightKg=${chargeable}&shipmentType=${shipmentType}`,
-      );
-      setPreview(result);
-      setPricedFor(priceKey);
-      setRateProviderId(result.options[0]?.rateProviderId ?? "manual");
-    } catch (err) {
-      setErrors((e) => ({ ...e, price: errorMessage(err, "Couldn't fetch prices.") }));
-    } finally {
-      setIsPricing(false);
-    }
+  function updateShipment(key: string, patch: Partial<ShipmentDraft>) {
+    setShipments((all) => all.map((sh) => (sh.key === key ? { ...sh, ...patch } : sh)));
   }
 
   function validate(): boolean {
@@ -300,18 +248,47 @@ export default function AdminNewOrderPage() {
     if (pickup.mapsUrl.trim() && !/^https:\/\//.test(pickup.mapsUrl.trim())) {
       next.mapsUrl = "Paste the full https:// Google Maps link.";
     }
-    if (!destinationCountry) next.destinationCountry = "Choose the destination country.";
-    if (packagesProblem) next.packages = packagesProblem;
-    const itemsProblem = validateItems(items);
-    if (itemsProblem) next.items = itemsProblem;
-    if (!priceIsCurrent) next.price = "Get prices for the current parcel details first.";
-    else if (rateProviderId === "manual" && !(Number(manualPrice) > 0)) next.price = "Enter the price to charge.";
     if (!partnerId) next.partner = "Choose who collects this pickup.";
 
-    const nextRecipientErrors = validateRecipient(recipient);
+    const perShipment: Record<string, string> = {};
+    const perRecipient: Record<string, RecipientErrors> = {};
+    for (const [i, shipment] of shipments.entries()) {
+      const label = `Delivery address ${i + 1}: `;
+      const recipientProblems = validateRecipient(shipment.recipient);
+      if (Object.keys(recipientProblems).length > 0) {
+        perRecipient[shipment.key] = recipientProblems;
+      }
+      if (!shipment.destinationCountry) {
+        perShipment[shipment.key] = `${label}choose the destination country.`;
+        continue;
+      }
+      const boxProblem = validatePackages(
+        shipment.boxes,
+        shipment.shipmentType !== "DOCUMENT",
+      );
+      if (boxProblem) {
+        perShipment[shipment.key] = label + boxProblem;
+        continue;
+      }
+      const itemProblem = validateItems(shipment.items);
+      if (itemProblem) {
+        perShipment[shipment.key] = label + itemProblem;
+        continue;
+      }
+      // A price is needed either way round: a carrier from the rate cards, or one staff typed.
+      if (!shipment.rateProviderId && !(Number(shipment.manualPrice) > 0)) {
+        perShipment[shipment.key] =
+          `${label}choose a carrier, or enter the price to charge.`;
+      }
+    }
+
     setErrors(next);
-    setRecipientErrors(nextRecipientErrors);
-    const ok = Object.keys(next).length === 0 && Object.keys(nextRecipientErrors).length === 0;
+    setShipmentErrors(perShipment);
+    setRecipientErrors(perRecipient);
+    const ok =
+      Object.keys(next).length === 0 &&
+      Object.keys(perShipment).length === 0 &&
+      Object.keys(perRecipient).length === 0;
     if (!ok) {
       requestAnimationFrame(() => {
         const first = document.querySelector<HTMLElement>('[aria-invalid="true"]');
@@ -327,37 +304,49 @@ export default function AdminNewOrderPage() {
     if (!customer || !validate() || !partnerId) return;
     setSubmitError(null);
     setIsSubmitting(true);
-    const body: AdminCreatePickupOrderDto = {
+    const body = {
       customerId: customer.id,
       submissionKey,
-      shipmentType,
-      packages: toPackagesPayload(boxes),
-      items: toItemsPayload(items),
-      destinationCountry,
-      recipient: toRecipientPayload(recipient),
-      pickupContactName: pickup.contactName.trim(),
-      pickupContactPhone: pickup.contactPhone.trim(),
-      pickupAddressLine1: pickup.addressLine1.trim(),
-      pickupAddressLine2: pickup.addressLine2.trim() || undefined,
-      pickupCity: pickup.city.trim(),
-      pickupState: pickup.state.trim(),
-      pickupPostalCode: pickup.postalCode.trim(),
-      ...(pickupLocation ? { pickupLatitude: pickupLocation.lat, pickupLongitude: pickupLocation.lng } : {}),
-      pickupMapsUrl: pickup.mapsUrl.trim() || undefined,
-      pickupDate: pickup.date,
-      pickupTimeSlot: pickup.timeSlot,
-      pickupInstructions: pickup.instructions.trim() || undefined,
-      ...(rateProviderId === "manual" ? { manualPrice: Number(manualPrice) } : { rateProviderId: rateProviderId! }),
       partnerId,
+      pickup: {
+        pickupContactName: pickup.contactName.trim(),
+        pickupContactPhone: pickup.contactPhone.trim(),
+        pickupAddressLine1: pickup.addressLine1.trim(),
+        pickupAddressLine2: pickup.addressLine2.trim() || undefined,
+        pickupCity: pickup.city.trim(),
+        pickupState: pickup.state.trim(),
+        pickupPostalCode: pickup.postalCode.trim(),
+        ...(pickupLocation
+          ? { pickupLatitude: pickupLocation.lat, pickupLongitude: pickupLocation.lng }
+          : {}),
+        pickupMapsUrl: pickup.mapsUrl.trim() || undefined,
+        pickupDate: pickup.date,
+        pickupTimeSlot: pickup.timeSlot,
+        pickupInstructions: pickup.instructions.trim() || undefined,
+      },
+      orders: shipments.map((shipment) => ({
+        recipient: toRecipientPayload(shipment.recipient),
+        destinationCountry: shipment.destinationCountry,
+        shipmentType: shipment.shipmentType,
+        packages: shipmentPackages(shipment),
+        items: toItemsPayload(shipment.items),
+        ...(shipment.rateProviderId
+          ? { rateProviderId: shipment.rateProviderId }
+          : { manualPrice: Number(shipment.manualPrice) }),
+      })),
     };
     try {
-      const created = await apiClient.post<PickupRequestDto>("/admin/pickup-requests", body);
+      const created = await apiClient.post<B2bOrderResultDto[]>(
+        "/admin/pickup-requests",
+        body,
+      );
+      setResults(created);
+      const booked = created.filter((r) => r.status === "BOOKED").length;
       showToast({
         variant: "success",
-        title: "Order booked",
-        description: `Assigned to ${created.assignedPartnerName ?? "the partner"}. The order is created when they complete the pickup.`,
+        title: `${booked} shipment${booked === 1 ? "" : "s"} booked`,
+        description: "Each order is created when the partner completes the pickup.",
       });
-      router.push(`/admin/pickup-requests/${created.id}`);
     } catch (err) {
       setSubmitError(errorMessage(err, "Couldn't book this order. Please try again."));
     } finally {
@@ -482,7 +471,61 @@ export default function AdminNewOrderPage() {
         </Card>
       )}
 
-      {customer && (
+      {customer && results && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Booked</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {results.map((r) => (
+              <div
+                key={r.index}
+                className="flex items-start gap-3 rounded-lg border border-border p-3 text-sm"
+              >
+                {r.status === "BOOKED" ? (
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden />
+                ) : (
+                  <Clock className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
+                )}
+                <div className="flex-1">
+                  <p className="font-medium text-foreground">
+                    {r.recipientName} · {r.destinationCountry}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {r.status === "BOOKED"
+                      ? `${r.carrier ?? "Manually priced"} · ${r.currency} ${Math.round(
+                          r.price ?? 0,
+                        ).toLocaleString("en-IN")} — assigned to the partner.`
+                      : "No rate covers this route and no price was given — price it from Quote Requests."}
+                  </p>
+                </div>
+                {r.pickupRequestId && (
+                  <Link
+                    href={`/admin/pickup-requests/${r.pickupRequestId}`}
+                    className="shrink-0 text-xs font-medium text-primary hover:underline"
+                  >
+                    Open
+                  </Link>
+                )}
+              </div>
+            ))}
+            <div className="flex gap-2">
+              <Button type="button" onClick={() => router.push("/admin/pickup-requests")}>
+                Go to pickup requests
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => router.refresh()}
+              >
+                Book another
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {customer && !results && (
         <form onSubmit={handleSubmit} className="space-y-5" noValidate>
           <div className="flex items-center justify-between rounded-md border border-border bg-muted/30 px-4 py-3 text-sm">
             <div>
@@ -594,153 +637,38 @@ export default function AdminNewOrderPage() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Deliver to</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <SavedRecipients
-                recipients={savedRecipients}
-                onPick={(r) => {
-                  setRecipient(recipientFrom(r));
-                  setDestinationCountry(r.country);
-                }}
-              />
-              <div className="space-y-1.5">
-                <Label htmlFor="destination-country">Destination country</Label>
-                <NativeSelect
-                  id="destination-country"
-                  value={destinationCountry}
-                  onChange={(e) => setDestinationCountry(e.target.value)}
-                  aria-invalid={Boolean(errors.destinationCountry)}
-                >
-                  <option value="">Select a country…</option>
-                  {countries.map((c) => (
-                    <option key={c.id} value={c.name}>
-                      {c.name}
-                    </option>
-                  ))}
-                </NativeSelect>
-                {errors.destinationCountry && <FieldError>{errors.destinationCountry}</FieldError>}
-              </div>
-              <RecipientFields
-                value={recipient}
-                onChange={setRecipient}
-                errors={recipientErrors}
-                isIndia={destinationCountry === "India"}
-                country={destinationCountry}
-                idPrefix="recipient"
-              />
-            </CardContent>
-          </Card>
+          {shipments.map((shipment, index) => (
+            <ShipmentCard
+              key={shipment.key}
+              index={index}
+              draft={shipment}
+              countries={countries}
+              recipients={savedRecipients}
+              savedItems={savedItems}
+              onSavedItemsChange={setSavedItems}
+              savedItemsBase={`/customers/${customer.id}`}
+              // Staff may charge a route the rate cards do not cover; the portal may not.
+              allowManualPrice
+              fetchPreview={(query) =>
+                apiClient.get<QuotePreviewResultDto>(`/quotes/preview?${query}`)
+              }
+              recipientErrors={recipientErrors[shipment.key] ?? {}}
+              error={shipmentErrors[shipment.key]}
+              canRemove={shipments.length > 1}
+              onRemove={() =>
+                setShipments((all) => all.filter((sh) => sh.key !== shipment.key))
+              }
+              onChange={(patch) => updateShipment(shipment.key, patch)}
+            />
+          ))}
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Parcel</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="shipment-type">Shipment type</Label>
-                <NativeSelect
-                  id="shipment-type"
-                  value={shipmentType}
-                  onChange={(e) => setShipmentType(e.target.value as ShipmentTypeCode)}
-                >
-                  {SHIPMENT_TYPES.map((t) => (
-                    <option key={t.value} value={t.value}>
-                      {t.label}
-                    </option>
-                  ))}
-                </NativeSelect>
-              </div>
-              <div aria-invalid={Boolean(errors.packages)} tabIndex={-1}>
-                <PackagesEditor
-                  value={boxes}
-                  onChange={setBoxes}
-                  requireDimensions={shipmentType !== "DOCUMENT"}
-                  error={errors.packages}
-                />
-              </div>
-              <div className="space-y-2" aria-invalid={Boolean(errors.items)} tabIndex={-1}>
-                <p className="text-sm font-medium text-foreground">Contents</p>
-                <ItemsEditor
-                  value={items}
-                  onChange={setItems}
-                  savedItems={savedItems}
-                  onSavedItemsChange={setSavedItems}
-                  libraryBase={`/customers/${customer.id}`}
-                  error={errors.items}
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Price</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3" aria-invalid={Boolean(errors.price)} tabIndex={-1}>
-              <Button type="button" variant="secondary" onClick={getPrices} isLoading={isPricing}>
-                {preview ? "Refresh prices" : "Get prices"}
-              </Button>
-              {preview && !priceIsCurrent && (
-                <p className="text-xs text-warning">The parcel details changed — refresh prices.</p>
-              )}
-              {preview && priceIsCurrent && (
-                <div role="radiogroup" aria-label="Carrier" className="space-y-1.5">
-                  {preview.options.length === 0 && (
-                    <p className="text-sm text-muted-foreground">
-                      No carrier rate covers this shipment — enter the price to charge.
-                    </p>
-                  )}
-                  {[...preview.options]
-                    .sort((a, b) => a.finalPrice - b.finalPrice)
-                    .map((o) => (
-                      <label
-                        key={o.rateProviderId}
-                        className="flex cursor-pointer items-center gap-3 rounded-lg border border-border px-3 py-2.5 text-sm hover:bg-muted"
-                      >
-                        <input
-                          type="radio"
-                          name="carrier"
-                          checked={rateProviderId === o.rateProviderId}
-                          onChange={() => setRateProviderId(o.rateProviderId)}
-                        />
-                        <span className="flex-1 font-medium text-foreground">{o.rateProviderName}</span>
-                        <span className="font-semibold text-foreground">
-                          {o.currency} {Math.round(o.finalPrice).toLocaleString("en-IN")}
-                        </span>
-                      </label>
-                    ))}
-                  <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-border px-3 py-2.5 text-sm hover:bg-muted">
-                    <input
-                      type="radio"
-                      name="carrier"
-                      checked={rateProviderId === "manual"}
-                      onChange={() => setRateProviderId("manual")}
-                    />
-                    <span className="flex-1 font-medium text-foreground">Enter a price manually</span>
-                    {rateProviderId === "manual" && (
-                      <Input
-                        aria-label="Price in INR"
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        className="w-32"
-                        placeholder="₹"
-                        value={manualPrice}
-                        onChange={(e) => setManualPrice(e.target.value)}
-                      />
-                    )}
-                  </label>
-                  <p className="text-xs text-muted-foreground">
-                    Priced on {chargeable} kg chargeable. The partner re-weighs and re-measures at pickup.
-                  </p>
-                </div>
-              )}
-              {errors.price && <FieldError>{errors.price}</FieldError>}
-            </CardContent>
-          </Card>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => setShipments((all) => [...all, newShipment()])}
+          >
+            <Plus className="h-4 w-4" aria-hidden /> Add another delivery address
+          </Button>
 
           <Card>
             <CardHeader>
@@ -759,7 +687,7 @@ export default function AdminNewOrderPage() {
 
           {submitError && <FieldError>{submitError}</FieldError>}
           <Button type="submit" size="lg" className="w-full" isLoading={isSubmitting}>
-            Book order &amp; assign partner
+            Book {shipments.length} shipment{shipments.length === 1 ? "" : "s"} &amp; assign partner
           </Button>
         </form>
       )}

@@ -290,9 +290,9 @@ export class PickupRequestsService {
   private async commitBooking(params: {
     quote: { id: string; status: string; weightKg: number };
     customerId: string;
-    shipmentType: AdminCreatePickupOrderDto['shipmentType'];
+    shipmentType: B2bOrderDto['shipmentType'];
     recipient: RecipientAddressDto;
-    items: AdminCreatePickupOrderDto['items'];
+    items: B2bOrderDto['items'];
     logistics: PickupLogistics;
     pricing: BookingPricing;
     partnerId?: string;
@@ -377,6 +377,7 @@ export class PickupRequestsService {
   async createBatchForCustomer(
     customerId: string,
     dto: B2bCreateOrdersDto,
+    opts: { partnerId?: string; actorId?: string } = {},
   ): Promise<B2bOrderResultDto[]> {
     const results: B2bOrderResultDto[] = [];
     const booked: PickupRequestWithDetails[] = [];
@@ -421,6 +422,41 @@ export class PickupRequestsService {
           results.push(this.toOrderResult(index, order, existing));
           continue;
         }
+      }
+
+      const manualPrice = (order as { manualPrice?: number }).manualPrice;
+      if (
+        quote.status !== 'RATED' &&
+        manualPrice !== undefined &&
+        opts.actorId
+      ) {
+        // Staff named a price for a route no rate card covers — the escape hatch the portal
+        // deliberately does not have.
+        const created = await this.commitBooking({
+          quote,
+          customerId,
+          shipmentType: order.shipmentType,
+          recipient: order.recipient,
+          items: order.items,
+          logistics,
+          pricing: {
+            rateProviderId: null,
+            rateProviderName: null,
+            estimatedPrice: manualPrice,
+            currency: 'INR',
+            quote: {
+              quotedAmount: manualPrice,
+              quotedCurrency: 'INR',
+              quotedByAdminId: opts.actorId,
+              quotedAt: new Date(),
+            },
+          },
+          partnerId: opts.partnerId,
+        });
+        booked.push(created);
+        results.push(this.toOrderResult(index, order, created));
+        await this.addressBook.remember(customerId, order.items);
+        continue;
       }
 
       if (quote.status !== 'RATED') {
@@ -472,6 +508,7 @@ export class PickupRequestsService {
             quotedCurrency: option.currency,
           },
         },
+        partnerId: opts.partnerId,
       });
       booked.push(created);
       results.push(this.toOrderResult(index, order, created));
@@ -488,7 +525,11 @@ export class PickupRequestsService {
         {},
       );
       for (const pickupRequest of booked) {
-        await this.broadcastToPartners(pickupRequest);
+        if (opts.partnerId) {
+          await this.announceAssignment(pickupRequest, opts.partnerId);
+        } else {
+          await this.broadcastToPartners(pickupRequest);
+        }
       }
     }
 
@@ -548,139 +589,32 @@ export class PickupRequestsService {
   }
 
   /**
-   * Staff booking a pickup on a customer's behalf (a phone-in or walk-in) and handing it straight
-   * to a partner of their choosing — no broadcast. Prices through QuotesService.create exactly as
-   * the customer wizard does; the chosen carrier's option (or a staff-entered price where none is
-   * wanted or rated) is committed in the same transaction that creates the pickup, so the quote can
-   * never be left half-booked. The Order is still only created when the partner completes pickup.
+   * Staff booking for a customer (a phone-in or walk-in), handed straight to a partner of their
+   * choosing — no broadcast. The same path the portal uses, so staff and customers cannot drift
+   * apart; the only differences are the assigned partner and the staff-set price.
    */
   async createForAdmin(
     dto: AdminCreatePickupOrderDto,
     actorId: string,
-  ): Promise<PickupRequestWithDetails> {
-    const [customer, partner] = await Promise.all([
-      this.prisma.customer.findUnique({ where: { id: dto.customerId } }),
-      this.prisma.adminUser.findUnique({ where: { id: dto.partnerId } }),
-    ]);
-    if (!customer) {
-      throw new NotFoundException(`Customer ${dto.customerId} not found`);
-    }
+  ): Promise<B2bOrderResultDto[]> {
+    const partner = await this.prisma.adminUser.findUnique({
+      where: { id: dto.partnerId },
+    });
     if (!partner || partner.role !== 'PICKUP_PARTNER' || !partner.isActive) {
       throw new NotFoundException(`Pickup partner ${dto.partnerId} not found`);
     }
-    if (
-      (dto.rateProviderId === undefined) ===
-      (dto.manualPrice === undefined)
-    ) {
-      throw new BadRequestException(
-        'Choose a carrier or enter a price — exactly one of the two',
-      );
+    const customer = await this.prisma.customer.findUnique({
+      where: { id: dto.customerId },
+      select: { id: true },
+    });
+    if (!customer) {
+      throw new NotFoundException(`Customer ${dto.customerId} not found`);
     }
 
-    const quote = await this.quotesService.create(
-      {
-        shipmentType: dto.shipmentType,
-        weightKg: chargeableWeightKg(dto.packages),
-        packages: dto.packages,
-        destination: { ...dto.recipient, country: dto.destinationCountry },
-        submissionKey: dto.submissionKey,
-      },
-      dto.customerId,
-    );
-
-    // A retried submit (same submissionKey) gets the pickup the first attempt already created.
-    if (quote.status === 'PICKUP_REQUESTED') {
-      const existing = await this.prisma.pickupRequest.findUnique({
-        where: { quoteId: quote.id },
-        ...withDetails,
-      });
-      if (existing) return existing;
-    }
-
-    let pricing: BookingPricing;
-    if (dto.rateProviderId) {
-      const option = quote.rateQuoteOptions.find(
-        (o) => o.rateProviderId === dto.rateProviderId,
-      );
-      if (quote.status !== 'RATED' || !option) {
-        throw new BadRequestException(
-          'The selected carrier no longer quotes this shipment — get prices again',
-        );
-      }
-      pricing = {
-        rateProviderId: option.rateProviderId,
-        rateProviderName: option.rateProvider.name,
-        estimatedPrice: option.finalPrice,
-        currency: option.currency,
-        quote: {
-          selectedOptionId: option.id,
-          quotedAmount: option.finalPrice,
-          quotedCurrency: option.currency,
-        },
-      };
-    } else {
-      const amount = dto.manualPrice!;
-      pricing = {
-        rateProviderId: null,
-        rateProviderName: null,
-        estimatedPrice: amount,
-        currency: 'INR',
-        quote: {
-          quotedAmount: amount,
-          quotedCurrency: 'INR',
-          quotedByAdminId: actorId,
-          quotedAt: new Date(),
-        },
-      };
-    }
-
-    // A pasted short link carries no coordinates until expanded. The admin UI resolves it first;
-    // this only covers a client that did not.
-    let { pickupLatitude, pickupLongitude } = dto;
-    if (pickupLatitude == null && dto.pickupMapsUrl) {
-      const resolved = await resolveMapsUrl(dto.pickupMapsUrl);
-      pickupLatitude = resolved?.latitude;
-      pickupLongitude = resolved?.longitude;
-    }
-
-    const created = await this.commitBooking({
-      quote,
-      customerId: dto.customerId,
-      shipmentType: dto.shipmentType,
-      recipient: dto.recipient,
-      items: dto.items,
-      logistics: {
-        ...dto,
-        dropAtWarehouse: false,
-        pickupLatitude,
-        pickupLongitude,
-      },
-      pricing,
+    return this.createBatchForCustomer(dto.customerId, dto, {
       partnerId: dto.partnerId,
+      actorId,
     });
-
-    await this.addressBook.remember(dto.customerId, dto.items);
-    await this.prisma.auditLog.create({
-      data: {
-        actorId,
-        action: 'PICKUP_REQUEST_CREATED_BY_ADMIN',
-        entity: 'PickupRequest',
-        entityId: created.id,
-        after: {
-          quoteId: quote.id,
-          assignedPartnerId: dto.partnerId,
-          estimatedPrice: pricing.estimatedPrice,
-        },
-      },
-    });
-    await this.notificationsService.enqueue(
-      dto.customerId,
-      'WHATSAPP',
-      NOTIFICATION_TEMPLATES.PICKUP_REQUEST_RECEIVED,
-      {},
-    );
-    await this.announceAssignment(created, dto.partnerId);
-    return this.findOne(created.id);
   }
 
   // A partner taking an open request. The WHERE re-checks "still unclaimed" against the database,

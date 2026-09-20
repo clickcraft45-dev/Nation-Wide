@@ -46,6 +46,13 @@ export class ParcelPackageDto {
 }
 
 export class ShipmentItemDto {
+  // The kind of goods ("Garments"); `description` is the specific item ("Saree"). Optional, so
+  // contents recorded before this stay valid.
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  category?: string | null;
+
   @IsString()
   @MinLength(1)
   @MaxLength(200)
@@ -99,6 +106,7 @@ export function cleanPackages(packages: ParcelPackageDto[]) {
 
 export function cleanItems(items: ShipmentItemDto[]) {
   return items.map((i) => ({
+    category: i.category?.trim() || null,
     description: i.description.trim(),
     quantity: i.quantity,
     unitValue: i.unitValue,

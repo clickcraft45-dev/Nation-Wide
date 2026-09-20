@@ -9,6 +9,7 @@ import {
   Truck,
   CreditCard,
   ReceiptIndianRupee,
+  Wallet,
   MapPin,
   FileQuestion,
   BarChart3,
@@ -78,6 +79,8 @@ export const ADMIN_NAV_GROUPS: NavGroup[] = [
         icon: ReceiptIndianRupee,
         roles: ["ADMIN"],
       },
+      // ADMIN-only for the same reason: payroll and rent are not operational data.
+      { label: "Expenses", href: "/admin/expenses", icon: Wallet, roles: ["ADMIN"] },
     ],
   },
   {

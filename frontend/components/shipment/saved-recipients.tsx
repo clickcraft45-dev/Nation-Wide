@@ -5,7 +5,8 @@ import type { SavedRecipientDto } from "@nationwide/shared-types";
 
 /**
  * Recipients this customer has shipped to before, newest first. Tapping a name fills the address
- * form below it; a new recipient is remembered simply by booking to them.
+ * below it AND the contents last sent to them, which is what makes a repeat consignment one tap
+ * rather than a retype. A new recipient is remembered simply by booking to them.
  */
 export function SavedRecipients({
   recipients,
@@ -30,6 +31,12 @@ export function SavedRecipients({
             <UserRound className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
             <span className="truncate">
               {r.name} · {r.city}, {r.country}
+              {r.lastItems?.length ? (
+                <span className="text-muted-foreground">
+                  {" "}
+                  · {r.lastItems.length} saved item{r.lastItems.length === 1 ? "" : "s"}
+                </span>
+              ) : null}
             </span>
           </button>
         ))}

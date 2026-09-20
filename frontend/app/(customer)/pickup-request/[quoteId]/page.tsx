@@ -564,7 +564,11 @@ export default function PickupRequestPage() {
             {addRecipient && (
               <SavedRecipients
                 recipients={savedRecipients}
-                onPick={(r) => setRecipient(recipientFrom(r))}
+                onPick={(r) => {
+                  setRecipient(recipientFrom(r));
+                  // Their usual goods come back with the address; still editable.
+                  if (r.lastItems?.length) setItems(itemsFrom(r.lastItems));
+                }}
               />
             )}
             {addRecipient && (

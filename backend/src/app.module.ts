@@ -27,6 +27,7 @@ import { PickupRequestsModule } from './modules/pickup-requests/pickup-requests.
 import { PincodesModule } from './modules/pincodes/pincodes.module';
 import { InvoicesModule } from './modules/invoices/invoices.module';
 import { ReceiptsModule } from './modules/receipts/receipts.module';
+import { ExpensesModule } from './modules/expenses/expenses.module';
 
 @Module({
   imports: [
@@ -55,6 +56,7 @@ import { ReceiptsModule } from './modules/receipts/receipts.module';
     PincodesModule,
     InvoicesModule,
     ReceiptsModule,
+    ExpensesModule,
   ],
   controllers: [AppController, HealthController],
   providers: [

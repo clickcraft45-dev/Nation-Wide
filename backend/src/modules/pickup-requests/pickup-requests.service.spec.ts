@@ -231,7 +231,13 @@ describe('PickupRequestsService', () => {
         where: { id: 'quote-1' },
         data: {
           items: [
-            { description: 'Books', quantity: 2, unitValue: 300, hsCode: null },
+            {
+              category: null,
+              description: 'Books',
+              quantity: 2,
+              unitValue: 300,
+              hsCode: null,
+            },
           ],
         },
       });
@@ -376,32 +382,46 @@ describe('PickupRequestsService', () => {
   });
 
   describe('createForAdmin', () => {
+    const recipient = (name: string) => ({
+      name,
+      phone: '+15550000000',
+      addressLine1: '1 Main St',
+      city: 'NYC',
+      state: 'NY',
+      postalCode: '10001',
+    });
     const adminDto = {
       customerId: 'customer-1',
       submissionKey: 'key-1',
-      shipmentType: 'PACKAGE',
-      packages: [{ weightKg: 4 }],
-      items: [{ description: 'Books', quantity: 2, unitValue: 300 }],
-      destinationCountry: 'United States',
-      recipient: {
-        name: 'Sam',
-        phone: '+15550000000',
-        addressLine1: '1 Main St',
-        city: 'NYC',
-        state: 'NY',
-        postalCode: '10001',
-      },
-      pickupContactName: 'Jane',
-      pickupContactPhone: '+911234567890',
-      pickupAddressLine1: 'Flat 4, MG Road',
-      pickupCity: 'Hyderabad',
-      pickupState: 'Telangana',
-      pickupPostalCode: '500001',
-      pickupLatitude: 17.4,
-      pickupLongitude: 78.5,
-      pickupDate: '2026-09-18',
-      pickupTimeSlot: '09:00-12:00',
       partnerId: 'partner-1',
+      pickup: {
+        pickupContactName: 'Jane',
+        pickupContactPhone: '+911234567890',
+        pickupAddressLine1: 'Flat 4, MG Road',
+        pickupCity: 'Hyderabad',
+        pickupState: 'Telangana',
+        pickupPostalCode: '500001',
+        pickupLatitude: 17.4,
+        pickupLongitude: 78.5,
+        pickupDate: '2026-09-18',
+        pickupTimeSlot: '09:00-12:00',
+      },
+      orders: [
+        {
+          recipient: recipient('Sam'),
+          destinationCountry: 'United States',
+          shipmentType: 'PACKAGE',
+          packages: [{ weightKg: 4 }],
+          items: [
+            {
+              category: 'Garments',
+              description: 'Saree',
+              quantity: 2,
+              unitValue: 300,
+            },
+          ],
+        },
+      ],
     };
     const ratedQuote = {
       id: 'quote-9',
@@ -428,62 +448,81 @@ describe('PickupRequestsService', () => {
       prisma.pickupRequest.create.mockResolvedValue(basePickupRequest);
     });
 
-    it('commits the chosen carrier and assigns the partner in one go, without a broadcast', async () => {
-      await service.createForAdmin(
-        { ...adminDto, rateProviderId: 'provider-1' } as never,
+    it('books each delivery address against one pickup and assigns the partner, without a broadcast', async () => {
+      const results = await service.createForAdmin(
+        {
+          ...adminDto,
+          orders: [
+            { ...adminDto.orders[0], rateProviderId: 'provider-1' },
+            {
+              ...adminDto.orders[0],
+              recipient: recipient('Ana'),
+              destinationCountry: 'Germany',
+            },
+          ],
+        } as never,
         'admin-1',
       );
 
-      expect(quotesService.create).toHaveBeenCalledWith(
-        expect.objectContaining({ weightKg: 4, submissionKey: 'key-1' }),
-        'customer-1',
-      );
-      expect(prisma.quote.updateMany).toHaveBeenCalledWith({
-        where: {
-          id: 'quote-9',
-          status: { in: ['RATED', 'NEEDS_MANUAL_REVIEW'] },
-        },
-        data: expect.objectContaining({
-          status: 'PICKUP_REQUESTED',
-          selectedOptionId: 'opt-1',
-          quotedAmount: 900,
-          destName: 'Sam',
-        }),
-      });
-      expect(prisma.pickupRequest.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({
-            rateProviderId: 'provider-1',
-            estimatedPrice: 900,
+      expect(results.map((r) => r.status)).toEqual(['BOOKED', 'BOOKED']);
+      expect(prisma.pickupRequest.create).toHaveBeenCalledTimes(2);
+      for (const call of prisma.pickupRequest.create.mock.calls) {
+        const { data } = call[0] as { data: Record<string, unknown> };
+        // One collection for the whole booking, handed to the chosen partner.
+        expect(data).toEqual(
+          expect.objectContaining({
+            pickupCity: 'Hyderabad',
             assignedPartnerId: 'partner-1',
             status: 'ASSIGNED',
-            pickupLatitude: 17.4,
+          }),
+        );
+      }
+      // The assigned partner hears about it; nobody else is offered the job.
+      expect(prisma.adminUser.findMany).not.toHaveBeenCalled();
+      expect(pushService.sendToAdminUser).toHaveBeenCalledTimes(2);
+    });
+
+    it('keeps the contents, including their type, against each address', async () => {
+      await service.createForAdmin(adminDto as never, 'admin-1');
+
+      expect(prisma.quote.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            destName: 'Sam',
+            items: [
+              {
+                category: 'Garments',
+                description: 'Saree',
+                quantity: 2,
+                unitValue: 300,
+                hsCode: null,
+              },
+            ],
           }),
         }),
       );
       expect(addressBook.remember).toHaveBeenCalledWith(
         'customer-1',
-        adminDto.items,
-      );
-      // Only the assigned partner hears about it.
-      expect(prisma.adminUser.findMany).not.toHaveBeenCalled();
-      expect(pushService.sendToAdminUser).toHaveBeenCalledTimes(1);
-      expect(pushService.sendToAdminUser).toHaveBeenCalledWith(
-        'partner-1',
-        expect.anything(),
+        adminDto.orders[0].items,
       );
     });
 
-    it('takes a staff-entered price when no carrier is chosen', async () => {
+    it('books an unrated shipment on a staff-entered price', async () => {
       quotesService.create.mockResolvedValue({
         ...ratedQuote,
         status: 'NEEDS_MANUAL_REVIEW',
         rateQuoteOptions: [],
       });
-      await service.createForAdmin(
-        { ...adminDto, manualPrice: 1500 } as never,
+
+      const results = await service.createForAdmin(
+        {
+          ...adminDto,
+          orders: [{ ...adminDto.orders[0], manualPrice: 1500 }],
+        } as never,
         'admin-1',
       );
+
+      expect(results[0].status).toBe('BOOKED');
       expect(prisma.pickupRequest.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
@@ -494,27 +533,32 @@ describe('PickupRequestsService', () => {
       );
     });
 
-    it('needs exactly one of a carrier or a price', async () => {
-      await expect(
-        service.createForAdmin(adminDto as never, 'admin-1'),
-      ).rejects.toThrow(BadRequestException);
-      await expect(
-        service.createForAdmin(
-          {
-            ...adminDto,
-            rateProviderId: 'provider-1',
-            manualPrice: 5,
-          } as never,
-          'admin-1',
-        ),
-      ).rejects.toThrow(BadRequestException);
-      expect(quotesService.create).not.toHaveBeenCalled();
+    it('leaves an unrated shipment for staff to price when no price was given', async () => {
+      quotesService.create.mockResolvedValue({
+        ...ratedQuote,
+        status: 'NEEDS_MANUAL_REVIEW',
+        rateQuoteOptions: [],
+      });
+
+      const results = await service.createForAdmin(
+        adminDto as never,
+        'admin-1',
+      );
+
+      expect(results[0]).toMatchObject({
+        status: 'NEEDS_PRICING',
+        pickupRequestId: null,
+      });
+      expect(prisma.pickupRequest.create).not.toHaveBeenCalled();
     });
 
     it('refuses a carrier that did not quote the shipment', async () => {
       await expect(
         service.createForAdmin(
-          { ...adminDto, rateProviderId: 'provider-x' } as never,
+          {
+            ...adminDto,
+            orders: [{ ...adminDto.orders[0], rateProviderId: 'provider-x' }],
+          } as never,
           'admin-1',
         ),
       ).rejects.toThrow(BadRequestException);
@@ -528,10 +572,7 @@ describe('PickupRequestsService', () => {
         isActive: false,
       });
       await expect(
-        service.createForAdmin(
-          { ...adminDto, rateProviderId: 'provider-1' } as never,
-          'admin-1',
-        ),
+        service.createForAdmin(adminDto as never, 'admin-1'),
       ).rejects.toThrow(NotFoundException);
       expect(quotesService.create).not.toHaveBeenCalled();
     });
@@ -541,155 +582,8 @@ describe('PickupRequestsService', () => {
         ...ratedQuote,
         status: 'PICKUP_REQUESTED',
       });
-      await service.createForAdmin(
-        { ...adminDto, rateProviderId: 'provider-1' } as never,
-        'admin-1',
-      );
+      await service.createForAdmin(adminDto as never, 'admin-1');
       expect(prisma.pickupRequest.create).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('createBatchForCustomer (B2B portal)', () => {
-    const pickup = {
-      pickupContactName: 'Despatch desk',
-      pickupContactPhone: '+919876500099',
-      pickupAddressLine1: 'Gate 2, Industrial Estate',
-      pickupCity: 'Hyderabad',
-      pickupState: 'Telangana',
-      pickupPostalCode: '500001',
-      pickupDate: '2026-09-20',
-      pickupTimeSlot: '09:00-12:00',
-    };
-    const order = (recipientName: string, country: string) => ({
-      recipient: {
-        name: recipientName,
-        phone: '+15550000000',
-        addressLine1: '1 Main St',
-        city: 'NYC',
-        state: 'NY',
-        postalCode: '10001',
-      },
-      destinationCountry: country,
-      shipmentType: 'PACKAGE',
-      packages: [{ weightKg: 2 }],
-      items: [{ description: 'Books', quantity: 1, unitValue: 300 }],
-    });
-    const ratedQuote = {
-      id: 'quote-9',
-      status: 'RATED',
-      weightKg: 2,
-      rateQuoteOptions: [
-        {
-          id: 'opt-dhl',
-          rateProviderId: 'provider-dhl',
-          rateProvider: { name: 'DHL' },
-          finalPrice: 1200,
-          currency: 'INR',
-        },
-        {
-          id: 'opt-fedex',
-          rateProviderId: 'provider-1',
-          rateProvider: { name: 'FedEx' },
-          finalPrice: 900,
-          currency: 'INR',
-        },
-      ],
-    };
-
-    beforeEach(() => {
-      quotesService.create.mockResolvedValue(ratedQuote);
-      prisma.pickupRequest.create.mockResolvedValue(basePickupRequest);
-      prisma.adminUser.findMany.mockResolvedValue([
-        { id: 'partner-1' },
-        { id: 'partner-2' },
-      ]);
-    });
-
-    it('books every shipment against one pickup and broadcasts each to partners', async () => {
-      const results = await service.createBatchForCustomer('customer-1', {
-        submissionKey: 'batch-1',
-        pickup,
-        orders: [order('Sam', 'United States'), order('Ana', 'Germany')],
-      } as never);
-
-      expect(results.map((r) => r.status)).toEqual(['BOOKED', 'BOOKED']);
-      expect(prisma.pickupRequest.create).toHaveBeenCalledTimes(2);
-      // Each shipment is its own quote, keyed off the batch so a retry converges.
-      expect(quotesService.create).toHaveBeenNthCalledWith(
-        1,
-        expect.objectContaining({ submissionKey: 'batch-1:0' }),
-        'customer-1',
-      );
-      expect(quotesService.create).toHaveBeenNthCalledWith(
-        2,
-        expect.objectContaining({ submissionKey: 'batch-1:1' }),
-        'customer-1',
-      );
-      // One pickup address for the whole batch.
-      for (const call of prisma.pickupRequest.create.mock.calls) {
-        const { data } = call[0] as { data: Record<string, unknown> };
-        expect(data).toEqual(
-          expect.objectContaining({ pickupCity: 'Hyderabad' }),
-        );
-        // Left unassigned: a broadcast request any partner can claim.
-        expect(data).not.toHaveProperty('assignedPartnerId');
-        expect(data).not.toHaveProperty('status');
-      }
-      // Two partners × two shipments, and a single message to the customer.
-      expect(pushService.sendToAdminUser).toHaveBeenCalledTimes(4);
-      expect(notificationsService.enqueue).toHaveBeenCalledTimes(1);
-      expect(addressBook.remember).toHaveBeenCalledTimes(2);
-    });
-
-    it('takes the cheapest carrier when the customer did not pick one', async () => {
-      await service.createBatchForCustomer('customer-1', {
-        submissionKey: 'batch-2',
-        pickup,
-        orders: [order('Sam', 'United States')],
-      } as never);
-
-      expect(prisma.quote.updateMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({
-            selectedOptionId: 'opt-fedex',
-            quotedAmount: 900,
-          }),
-        }),
-      );
-    });
-
-    it('records an unpriced shipment for staff instead of dispatching it', async () => {
-      quotesService.create.mockResolvedValue({
-        ...ratedQuote,
-        status: 'NEEDS_MANUAL_REVIEW',
-        rateQuoteOptions: [],
-      });
-
-      const results = await service.createBatchForCustomer('customer-1', {
-        submissionKey: 'batch-3',
-        pickup,
-        orders: [order('Sam', 'Antarctica')],
-      } as never);
-
-      expect(results[0]).toMatchObject({
-        status: 'NEEDS_PRICING',
-        quoteId: 'quote-9',
-        pickupRequestId: null,
-      });
-      expect(prisma.pickupRequest.create).not.toHaveBeenCalled();
-      expect(pushService.sendToAdminUser).not.toHaveBeenCalled();
-    });
-
-    it('refuses a carrier that does not quote the shipment', async () => {
-      await expect(
-        service.createBatchForCustomer('customer-1', {
-          submissionKey: 'batch-4',
-          pickup,
-          orders: [
-            { ...order('Sam', 'United States'), rateProviderId: 'provider-x' },
-          ],
-        } as never),
-      ).rejects.toThrow(BadRequestException);
     });
   });
 

@@ -9,17 +9,40 @@ import { Input, Label, FieldError } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 
 export interface ItemForm {
+  category: string;
   description: string;
   quantity: string;
   unitValue: string;
   hsCode: string;
 }
 
-export const emptyItem: ItemForm = { description: "", quantity: "1", unitValue: "", hsCode: "" };
+export const emptyItem: ItemForm = {
+  category: "",
+  description: "",
+  quantity: "1",
+  unitValue: "",
+  hsCode: "",
+};
+
+// The kinds of goods that actually move through this business. Offered as suggestions, never a
+// closed list — the field stays free text, because the next customer ships something not here.
+const COMMON_CATEGORIES = [
+  "Garments",
+  "Food",
+  "Medicines",
+  "Documents",
+  "Electronics",
+  "Cosmetics",
+  "Spices",
+  "Handicrafts",
+  "Books",
+  "Spare parts",
+];
 
 export function itemsFrom(saved: ShipmentItemDto[] | null | undefined): ItemForm[] {
   if (!saved?.length) return [{ ...emptyItem }];
   return saved.map((i) => ({
+    category: i.category ?? "",
     description: i.description,
     quantity: String(i.quantity),
     unitValue: String(i.unitValue),
@@ -29,6 +52,7 @@ export function itemsFrom(saved: ShipmentItemDto[] | null | undefined): ItemForm
 
 export function toItemsPayload(forms: ItemForm[]): ShipmentItemDto[] {
   return forms.map((f) => ({
+    ...(f.category.trim() ? { category: f.category.trim() } : {}),
     description: f.description.trim(),
     quantity: Number(f.quantity),
     unitValue: Number(f.unitValue),
@@ -75,6 +99,7 @@ export function ItemsEditor({
   error?: string | null;
 }) {
   const listId = useId();
+  const categoryListId = useId();
   const saved = savedItems ?? [];
 
   function setRow(index: number, key: keyof ItemForm, v: string) {
@@ -85,7 +110,12 @@ export function ItemsEditor({
         // Picking a remembered description fills what was declared for it last time.
         const match = key === "description" ? saved.find((s) => s.description === v) : undefined;
         return match
-          ? { ...next, unitValue: String(match.unitValue), hsCode: match.hsCode ?? next.hsCode }
+          ? {
+              ...next,
+              category: match.category ?? next.category,
+              unitValue: String(match.unitValue),
+              hsCode: match.hsCode ?? next.hsCode,
+            }
           : next;
       }),
     );
@@ -100,15 +130,32 @@ export function ItemsEditor({
           <option key={s.id} value={s.description} />
         ))}
       </datalist>
+      <datalist id={categoryListId}>
+        {[...new Set([...saved.map((s) => s.category), ...COMMON_CATEGORIES])]
+          .filter((c): c is string => Boolean(c))
+          .map((category) => (
+            <option key={category} value={category} />
+          ))}
+      </datalist>
 
       {value.map((row, i) => (
         <div key={i} className="grid grid-cols-6 items-end gap-2 rounded-lg border border-border p-3">
-          <div className="col-span-6 space-y-1 sm:col-span-3">
-            <Label htmlFor={`item-${i}-description`}>Item description</Label>
+          <div className="col-span-3 space-y-1 sm:col-span-2">
+            <Label htmlFor={`item-${i}-category`}>Type</Label>
+            <Input
+              id={`item-${i}-category`}
+              list={categoryListId}
+              placeholder="e.g. Garments"
+              value={row.category}
+              onChange={(e) => setRow(i, "category", e.target.value)}
+            />
+          </div>
+          <div className="col-span-3 space-y-1 sm:col-span-2">
+            <Label htmlFor={`item-${i}-description`}>Item</Label>
             <Input
               id={`item-${i}-description`}
               list={listId}
-              placeholder="e.g. Cotton shirts"
+              placeholder="e.g. Saree"
               value={row.description}
               onChange={(e) => setRow(i, "description", e.target.value)}
               error={Boolean(error)}
@@ -182,6 +229,7 @@ export function ItemsEditor({
           onUse={(item) => {
             const blank = value.findIndex((r) => !r.description.trim());
             const row: ItemForm = {
+              category: item.category ?? "",
               description: item.description,
               quantity: "1",
               unitValue: String(item.unitValue),
@@ -294,6 +342,7 @@ function SavedItemsLibrary({
                 className="min-w-0 flex-1 truncate text-left text-foreground hover:text-primary"
                 title="Add to this shipment"
               >
+                {item.category ? `${item.category} · ` : ""}
                 {item.description}
                 <span className="text-muted-foreground">
                   {" "}

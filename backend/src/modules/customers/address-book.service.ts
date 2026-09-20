@@ -4,7 +4,11 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import type { AddressBookDto, SavedItemDto } from '@nationwide/shared-types';
+import type {
+  AddressBookDto,
+  SavedItemDto,
+  ShipmentItemDto,
+} from '@nationwide/shared-types';
 import { PrismaService } from '../../database/prisma.service';
 import { SaveItemDto } from './dto/save-item.dto';
 
@@ -14,12 +18,14 @@ type Db = PrismaService | Prisma.TransactionClient;
 
 function toSavedItemDto(item: {
   id: string;
+  category: string | null;
   description: string;
   hsCode: string | null;
   unitValue: number;
 }): SavedItemDto {
   return {
     id: item.id,
+    category: item.category,
     description: item.description,
     hsCode: item.hsCode,
     unitValue: item.unitValue,
@@ -76,6 +82,8 @@ export class AddressBookService {
           }
         : null,
       recipients: recipients.map((q) => ({
+        // What went to this address last time, so picking the name brings the goods back.
+        lastItems: (q.items as ShipmentItemDto[] | null) ?? null,
         name: q.destName ?? '',
         phone: q.destPhone ?? '',
         addressLine1: q.destAddressLine1 ?? '',
@@ -92,13 +100,19 @@ export class AddressBookService {
   /** Remembers what was just shipped — an existing description is updated with the new value. */
   async remember(
     customerId: string,
-    items: { description: string; unitValue: number; hsCode?: string | null }[],
+    items: {
+      description: string;
+      unitValue: number;
+      hsCode?: string | null;
+      category?: string | null;
+    }[],
     db: Db = this.prisma,
   ): Promise<void> {
     for (const item of items) {
       const data = {
         unitValue: item.unitValue,
         hsCode: item.hsCode?.trim() || null,
+        category: item.category?.trim() || null,
       };
       await db.savedItem.upsert({
         where: {
@@ -149,6 +163,7 @@ export class AddressBookService {
           description: dto.description.trim(),
           unitValue: dto.unitValue,
           hsCode: dto.hsCode?.trim() || null,
+          category: dto.category?.trim() || null,
         },
       });
       if (updated.count === 0) {

@@ -809,6 +809,7 @@ model AdminUser {
   reviewedPartnerApplications PartnerApplication[] @relation("PartnerApplicationReviewedBy")
   createdB2bLinks             B2bLink[]            @relation("B2bLinkCreatedBy")
   approvedReviews             Review[]             @relation("ReviewApprovedBy")
+  recordedExpenses            Expense[]            @relation("ExpenseRecordedBy")
 
   @@map("admin_users")
 }
@@ -1359,6 +1360,8 @@ model RemoteArea {
 model SavedItem {
   id          String   @id @default(uuid())
   customerId  String   @map("customer_id")
+  /// What kind of goods, e.g. "Garments" — the description below is the specific item ("Saree").
+  category    String?
   description String
   hsCode      String?  @map("hs_code")
   unitValue   Float    @map("unit_value")
@@ -1401,4 +1404,56 @@ model B2bLink {
 
   @@index([customerId])
   @@map("b2b_links")
+}
+
+// ---------------------------------------------------------------------------
+// Company expenses
+// ---------------------------------------------------------------------------
+
+/// What the money went on. Coarse on purpose — this is what a P&L line looks like, not an
+/// accounting chart of accounts; anything finer belongs in `description`.
+enum ExpenseCategory {
+  SALARY
+  RENT
+  UTILITIES
+  FUEL
+  PACKAGING
+  COURIER_PARTNER
+  MARKETING
+  OFFICE_SUPPLIES
+  TRAVEL
+  MAINTENANCE
+  TAXES_FEES
+  OTHER
+}
+
+/// Money the company spent. The mirror of Invoice/Receipt (money coming in), kept as a plain
+/// ledger row: no approval workflow and no attachments — an admin types what was spent and on
+/// what, and the screen totals it by category.
+model Expense {
+  id          String          @id @default(uuid())
+  /// When the money was spent, which is rarely when the row was typed — reporting windows use
+  /// this, never createdAt.
+  expenseDate DateTime        @map("expense_date")
+  category    ExpenseCategory
+  amount      Float
+  currency    String          @default("INR")
+  paymentMethod PaymentMethod @map("payment_method")
+  /// Vendor, landlord, employee — whoever received it.
+  paidTo      String          @map("paid_to")
+  description String?
+  /// The vendor's bill/reference number, when there is one. Free text: every vendor numbers
+  /// differently and none of it is ours to validate.
+  referenceNo String?         @map("reference_no")
+
+  recordedByAdminId String @map("recorded_by_admin_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  recordedBy AdminUser @relation("ExpenseRecordedBy", fields: [recordedByAdminId], references: [id])
+
+  @@index([expenseDate])
+  @@index([category])
+  @@map("expenses")
 }

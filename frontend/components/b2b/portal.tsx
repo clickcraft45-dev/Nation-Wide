@@ -1,22 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckCircle2, Clock, Package, Plus, Trash2 } from "lucide-react";
-import {
-  chargeableWeightKg,
-  type B2bCreateOrdersDto,
-  type B2bOrderResultDto,
-  type B2bRequestSummaryDto,
-  type B2bSessionDto,
-  type CountryDto,
-  type PickupTimeSlot,
-  type QuotePreviewResultDto,
-  type SavedItemDto,
-  type ShipmentTypeCode,
+import { CheckCircle2, Clock, Package, Plus } from "lucide-react";
+import type {
+  B2bCreateOrdersDto,
+  B2bOrderResultDto,
+  B2bRequestSummaryDto,
+  B2bSessionDto,
+  CountryDto,
+  PickupTimeSlot,
+  QuotePreviewResultDto,
+  SavedItemDto,
 } from "@nationwide/shared-types";
 import { errorMessage } from "@/lib/api-client";
 import type { B2bClient } from "@/lib/b2b-client";
-import { useDebouncedValue } from "@/lib/utils/use-debounced-value";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input, Label, FieldError } from "@/components/ui/input";
@@ -27,29 +24,18 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/ui/page-state";
 import { Logo } from "@/components/brand/logo";
 import {
-  RecipientFields,
-  emptyRecipient,
-  recipientFrom,
   toRecipientPayload,
   validateRecipient,
   type RecipientErrors,
-  type RecipientForm,
 } from "@/components/quote/recipient-fields";
+import { validatePackages } from "@/components/shipment/packages-editor";
+import { toItemsPayload, validateItems } from "@/components/shipment/items-editor";
 import {
-  PackagesEditor,
-  packagesFrom,
-  toPackagesPayload,
-  validatePackages,
-  type PackageForm,
-} from "@/components/shipment/packages-editor";
-import {
-  ItemsEditor,
-  itemsFrom,
-  toItemsPayload,
-  validateItems,
-  type ItemForm,
-} from "@/components/shipment/items-editor";
-import { SavedRecipients } from "@/components/shipment/saved-recipients";
+  ShipmentCard,
+  newShipment,
+  shipmentPackages,
+  type ShipmentDraft,
+} from "@/components/shipment/shipment-card";
 
 const TIME_SLOTS: { value: PickupTimeSlot; label: string }[] = [
   { value: "09:00-12:00", label: "9:00 AM – 12:00 PM" },
@@ -57,36 +43,7 @@ const TIME_SLOTS: { value: PickupTimeSlot; label: string }[] = [
   { value: "15:00-18:00", label: "3:00 PM – 6:00 PM" },
 ];
 
-const SHIPMENT_TYPES: { value: ShipmentTypeCode; label: string }[] = [
-  { value: "PACKAGE", label: "Package" },
-  { value: "PARCEL", label: "Parcel" },
-  { value: "DOCUMENT", label: "Document" },
-  { value: "OTHER", label: "Other" },
-];
-
 const todayIso = () => new Date().toISOString().slice(0, 10);
-
-interface OrderDraft {
-  key: string;
-  recipient: RecipientForm;
-  destinationCountry: string;
-  shipmentType: ShipmentTypeCode;
-  boxes: PackageForm[];
-  items: ItemForm[];
-  rateProviderId: string | null;
-}
-
-function newOrder(): OrderDraft {
-  return {
-    key: crypto.randomUUID(),
-    recipient: emptyRecipient,
-    destinationCountry: "",
-    shipmentType: "PACKAGE",
-    boxes: packagesFrom(null),
-    items: itemsFrom(null),
-    rateProviderId: null,
-  };
-}
 
 interface PickupForm {
   contactName: string;
@@ -130,7 +87,7 @@ export function B2bPortal({ client }: { client: B2bClient }) {
     timeSlot: TIME_SLOTS[0].value,
     instructions: "",
   });
-  const [orders, setOrders] = useState<OrderDraft[]>([newOrder()]);
+  const [orders, setOrders] = useState<ShipmentDraft[]>([newShipment()]);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [orderErrors, setOrderErrors] = useState<Record<string, string>>({});
   const [recipientErrors, setRecipientErrors] = useState<Record<string, RecipientErrors>>({});
@@ -177,7 +134,7 @@ export function B2bPortal({ client }: { client: B2bClient }) {
       .finally(() => setIsLoading(false));
   }, [client]);
 
-  function updateOrder(key: string, patch: Partial<OrderDraft>) {
+  function updateOrder(key: string, patch: Partial<ShipmentDraft>) {
     setOrders((all) => all.map((o) => (o.key === key ? { ...o, ...patch } : o)));
   }
 
@@ -256,7 +213,7 @@ export function B2bPortal({ client }: { client: B2bClient }) {
         recipient: toRecipientPayload(o.recipient),
         destinationCountry: o.destinationCountry,
         shipmentType: o.shipmentType,
-        packages: toPackagesPayload(o.boxes),
+        packages: shipmentPackages(o),
         items: toItemsPayload(o.items),
         ...(o.rateProviderId ? { rateProviderId: o.rateProviderId } : {}),
       })),
@@ -274,7 +231,7 @@ export function B2bPortal({ client }: { client: B2bClient }) {
 
   function startAnother() {
     setResults(null);
-    setOrders([newOrder()]);
+    setOrders([newShipment()]);
     // A fresh key: the next batch is a new submission, not a retry of the one just booked.
     setSubmissionKey(crypto.randomUUID());
   }
@@ -294,9 +251,6 @@ export function B2bPortal({ client }: { client: B2bClient }) {
       </div>
     );
   }
-
-  const recipientsForCountry = (country: string) =>
-    session.addressBook.recipients.filter((r) => !country || r.country === country);
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 px-4 py-8 pb-16">
@@ -465,16 +419,18 @@ export function B2bPortal({ client }: { client: B2bClient }) {
           </Card>
 
           {orders.map((order, index) => (
-            <OrderCard
+            <ShipmentCard
               key={order.key}
               index={index}
-              order={order}
+              draft={order}
               countries={countries}
-              client={client}
-              savedRecipients={recipientsForCountry(order.destinationCountry)}
-              allRecipients={session.addressBook.recipients}
+              recipients={session.addressBook.recipients}
               savedItems={savedItems}
               onSavedItemsChange={setSavedItems}
+              // The portal's client is already scoped to /b2b and carries the link token.
+              savedItemsBase=""
+              savedItemsClient={client}
+              fetchPreview={(query) => client.get<QuotePreviewResultDto>(`/preview?${query}`)}
               recipientErrors={recipientErrors[order.key] ?? {}}
               error={orderErrors[order.key]}
               canRemove={orders.length > 1}
@@ -486,7 +442,7 @@ export function B2bPortal({ client }: { client: B2bClient }) {
           <Button
             type="button"
             variant="secondary"
-            onClick={() => setOrders((all) => [...all, newOrder()])}
+            onClick={() => setOrders((all) => [...all, newShipment()])}
           >
             <Plus className="h-4 w-4" aria-hidden /> Add another shipment
           </Button>
@@ -526,205 +482,6 @@ export function B2bPortal({ client }: { client: B2bClient }) {
         </Card>
       )}
     </div>
-  );
-}
-
-function OrderCard({
-  index,
-  order,
-  countries,
-  client,
-  savedRecipients,
-  allRecipients,
-  savedItems,
-  onSavedItemsChange,
-  recipientErrors,
-  error,
-  canRemove,
-  onRemove,
-  onChange,
-}: {
-  index: number;
-  order: OrderDraft;
-  countries: CountryDto[];
-  client: B2bClient;
-  savedRecipients: B2bSessionDto["addressBook"]["recipients"];
-  allRecipients: B2bSessionDto["addressBook"]["recipients"];
-  savedItems: SavedItemDto[];
-  onSavedItemsChange: (next: SavedItemDto[]) => void;
-  recipientErrors: RecipientErrors;
-  error?: string;
-  canRemove: boolean;
-  onRemove: () => void;
-  onChange: (patch: Partial<OrderDraft>) => void;
-}) {
-  const [preview, setPreview] = useState<QuotePreviewResultDto | null>(null);
-  const [isPricing, setIsPricing] = useState(false);
-
-  const boxProblem = validatePackages(order.boxes, order.shipmentType !== "DOCUMENT");
-  const chargeable = boxProblem ? 0 : chargeableWeightKg(toPackagesPayload(order.boxes));
-  const debounced = useDebouncedValue(
-    `${order.destinationCountry}|${order.shipmentType}|${chargeable}`,
-    600,
-  );
-
-  // Prices refresh themselves as the shipment is filled in — the same stateless preview the
-  // customer wizard uses. Nothing is booked until the whole batch is submitted.
-  useEffect(() => {
-    const [country, shipmentType, weight] = debounced.split("|");
-    if (!country || Number(weight) <= 0) {
-      // Dropping a now-stale price when the shipment stops being priceable — one render.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setPreview(null);
-      return;
-    }
-    let cancelled = false;
-    setIsPricing(true);
-    client
-      .get<QuotePreviewResultDto>(
-        `/preview?destinationCountry=${encodeURIComponent(country)}&weightKg=${weight}&shipmentType=${shipmentType}`,
-      )
-      .then((result) => {
-        if (cancelled) return;
-        setPreview(result);
-        // Default to the cheapest; the server does the same when nothing is chosen.
-        const cheapest = [...result.options].sort((a, b) => a.finalPrice - b.finalPrice)[0];
-        onChange({ rateProviderId: cheapest?.rateProviderId ?? null });
-      })
-      .catch(() => {
-        if (!cancelled) setPreview(null);
-      })
-      .finally(() => {
-        if (!cancelled) setIsPricing(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debounced, client]);
-
-  return (
-    <Card>
-      <CardHeader className="flex-row items-center justify-between gap-2">
-        <CardTitle>Shipment {index + 1}</CardTitle>
-        {canRemove && (
-          <button
-            type="button"
-            onClick={onRemove}
-            aria-label={`Remove shipment ${index + 1}`}
-            className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-danger"
-          >
-            <Trash2 className="h-4 w-4" aria-hidden />
-          </button>
-        )}
-      </CardHeader>
-      <CardContent className="space-y-4" aria-invalid={Boolean(error)} tabIndex={-1}>
-        <SavedRecipients
-          recipients={savedRecipients.length > 0 ? savedRecipients : allRecipients}
-          onPick={(r) =>
-            onChange({ recipient: recipientFrom(r), destinationCountry: r.country })
-          }
-        />
-        <Field label="Destination country" htmlFor={`country-${order.key}`}>
-          <NativeSelect
-            id={`country-${order.key}`}
-            value={order.destinationCountry}
-            onChange={(e) => onChange({ destinationCountry: e.target.value })}
-          >
-            <option value="">Select a country…</option>
-            {countries.map((c) => (
-              <option key={c.id} value={c.name}>
-                {c.name}
-              </option>
-            ))}
-          </NativeSelect>
-        </Field>
-        <RecipientFields
-          value={order.recipient}
-          onChange={(update) =>
-            onChange({
-              recipient:
-                typeof update === "function" ? update(order.recipient) : update,
-            })
-          }
-          errors={recipientErrors}
-          isIndia={order.destinationCountry === "India"}
-          country={order.destinationCountry}
-          idPrefix={`recipient-${order.key}`}
-        />
-
-        <Field label="Shipment type" htmlFor={`type-${order.key}`}>
-          <NativeSelect
-            id={`type-${order.key}`}
-            value={order.shipmentType}
-            onChange={(e) => onChange({ shipmentType: e.target.value as ShipmentTypeCode })}
-          >
-            {SHIPMENT_TYPES.map((t) => (
-              <option key={t.value} value={t.value}>
-                {t.label}
-              </option>
-            ))}
-          </NativeSelect>
-        </Field>
-
-        <PackagesEditor
-          value={order.boxes}
-          onChange={(boxes) => onChange({ boxes })}
-          requireDimensions={order.shipmentType !== "DOCUMENT"}
-          idPrefix={`box-${order.key}`}
-        />
-
-        <div className="space-y-2">
-          <p className="text-sm font-medium text-foreground">Contents</p>
-          <ItemsEditor
-            value={order.items}
-            onChange={(items) => onChange({ items })}
-            savedItems={savedItems}
-            onSavedItemsChange={onSavedItemsChange}
-            libraryBase=""
-            client={client}
-          />
-        </div>
-
-        <div className="rounded-lg border border-border bg-muted/30 p-3 text-sm">
-          {isPricing && <p className="text-muted-foreground">Checking prices…</p>}
-          {!isPricing && !preview && (
-            <p className="text-muted-foreground">
-              Choose a country and enter the boxes to see prices.
-            </p>
-          )}
-          {!isPricing && preview && preview.options.length === 0 && (
-            <p className="text-muted-foreground">
-              No published rate covers this route — submit it anyway and our team will price it and
-              come back to you.
-            </p>
-          )}
-          {!isPricing && preview && preview.options.length > 0 && (
-            <div className="space-y-1.5">
-              <p className="text-xs text-muted-foreground">Carrier · {chargeable} kg chargeable</p>
-              {[...preview.options]
-                .sort((a, b) => a.finalPrice - b.finalPrice)
-                .map((o) => (
-                  <label key={o.rateProviderId} className="flex cursor-pointer items-center gap-3">
-                    <input
-                      type="radio"
-                      name={`carrier-${order.key}`}
-                      checked={order.rateProviderId === o.rateProviderId}
-                      onChange={() => onChange({ rateProviderId: o.rateProviderId })}
-                    />
-                    <span className="flex-1 font-medium text-foreground">{o.rateProviderName}</span>
-                    <span className="font-semibold text-foreground">
-                      {o.currency} {Math.round(o.finalPrice).toLocaleString("en-IN")}
-                    </span>
-                  </label>
-                ))}
-            </div>
-          )}
-        </div>
-
-        {error && <FieldError>{error}</FieldError>}
-      </CardContent>
-    </Card>
   );
 }
 

@@ -13,6 +13,8 @@ export interface ParcelPackageDto {
 
 /** One line of a shipment's contents — what DHL/FedEx/UPS/DPD ask for on the commercial invoice. */
 export interface ShipmentItemDto {
+  /** The kind of goods, e.g. "Garments". The description is the specific item, e.g. "Saree". */
+  category?: string | null;
   description: string;
   quantity: number;
   /** Per unit, INR. */
@@ -22,12 +24,14 @@ export interface ShipmentItemDto {
 
 export interface SavedItemDto {
   id: string;
+  category: string | null;
   description: string;
   hsCode: string | null;
   unitValue: number;
 }
 
 export interface SaveItemDto {
+  category?: string;
   description: string;
   unitValue: number;
   hsCode?: string;
@@ -48,6 +52,12 @@ export interface SavedPickupAddressDto {
 
 export interface SavedRecipientDto extends PickupRecipientDto {
   country: string;
+  /**
+   * What was last sent to this recipient. Picking their name brings these back, so a customer
+   * shipping the same goods to the same person does not retype them. Read off the most recent
+   * booking to that address — nothing extra is stored.
+   */
+  lastItems: ShipmentItemDto[] | null;
 }
 
 /** Everything a booking form can prefill for one customer. */

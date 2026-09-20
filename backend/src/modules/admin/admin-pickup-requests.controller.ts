@@ -10,6 +10,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import type {
+  B2bOrderResultDto,
   PickupDocumentsDto,
   PickupRequestDto,
   RecalculatePreviewDto,
@@ -59,15 +60,16 @@ export class AdminPickupRequestsController {
     return pickupRequests.map(toPickupRequestDto);
   }
 
-  // Staff booking a pickup for a customer (phone-in / walk-in), assigned straight to a partner.
+  /**
+   * Staff booking for a customer (phone-in / walk-in): one collection, one or many delivery
+   * addresses, assigned straight to a partner. The result says what happened to each shipment.
+   */
   @Post()
-  async create(
+  create(
     @Body() dto: AdminCreatePickupOrderDto,
     @CurrentUser() user: JwtPayload,
-  ): Promise<PickupRequestDto> {
-    return toPickupRequestDto(
-      await this.pickupRequestsService.createForAdmin(dto, user.sub),
-    );
+  ): Promise<B2bOrderResultDto[]> {
+    return this.pickupRequestsService.createForAdmin(dto, user.sub);
   }
 
   // Turns a pasted Google Maps link into a pin, so staff can check it before booking. Registered
