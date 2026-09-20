@@ -9,7 +9,7 @@ import {
 
 @Controller('shipping-providers')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('STAFF', 'ADMIN')
+@Roles('ADMIN')
 export class ShippingProvidersController {
   constructor(
     private readonly shippingProvidersService: ShippingProvidersService,

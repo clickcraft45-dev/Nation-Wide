@@ -6,12 +6,16 @@ describe('generatePassword', () => {
   });
 
   it('avoids characters that are ambiguous when read off a screen', () => {
-    const sample = Array.from({ length: 200 }, () => generatePassword()).join('');
+    const sample = Array.from({ length: 200 }, () => generatePassword()).join(
+      '',
+    );
     expect(sample).not.toMatch(/[0O1lI]/);
   });
 
   it('does not repeat itself', () => {
-    const generated = new Set(Array.from({ length: 500 }, () => generatePassword()));
+    const generated = new Set(
+      Array.from({ length: 500 }, () => generatePassword()),
+    );
     expect(generated.size).toBe(500);
   });
 });

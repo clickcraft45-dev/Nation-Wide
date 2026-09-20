@@ -55,7 +55,7 @@ const MANUAL_MAIL_THROTTLE = { default: { limit: 20, ttl: 60_000 } };
  */
 @Controller('admin/mail')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('STAFF', 'ADMIN')
+@Roles('ADMIN')
 export class AdminMailController {
   private readonly logger = new Logger(AdminMailController.name);
 

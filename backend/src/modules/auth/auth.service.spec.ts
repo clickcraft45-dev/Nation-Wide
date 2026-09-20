@@ -11,7 +11,7 @@ describe('AuthService', () => {
   const adminUser = {
     id: 'admin-1',
     email: 'staff@nationwide.dev',
-    role: 'STAFF' as const,
+    role: 'ADMIN' as const,
     passwordHash: '',
     hashedRefreshToken: null as string | null,
     isActive: true,
@@ -127,7 +127,7 @@ describe('AuthService', () => {
         adminUser.email,
         'correct-password',
       );
-      expect(result).toMatchObject({ id: adminUser.id, role: 'STAFF' });
+      expect(result).toMatchObject({ id: adminUser.id, role: 'ADMIN' });
     });
 
     it('resolves a Customer account by email with role CUSTOMER', async () => {
@@ -230,7 +230,7 @@ describe('AuthService', () => {
   describe('refreshTokenPair', () => {
     it('throws and does not revoke when the account has no stored refresh token', async () => {
       await expect(
-        authService.refreshTokenPair(adminUser.id, 'STAFF', 'presented-token'),
+        authService.refreshTokenPair(adminUser.id, 'ADMIN', 'presented-token'),
       ).rejects.toThrow(UnauthorizedException);
       expect(prisma.adminUser.update).not.toHaveBeenCalled();
     });
@@ -239,7 +239,7 @@ describe('AuthService', () => {
       adminUser.hashedRefreshToken = await bcrypt.hash('a-different-token', 10);
 
       await expect(
-        authService.refreshTokenPair(adminUser.id, 'STAFF', 'presented-token'),
+        authService.refreshTokenPair(adminUser.id, 'ADMIN', 'presented-token'),
       ).rejects.toThrow(UnauthorizedException);
       expect(prisma.adminUser.update).toHaveBeenCalledWith({
         where: { id: adminUser.id },
@@ -255,7 +255,7 @@ describe('AuthService', () => {
 
       const result = await authService.refreshTokenPair(
         adminUser.id,
-        'STAFF',
+        'ADMIN',
         'valid-refresh-token',
       );
 
@@ -290,7 +290,7 @@ describe('AuthService', () => {
       await expect(
         authService.changePassword(
           adminUser.id,
-          'STAFF',
+          'ADMIN',
           'wrong-current-password',
           'a-new-password',
         ),
@@ -306,7 +306,7 @@ describe('AuthService', () => {
 
       await authService.changePassword(
         adminUser.id,
-        'STAFF',
+        'ADMIN',
         'correct-password',
         'a-new-password',
       );
@@ -349,7 +349,7 @@ describe('AuthService', () => {
       prisma.adminUser.findUnique.mockResolvedValue(adminUser);
 
       const account = await authService.loginWithGoogle(googleProfile);
-      expect(account).toMatchObject({ id: adminUser.id, role: 'STAFF' });
+      expect(account).toMatchObject({ id: adminUser.id, role: 'ADMIN' });
       expect(prisma.customer.create).not.toHaveBeenCalled();
     });
 

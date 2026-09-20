@@ -30,6 +30,13 @@ export class RolesGuard implements CanActivate {
       return true;
     }
 
+    // SUPER_ADMIN is a superset of ADMIN, stated once here rather than by listing both roles on
+    // every admin route — which is the version that goes wrong the first time someone adds a
+    // route and lists only one.
+    if (user?.role === 'SUPER_ADMIN' && requiredRoles.includes('ADMIN')) {
+      return true;
+    }
+
     // 404, not 403. A 403 confirms the route exists — someone probing with a low-privilege token
     // can map the entire admin surface by reading status codes alone, telling apart "no such
     // endpoint" from "an endpoint you may not use". Answering 404 makes those indistinguishable.

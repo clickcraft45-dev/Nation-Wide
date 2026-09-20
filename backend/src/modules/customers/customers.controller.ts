@@ -51,7 +51,7 @@ export class CustomersController {
   }
 
   @Post()
-  @Roles('STAFF', 'ADMIN')
+  @Roles('ADMIN')
   create(@Body() dto: CreateCustomerDto): Promise<PublicCustomer> {
     return this.customersService.create(dto);
   }
@@ -61,7 +61,7 @@ export class CustomersController {
   // Passing page/pageSize opts into skip/take and adds an X-Total-Count response header the
   // admin customers list page reads to render pagination controls.
   @Get()
-  @Roles('STAFF', 'ADMIN')
+  @Roles('ADMIN')
   async findAll(
     @Query() query: QueryCustomersDto,
     @Res({ passthrough: true }) res: Response,
@@ -72,7 +72,7 @@ export class CustomersController {
   }
 
   @Get(':id')
-  @Roles('STAFF', 'ADMIN')
+  @Roles('ADMIN')
   findOne(@Param('id') id: string): Promise<PublicCustomer> {
     return this.customersService.findOne(id);
   }
@@ -80,7 +80,7 @@ export class CustomersController {
   // Blocking or restoring access. Separate from update() because it is not an edit of their
   // details — it ends their sessions, and it is what staff reach for instead of deleting.
   @Patch(':id/active')
-  @Roles('STAFF', 'ADMIN')
+  @Roles('ADMIN')
   setActive(
     @Param('id') id: string,
     @Body() dto: SetCustomerActiveDto,
@@ -101,7 +101,7 @@ export class CustomersController {
   }
 
   @Patch(':id')
-  @Roles('STAFF', 'ADMIN')
+  @Roles('ADMIN')
   update(
     @Param('id') id: string,
     @Body() dto: UpdateCustomerDto,

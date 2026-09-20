@@ -22,7 +22,7 @@ import { UpdatePickupPartnerDto } from './dto/update-pickup-partner.dto';
 
 @Controller('admin/pickup-partners')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('STAFF', 'ADMIN')
+@Roles('ADMIN')
 export class PickupPartnersController {
   constructor(private readonly pickupPartnersService: PickupPartnersService) {}
 

@@ -28,7 +28,7 @@ class CreateB2bLinkDto {
 }
 
 // Issuing a link lets its holder place orders billed to that customer, so ADMIN only — the same
-// bar as company settings, not the STAFF bar used for day-to-day booking.
+// bar as company settings.
 @Controller('admin/customers/:customerId/b2b-links')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('ADMIN')

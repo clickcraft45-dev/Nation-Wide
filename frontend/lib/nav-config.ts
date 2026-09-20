@@ -20,6 +20,7 @@ import {
   Tag,
   ClipboardCheck,
   ClipboardList,
+  Crown,
   UserCog,
   ShieldCheck,
   CalendarClock,
@@ -51,7 +52,17 @@ export interface NavGroup {
 export const ADMIN_NAV_GROUPS: NavGroup[] = [
   {
     label: "Overview",
-    items: [{ label: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard }],
+    items: [
+      { label: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard },
+      // The whole company on one screen — payroll, margin and headcount together, which is why
+      // it is the one item an ordinary ADMIN does not see.
+      {
+        label: "Command Centre",
+        href: "/admin/command-centre",
+        icon: Crown,
+        roles: ["SUPER_ADMIN"],
+      },
+    ],
   },
   {
     label: "Operations",
@@ -114,11 +125,22 @@ export const ADMIN_NAV_GROUPS: NavGroup[] = [
 
 export const ADMIN_NAV_ITEMS: NavItem[] = ADMIN_NAV_GROUPS.flatMap((group) => group.items);
 
+/**
+ * Whether this role may see an item. SUPER_ADMIN is a superset of ADMIN — stated once here, the
+ * same rule the server's RolesGuard applies, so the menu and the API can never disagree about who
+ * sees what.
+ */
+export function canSeeNavItem(item: NavItem, role: Role): boolean {
+  if (!item.roles) return true;
+  if (item.roles.includes(role)) return true;
+  return role === "SUPER_ADMIN" && item.roles.includes("ADMIN");
+}
+
 export function filterNavGroupsByRole(groups: NavGroup[], role: Role): NavGroup[] {
   return groups
     .map((group) => ({
       ...group,
-      items: group.items.filter((item) => !item.roles || item.roles.includes(role)),
+      items: group.items.filter((item) => canSeeNavItem(item, role)),
     }))
     .filter((group) => group.items.length > 0);
 }

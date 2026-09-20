@@ -22,7 +22,7 @@ import { CreateAdminUserDto } from './dto/create-admin-user.dto';
 import { UpdateAdminUserDto } from './dto/update-admin-user.dto';
 import { ResetAdminUserPasswordDto } from './dto/reset-admin-user-password.dto';
 
-// ADMIN only — not STAFF, unlike most of this module. Anything less means a STAFF account can
+// ADMIN and above. Anything less means an account can
 // promote itself to ADMIN, which makes the role boundary decorative.
 @Controller('admin/users')
 @UseGuards(JwtAuthGuard, RolesGuard)

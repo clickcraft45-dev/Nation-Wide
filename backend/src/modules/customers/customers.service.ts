@@ -16,7 +16,7 @@ const UNIQUE_CONSTRAINT_VIOLATION = 'P2002';
 const RECORD_NOT_FOUND = 'P2025';
 
 // Deliberately excludes passwordHash / hashedRefreshToken — those must never leave this
-// service, not even to STAFF/ADMIN callers. Keep in sync with @nationwide/shared-types CustomerDto.
+// service, not even to ADMIN/ADMIN callers. Keep in sync with @nationwide/shared-types CustomerDto.
 const PUBLIC_CUSTOMER_SELECT = {
   id: true,
   name: true,

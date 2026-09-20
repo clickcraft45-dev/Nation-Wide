@@ -18,8 +18,8 @@ export class CreateAdminUserDto {
   // PICKUP_PARTNER is deliberately not accepted: those accounts carry different fields and are
   // created through /admin/pickup-partners. Allowing it here would let this endpoint mint
   // partners that bypass that flow's own rules.
-  @IsIn(['STAFF', 'ADMIN'])
-  role!: 'STAFF' | 'ADMIN';
+  @IsIn(['ADMIN', 'SUPER_ADMIN'])
+  role!: 'ADMIN' | 'SUPER_ADMIN';
 
   @IsOptional()
   @IsString()

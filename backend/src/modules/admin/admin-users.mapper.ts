@@ -11,7 +11,7 @@ export function toAdminUserDto(user: AdminUser): AdminUserDto {
     email: user.email,
     name: user.name,
     phone: user.phone,
-    role: user.role as 'STAFF' | 'ADMIN',
+    role: user.role as 'ADMIN' | 'SUPER_ADMIN',
     isActive: user.isActive,
     createdAt: user.createdAt.toISOString(),
     updatedAt: user.updatedAt.toISOString(),

@@ -37,7 +37,7 @@ describe('Rate Cards (e2e)', () => {
   async function signToken(
     sub: string,
     email: string,
-    role: 'STAFF' | 'ADMIN',
+    role: 'ADMIN' | 'ADMIN',
   ) {
     return jwtService.signAsync(
       { sub, email, role },
@@ -87,11 +87,11 @@ describe('Rate Cards (e2e)', () => {
       create: {
         email: TEST_STAFF_EMAIL,
         passwordHash: await bcrypt.hash(TEST_PASSWORD, 10),
-        role: 'STAFF',
+        role: 'ADMIN',
       },
     });
     staffId = staff.id;
-    staffAccessToken = await signToken(staff.id, staff.email, 'STAFF');
+    staffAccessToken = await signToken(staff.id, staff.email, 'ADMIN');
 
     const country = await prisma.country.upsert({
       where: { code: TEST_COUNTRY_CODE },

@@ -17,13 +17,13 @@ const ADMIN = {
   name: 'Admin',
   phone: null,
 };
-const STAFF = {
+const OTHER_ADMIN = {
   ...ADMIN,
-  id: 'staff-1',
-  email: 's@n.dev',
-  role: 'STAFF' as const,
+  id: 'admin-2',
+  email: 'second@n.dev',
+  role: 'ADMIN' as const,
 };
-const PARTNER = { ...ADMIN, id: 'p-1', role: 'PICKUP_PARTNER' as const };
+const PARTNER = { ...OTHER_ADMIN, id: 'p-1', role: 'PICKUP_PARTNER' as const };
 
 function harness(found: unknown, activeAdmins = 2) {
   const prisma = {
@@ -47,7 +47,7 @@ describe('AdminUsersService', () => {
     it('refuses to let an admin change their own role', async () => {
       const { service } = harness(ADMIN);
       await expect(
-        service.update('admin-1', { role: 'STAFF' }, 'admin-1'),
+        service.update('admin-1', { role: 'SUPER_ADMIN' }, 'admin-1'),
       ).rejects.toThrow(ForbiddenException);
     });
 
@@ -70,7 +70,7 @@ describe('AdminUsersService', () => {
     it('refuses to demote the last active admin', async () => {
       const { service } = harness(ADMIN, 1);
       await expect(
-        service.update('admin-1', { role: 'STAFF' }, 'other-admin'),
+        service.update('admin-1', { role: 'PICKUP_PARTNER' }, 'other-admin'),
       ).rejects.toThrow(BadRequestException);
     });
 
@@ -84,27 +84,27 @@ describe('AdminUsersService', () => {
     it('allows demoting an admin while another active admin remains', async () => {
       const { service } = harness(ADMIN, 2);
       await expect(
-        service.update('admin-1', { role: 'STAFF' }, 'other-admin'),
+        service.update('admin-1', { role: 'PICKUP_PARTNER' }, 'other-admin'),
       ).resolves.toBeDefined();
     });
 
-    it('does not consult the admin count when demoting a staff member', async () => {
-      const { prisma, service } = harness(STAFF, 1);
-      await service.update('staff-1', { isActive: false }, 'admin-1');
+    it('does not consult the admin count when deactivating a partner', async () => {
+      const { prisma, service } = harness(PARTNER, 1);
+      await service.update('p-1', { isActive: false }, 'admin-1');
       expect(prisma.adminUser.count).not.toHaveBeenCalled();
     });
   });
 
   describe('session revocation', () => {
     it('clears the refresh token when deactivating, so live sessions end', async () => {
-      const { prisma, service } = harness(STAFF);
+      const { prisma, service } = harness(ADMIN);
       await service.update('staff-1', { isActive: false }, 'admin-1');
       const { data } = prisma.adminUser.update.mock.calls[0][0];
       expect(data.hashedRefreshToken).toBeNull();
     });
 
     it('clears the refresh token on a password reset', async () => {
-      const { prisma, service } = harness(STAFF);
+      const { prisma, service } = harness(ADMIN);
       await service.resetPassword(
         'staff-1',
         'a-long-enough-password',
@@ -122,7 +122,7 @@ describe('AdminUsersService', () => {
     });
 
     it('leaves the refresh token alone on an ordinary edit', async () => {
-      const { prisma, service } = harness(STAFF);
+      const { prisma, service } = harness(ADMIN);
       await service.update('staff-1', { name: 'Renamed' }, 'admin-1');
       const { data } = prisma.adminUser.update.mock.calls[0][0];
       expect(data).not.toHaveProperty('hashedRefreshToken');
@@ -131,17 +131,17 @@ describe('AdminUsersService', () => {
 
   it('manages pickup partners too, so a role change is an edit rather than a recreate', async () => {
     const { prisma, service } = harness(PARTNER);
-    await service.update('p-1', { role: 'STAFF' }, 'admin-1');
+    await service.update('p-1', { role: 'ADMIN' }, 'admin-1');
     expect(prisma.adminUser.update).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({ role: 'STAFF' }),
+        data: expect.objectContaining({ role: 'ADMIN' }),
       }),
     );
   });
 
   describe('remove', () => {
     it('deletes an account that has no recorded activity', async () => {
-      const { prisma, service } = harness(STAFF);
+      const { prisma, service } = harness(ADMIN);
       await service.remove('staff-1', 'admin-1');
       expect(prisma.adminUser.delete).toHaveBeenCalledWith({
         where: { id: 'staff-1' },
@@ -149,7 +149,7 @@ describe('AdminUsersService', () => {
     });
 
     it('refuses an account with history, pointing at deactivation instead', async () => {
-      const { prisma, service } = harness(STAFF);
+      const { prisma, service } = harness(ADMIN);
       // What Postgres raises when a row is still referenced by any of the thirteen FKs.
       prisma.adminUser.delete.mockRejectedValue(
         new Prisma.PrismaClientKnownRequestError('FK violation', {

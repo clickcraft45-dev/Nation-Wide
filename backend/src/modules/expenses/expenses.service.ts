@@ -42,7 +42,11 @@ export class ExpensesService {
         take: filters.take ?? 50,
         include: { recordedBy: RECORDED_BY },
       }),
-      this.prisma.expense.aggregate({ where, _sum: { amount: true }, _count: true }),
+      this.prisma.expense.aggregate({
+        where,
+        _sum: { amount: true },
+        _count: true,
+      }),
       this.prisma.expense.groupBy({
         by: ['category'],
         where,
@@ -55,10 +59,15 @@ export class ExpensesService {
       total: aggregate._count,
       totalAmount: aggregate._sum.amount ?? 0,
       byCategory: grouped
-        .map((row: { category: ExpenseCategory; _sum: { amount: number | null } }) => ({
-          category: row.category,
-          amount: row._sum.amount ?? 0,
-        }))
+        .map(
+          (row: {
+            category: ExpenseCategory;
+            _sum: { amount: number | null };
+          }) => ({
+            category: row.category,
+            amount: row._sum.amount ?? 0,
+          }),
+        )
         .sort((a, b) => b.amount - a.amount),
     };
   }

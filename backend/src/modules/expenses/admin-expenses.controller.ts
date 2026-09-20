@@ -22,7 +22,7 @@ import { CreateExpenseDto } from './dto/create-expense.dto';
 import { QueryExpensesDto } from './dto/query-expenses.dto';
 
 // ADMIN only, matching GST Invoices: what the company spends is not operational data, and the
-// STAFF accounts that work orders have no reason to see payroll or rent.
+// Accounts that only work orders have no reason to see payroll or rent.
 @Controller('admin/expenses')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('ADMIN')

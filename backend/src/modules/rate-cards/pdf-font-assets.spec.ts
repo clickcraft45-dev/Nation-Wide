@@ -23,7 +23,9 @@ describe('PDF font assets', () => {
   it.each(['mark-black.png', 'wordmark-white.png'])(
     'ships brand/%s where brand-assets.ts looks for it',
     (file) => {
-      expect(existsSync(join(process.cwd(), 'assets', 'brand', file))).toBe(true);
+      expect(existsSync(join(process.cwd(), 'assets', 'brand', file))).toBe(
+        true,
+      );
     },
   );
 });

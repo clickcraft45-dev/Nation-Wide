@@ -63,13 +63,13 @@ export class AddressBookController {
   }
 
   @Get(':id/address-book')
-  @Roles('STAFF', 'ADMIN')
+  @Roles('ADMIN')
   get(@Param('id', ParseUUIDPipe) id: string): Promise<AddressBookDto> {
     return this.addressBook.get(id);
   }
 
   @Post(':id/saved-items')
-  @Roles('STAFF', 'ADMIN')
+  @Roles('ADMIN')
   create(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: SaveItemDto,
@@ -78,7 +78,7 @@ export class AddressBookController {
   }
 
   @Patch(':id/saved-items/:itemId')
-  @Roles('STAFF', 'ADMIN')
+  @Roles('ADMIN')
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Param('itemId', ParseUUIDPipe) itemId: string,
@@ -88,7 +88,7 @@ export class AddressBookController {
   }
 
   @Delete(':id/saved-items/:itemId')
-  @Roles('STAFF', 'ADMIN')
+  @Roles('ADMIN')
   @HttpCode(204)
   remove(
     @Param('id', ParseUUIDPipe) id: string,

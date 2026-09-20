@@ -20,6 +20,7 @@ import { PickupPartnersController } from './pickup-partners.controller';
 import { PickupPartnersService } from './pickup-partners.service';
 import { AdminPickupRequestsController } from './admin-pickup-requests.controller';
 import { AdminService } from './admin.service';
+import { CommandCentreService } from './command-centre.service';
 import { ShipmentsModule } from '../shipments/shipments.module';
 import { QuotesModule } from '../quotes/quotes.module';
 import { PickupsModule } from '../pickups/pickups.module';
@@ -61,7 +62,12 @@ import { MailModule } from '../mail/mail.module';
     AdminUsersController,
     AdminPickupRequestsController,
   ],
-  providers: [AdminService, PickupPartnersService, AdminUsersService],
+  providers: [
+    AdminService,
+    CommandCentreService,
+    PickupPartnersService,
+    AdminUsersService,
+  ],
   // PartnerApplicationsService approves an application by calling straight into this, so an
   // approved partner is provisioned by the same code path as a hand-created one.
   exports: [PickupPartnersService],

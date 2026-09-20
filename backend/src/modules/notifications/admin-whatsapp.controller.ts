@@ -100,7 +100,7 @@ export class SendWhatsAppTextDto {
  * so it gets the same retries, lands in the same Notification log, and uses the same adapter
  * rule: an approved template when one is configured, free-form otherwise.
  *
- * ADMIN only, unlike the mail screen's STAFF+ADMIN. One click here can message five hundred
+ * ADMIN only. One click here can message five hundred
  * customers from the company's number, and a low quality rating from that is not undone by
  * deleting anything.
  *

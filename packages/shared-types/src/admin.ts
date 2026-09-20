@@ -70,14 +70,14 @@ export interface DashboardSummaryDto {
 // ---------------------------------------------------------------------------
 
 /**
- * A STAFF or ADMIN account. PICKUP_PARTNER rows live in the same table but are managed through
+ * An ADMIN or SUPER_ADMIN account. PICKUP_PARTNER rows live in the same table but are managed through
  * their own endpoints (see PickupPartnerDto) — the two have different lifecycles and different
  * people administer them.
  *
  * There is deliberately no password field: the hash never leaves the backend.
  */
 /** Every internal role. CUSTOMER is excluded — customers are not AdminUser rows. */
-export type ManagedAdminRole = 'STAFF' | 'ADMIN' | 'PICKUP_PARTNER';
+export type ManagedAdminRole = 'ADMIN' | 'SUPER_ADMIN' | 'PICKUP_PARTNER';
 
 export interface AdminUserDto {
   id: string;
@@ -93,9 +93,9 @@ export interface AdminUserDto {
 export interface CreateAdminUserDto {
   email: string;
   password: string;
-  // Creation stays STAFF/ADMIN: partner accounts come from the application-approval flow, which
+  // Creation stays ADMIN/SUPER_ADMIN: partner accounts come from the application-approval flow, which
   // records who approved whom. An existing account can still be moved to PICKUP_PARTNER by edit.
-  role: 'STAFF' | 'ADMIN';
+  role: 'ADMIN' | 'SUPER_ADMIN';
   name?: string;
   phone?: string;
 }

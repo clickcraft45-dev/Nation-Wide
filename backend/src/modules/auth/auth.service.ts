@@ -24,7 +24,7 @@ export interface TokenPair {
 }
 
 /**
- * A unified view over the two tables that can authenticate — AdminUser (STAFF/ADMIN) and
+ * A unified view over the two tables that can authenticate — AdminUser (ADMIN/ADMIN) and
  * Customer (CUSTOMER). The single-root-login flow needs to look a person up by email without
  * knowing in advance which table they live in; this shape lets the rest of AuthService stay
  * table-agnostic once an account is resolved.

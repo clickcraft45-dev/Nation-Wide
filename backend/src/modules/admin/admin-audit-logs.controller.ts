@@ -8,7 +8,7 @@ import { QueryAuditLogsDto } from './dto/query-audit-logs.dto';
 
 @Controller('admin/audit-logs')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('STAFF', 'ADMIN')
+@Roles('ADMIN')
 export class AdminAuditLogsController {
   constructor(private readonly adminService: AdminService) {}
 

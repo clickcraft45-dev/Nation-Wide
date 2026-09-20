@@ -14,8 +14,8 @@ export class UpdateAdminUserDto {
   // purpose: customers live in the customers table, so an AdminUser holding that role would be
   // an account that can authenticate but has no working surface anywhere in the app.
   @IsOptional()
-  @IsIn(['STAFF', 'ADMIN', 'PICKUP_PARTNER'])
-  role?: 'STAFF' | 'ADMIN' | 'PICKUP_PARTNER';
+  @IsIn(['ADMIN', 'SUPER_ADMIN', 'PICKUP_PARTNER'])
+  role?: 'ADMIN' | 'SUPER_ADMIN' | 'PICKUP_PARTNER';
 
   @IsOptional()
   @IsBoolean()

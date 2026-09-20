@@ -22,7 +22,7 @@ export default function PartnerDashboardLayout({ children }: { children: React.R
       router.replace(`/login?redirect=${encodeURIComponent(pathname)}`);
     } else if (user.role === "CUSTOMER") {
       router.replace("/dashboard");
-    } else if (user.role === "STAFF" || user.role === "ADMIN") {
+    } else if (user.role === "ADMIN" || user.role === "SUPER_ADMIN") {
       router.replace("/admin/dashboard");
     }
   }, [isLoading, user, router, pathname]);

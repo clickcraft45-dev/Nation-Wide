@@ -28,7 +28,7 @@ import {
  */
 @Controller('admin/partner-applications')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('STAFF', 'ADMIN')
+@Roles('ADMIN')
 export class AdminPartnerApplicationsController {
   constructor(private readonly service: PartnerApplicationsService) {}
 

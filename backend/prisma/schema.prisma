@@ -18,10 +18,13 @@ enum OrderStatus {
   COMPLETED
 }
 
+/// SUPER_ADMIN is a strict superset of ADMIN: the guard grants it everything ADMIN may do (see
+/// RolesGuard), plus the company-wide dashboards that are its own. STAFF is gone — every account
+/// that had it became an ADMIN, because the split was never used in practice.
 enum AdminRole {
   CUSTOMER
-  STAFF
   ADMIN
+  SUPER_ADMIN
   PICKUP_PARTNER
 }
 
@@ -777,7 +780,7 @@ model AdminUser {
   id                 String    @id @default(uuid())
   email              String    @unique
   passwordHash       String    @map("password_hash")
-  role               AdminRole @default(STAFF)
+  role               AdminRole @default(ADMIN)
   isActive           Boolean   @default(true) @map("is_active")
   hashedRefreshToken String?   @map("hashed_refresh_token")
   // Nullable — only populated for PICKUP_PARTNER accounts today (STAFF/ADMIN rows stay NULL),

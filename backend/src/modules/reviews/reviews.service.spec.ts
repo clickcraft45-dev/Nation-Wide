@@ -5,7 +5,9 @@ import { ReviewsService } from './reviews.service';
 const SHIPMENT = {
   id: 'ship-1',
   internalTrackingNumber: 'NW-2026-00000042',
-  order: { customer: { id: 'cust-1', name: 'Ravi Kumar', email: 'ravi@example.com' } },
+  order: {
+    customer: { id: 'cust-1', name: 'Ravi Kumar', email: 'ravi@example.com' },
+  },
 };
 
 describe('ReviewsService', () => {
@@ -32,9 +34,13 @@ describe('ReviewsService', () => {
       shipment: { findUnique: jest.fn().mockResolvedValue(SHIPMENT) },
     };
     mail = { send: jest.fn().mockResolvedValue(true) };
-    service = new ReviewsService(prisma as never, mail as never, {
-      get: jest.fn().mockReturnValue('https://app.test'),
-    } as never);
+    service = new ReviewsService(
+      prisma as never,
+      mail as never,
+      {
+        get: jest.fn().mockReturnValue('https://app.test'),
+      } as never,
+    );
   });
 
   describe('requestFeedback', () => {
@@ -48,7 +54,9 @@ describe('ReviewsService', () => {
       expect(token).toBeTruthy();
       expect(stored.tokenHash).not.toBe(token);
       expect(stored.tokenHash).toBe(
-        createHash('sha256').update(token as string).digest('hex'),
+        createHash('sha256')
+          .update(token as string)
+          .digest('hex'),
       );
     });
 
@@ -89,7 +97,10 @@ describe('ReviewsService', () => {
     it('records the rating and leaves it unapproved', async () => {
       prisma.review.findUnique.mockResolvedValue(invite);
 
-      await service.submit('raw-token', { rating: 5, comment: 'Great service' });
+      await service.submit('raw-token', {
+        rating: 5,
+        comment: 'Great service',
+      });
 
       const { data } = prisma.review.update.mock.calls[0][0];
       expect(data.rating).toBe(5);
@@ -103,9 +114,9 @@ describe('ReviewsService', () => {
         ...invite,
         submittedAt: new Date(),
       });
-      await expect(
-        service.submit('raw', { rating: 1 }),
-      ).rejects.toBeInstanceOf(BadRequestException);
+      await expect(service.submit('raw', { rating: 1 })).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
     });
 
     it('refuses an expired link', async () => {

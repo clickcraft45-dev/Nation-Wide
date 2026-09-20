@@ -46,7 +46,7 @@ export class QuotesController {
   // quote wizard (AdminQuotesController) — same stateless lookup, same pricing engine, no separate
   // calculation for staff.
   @Get('preview')
-  @Roles('CUSTOMER', 'STAFF', 'ADMIN')
+  @Roles('CUSTOMER', 'ADMIN')
   async preview(
     @Query() query: QuotePreviewQueryDto,
   ): Promise<QuotePreviewResultDto> {

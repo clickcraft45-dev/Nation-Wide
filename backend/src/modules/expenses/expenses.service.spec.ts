@@ -20,7 +20,9 @@ describe('ExpensesService', () => {
       expense: {
         findMany: jest.fn().mockResolvedValue([]),
         findUnique: jest.fn().mockResolvedValue({ id: 'exp-1' }),
-        aggregate: jest.fn().mockResolvedValue({ _sum: { amount: 7500 }, _count: 3 }),
+        aggregate: jest
+          .fn()
+          .mockResolvedValue({ _sum: { amount: 7500 }, _count: 3 }),
         groupBy: jest.fn().mockResolvedValue([
           { category: 'FUEL', _sum: { amount: 2500 } },
           { category: 'RENT', _sum: { amount: 5000 } },
@@ -55,19 +57,25 @@ describe('ExpensesService', () => {
 
     const where = prisma.expense.findMany.mock.calls[0][0].where;
     expect(where.OR).toHaveLength(3);
-    expect(where.OR[0]).toEqual({ paidTo: { contains: 'indian oil', mode: 'insensitive' } });
+    expect(where.OR[0]).toEqual({
+      paidTo: { contains: 'indian oil', mode: 'insensitive' },
+    });
   });
 
   it('stamps the recording admin on create', async () => {
     await service.create({ amount: 100 } as never, 'admin-9');
 
-    expect(prisma.expense.create.mock.calls[0][0].data.recordedByAdminId).toBe('admin-9');
+    expect(prisma.expense.create.mock.calls[0][0].data.recordedByAdminId).toBe(
+      'admin-9',
+    );
   });
 
   it('refuses to update or delete a row that is not there', async () => {
     prisma.expense.findUnique.mockResolvedValue(null);
 
-    await expect(service.update('nope', {} as never)).rejects.toThrow(NotFoundException);
+    await expect(service.update('nope', {} as never)).rejects.toThrow(
+      NotFoundException,
+    );
     await expect(service.remove('nope')).rejects.toThrow(NotFoundException);
     expect(prisma.expense.delete).not.toHaveBeenCalled();
   });

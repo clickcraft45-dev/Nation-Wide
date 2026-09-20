@@ -69,7 +69,7 @@ describe('Auth (e2e)', () => {
       create: {
         email: TEST_ADMIN_EMAIL,
         passwordHash: await bcrypt.hash(TEST_ADMIN_PASSWORD, 10),
-        role: 'STAFF',
+        role: 'ADMIN',
       },
     });
 
@@ -79,7 +79,7 @@ describe('Auth (e2e)', () => {
       create: {
         email: TEST_DISABLED_EMAIL,
         passwordHash: await bcrypt.hash(TEST_DISABLED_PASSWORD, 10),
-        role: 'STAFF',
+        role: 'ADMIN',
         isActive: false,
       },
     });
@@ -92,7 +92,7 @@ describe('Auth (e2e)', () => {
       create: {
         email: TEST_PW_CHANGE_EMAIL,
         passwordHash: await bcrypt.hash(TEST_PW_CHANGE_OLD_PASSWORD, 10),
-        role: 'STAFF',
+        role: 'ADMIN',
       },
     });
 
@@ -154,7 +154,7 @@ describe('Auth (e2e)', () => {
     expect(loginBody.accessToken).toEqual(expect.any(String));
     expect(loginBody.user).toMatchObject({
       email: TEST_ADMIN_EMAIL,
-      role: 'STAFF',
+      role: 'ADMIN',
     });
     expect(loginRes.headers['set-cookie']?.[0]).toMatch(/refresh_token=/);
 

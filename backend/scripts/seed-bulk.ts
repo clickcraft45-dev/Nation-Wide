@@ -310,7 +310,7 @@ async function loadReference() {
   return {
     providers: [...byId.values()],
     countries: priceable,
-    adminIds: admins.filter((a) => a.role === 'ADMIN' || a.role === 'STAFF').map((a) => a.id),
+    adminIds: admins.filter((a) => a.role === 'ADMIN' || a.role === 'SUPER_ADMIN').map((a) => a.id),
     partnerIds: admins.filter((a) => a.role === 'PICKUP_PARTNER').map((a) => a.id),
     statusIdByCode: new Map(statuses.map((s) => [s.code, s.id])),
     iclProviderId: iclProvider.id,

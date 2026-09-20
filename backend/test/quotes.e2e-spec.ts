@@ -64,7 +64,7 @@ describe('Quotes (e2e)', () => {
   async function signToken(
     sub: string,
     email: string,
-    role: 'CUSTOMER' | 'STAFF' | 'ADMIN',
+    role: 'CUSTOMER' | 'ADMIN' | 'ADMIN',
   ) {
     return jwtService.signAsync(
       { sub, email, role },
@@ -112,11 +112,11 @@ describe('Quotes (e2e)', () => {
       create: {
         email: TEST_STAFF_EMAIL,
         passwordHash: await bcrypt.hash(TEST_STAFF_PASSWORD, 10),
-        role: 'STAFF',
+        role: 'ADMIN',
       },
     });
     staffId = staff.id;
-    staffAccessToken = await signToken(staff.id, staff.email, 'STAFF');
+    staffAccessToken = await signToken(staff.id, staff.email, 'ADMIN');
 
     await prisma.customer.deleteMany({ where: { phone: TEST_CUSTOMER_PHONE } });
     const customer = await prisma.customer.create({

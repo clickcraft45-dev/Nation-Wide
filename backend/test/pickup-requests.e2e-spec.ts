@@ -65,7 +65,7 @@ describe('Pickup Requests (e2e)', () => {
   async function signToken(
     sub: string,
     email: string,
-    role: 'CUSTOMER' | 'STAFF' | 'ADMIN' | 'PICKUP_PARTNER',
+    role: 'CUSTOMER' | 'ADMIN' | 'ADMIN' | 'PICKUP_PARTNER',
   ) {
     return jwtService.signAsync(
       { sub, email, role },
@@ -103,11 +103,11 @@ describe('Pickup Requests (e2e)', () => {
       create: {
         email: TEST_STAFF_EMAIL,
         passwordHash: await bcrypt.hash(TEST_PASSWORD, 10),
-        role: 'STAFF',
+        role: 'ADMIN',
       },
     });
     staffId = staff.id;
-    staffAccessToken = await signToken(staff.id, staff.email, 'STAFF');
+    staffAccessToken = await signToken(staff.id, staff.email, 'ADMIN');
 
     const partner = await prisma.adminUser.upsert({
       where: { email: TEST_PARTNER_EMAIL },

@@ -47,7 +47,7 @@ class ResolveMapsUrlDto {
 // of a partner; the service refuses them on any other pickup (findOneForPartner's asAdmin).
 @Controller('admin/pickup-requests')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('STAFF', 'ADMIN')
+@Roles('ADMIN')
 export class AdminPickupRequestsController {
   constructor(private readonly pickupRequestsService: PickupRequestsService) {}
 

@@ -11,7 +11,7 @@ import { UpdateOrderPaymentDto } from './dto/update-order-payment.dto';
 
 @Controller('admin/orders')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('STAFF', 'ADMIN')
+@Roles('ADMIN')
 export class AdminOrdersController {
   constructor(private readonly ordersService: OrdersService) {}
 

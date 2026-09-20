@@ -25,7 +25,7 @@ import { SelectOptionDto } from '../quotes/dto/select-option.dto';
 
 @Controller('admin/quotes')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('STAFF', 'ADMIN')
+@Roles('ADMIN')
 export class AdminQuotesController {
   constructor(private readonly quotesService: QuotesService) {}
 

@@ -12,7 +12,7 @@ import { OverrideTrackingStatusDto } from './dto/override-tracking-status.dto';
 
 @Controller('admin/shipments')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('STAFF', 'ADMIN')
+@Roles('ADMIN')
 export class AdminShipmentsController {
   constructor(private readonly shipmentsService: ShipmentsService) {}
 

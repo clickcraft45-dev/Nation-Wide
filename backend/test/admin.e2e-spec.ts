@@ -17,8 +17,8 @@ import { PrismaService } from '../src/database/prisma.service';
 import { RedisService } from '../src/database/redis.service';
 import { nextSequenceNumber } from '../src/modules/shipments/sequence';
 
-const TEST_STAFF_EMAIL = 'e2e-admin-staff@nationwide.dev';
-const TEST_STAFF_PASSWORD = 'CorrectHorseBattery1';
+const TEST_ADMIN_EMAIL = 'e2e-admin-staff@nationwide.dev';
+const TEST_ADMIN_PASSWORD = 'CorrectHorseBattery1';
 const TEST_CUSTOMER_PHONE = '+919876500004';
 const TEST_PROVIDER_CODE = 'ICL';
 const TEST_TRACKING_NUMBERS = ['NW-ADMIN-E2E-1', 'NW-ADMIN-E2E-2'];
@@ -84,12 +84,12 @@ describe('Admin (e2e)', () => {
     }
 
     const staff = await prisma.adminUser.upsert({
-      where: { email: TEST_STAFF_EMAIL },
+      where: { email: TEST_ADMIN_EMAIL },
       update: {},
       create: {
-        email: TEST_STAFF_EMAIL,
-        passwordHash: await bcrypt.hash(TEST_STAFF_PASSWORD, 10),
-        role: 'STAFF',
+        email: TEST_ADMIN_EMAIL,
+        passwordHash: await bcrypt.hash(TEST_ADMIN_PASSWORD, 10),
+        role: 'ADMIN',
       },
     });
     staffAccessToken = await jwtService.signAsync(
@@ -134,7 +134,7 @@ describe('Admin (e2e)', () => {
   afterAll(async () => {
     await redis.del(...TEST_TRACKING_NUMBERS.map((n) => `tracking:${n}`));
     const staff = await prisma.adminUser.findUnique({
-      where: { email: TEST_STAFF_EMAIL },
+      where: { email: TEST_ADMIN_EMAIL },
     });
     if (staff) {
       await prisma.auditLog.deleteMany({ where: { actorId: staff.id } });
@@ -149,7 +149,7 @@ describe('Admin (e2e)', () => {
     await prisma.order.deleteMany({ where: { customerId } });
     await prisma.notification.deleteMany({ where: { customerId } });
     await prisma.customer.deleteMany({ where: { id: customerId } });
-    await prisma.adminUser.deleteMany({ where: { email: TEST_STAFF_EMAIL } });
+    await prisma.adminUser.deleteMany({ where: { email: TEST_ADMIN_EMAIL } });
     await app.close();
   });
 
@@ -300,7 +300,7 @@ describe('Admin (e2e)', () => {
       expect(actions).toContain('MAP_EXTERNAL_TRACKING_NUMBER');
       expect(actions).toContain('OVERRIDE_TRACKING_STATUS');
       expect(
-        auditEntries.every((entry) => entry.actorEmail === TEST_STAFF_EMAIL),
+        auditEntries.every((entry) => entry.actorEmail === TEST_ADMIN_EMAIL),
       ).toBe(true);
     },
   );

@@ -23,7 +23,7 @@ import { UpdateOrderDto } from './dto/update-order.dto';
 import { QueryOrdersDto } from './dto/query-orders.dto';
 import type { JwtPayload } from '../auth/types/jwt-payload.type';
 
-// Tighter than the lenient 300/min global default — a compromised/careless STAFF+ account
+// Tighter than the lenient 300/min global default — a compromised/careless admin account
 // scripting order creation would otherwise be able to spam real DB writes at the global rate.
 const ORDER_CREATE_THROTTLE = { default: { limit: 10, ttl: 60_000 } };
 
@@ -43,7 +43,7 @@ export class OrdersController {
 
   @Throttle(ORDER_CREATE_THROTTLE)
   @Post()
-  @Roles('STAFF', 'ADMIN')
+  @Roles('ADMIN')
   async create(@Body() dto: CreateOrderDto): Promise<OrderDto> {
     const order = await this.ordersService.create(dto);
     return toOrderDto(order);
@@ -53,7 +53,7 @@ export class OrdersController {
   // every row). Passing page/pageSize opts into skip/take and adds an X-Total-Count header the
   // admin orders list page reads to render pagination controls.
   @Get()
-  @Roles('STAFF', 'ADMIN')
+  @Roles('ADMIN')
   async findAll(
     @Query() query: QueryOrdersDto,
     @Res({ passthrough: true }) res: Response,
@@ -64,14 +64,14 @@ export class OrdersController {
   }
 
   @Get(':id')
-  @Roles('STAFF', 'ADMIN')
+  @Roles('ADMIN')
   async findOne(@Param('id') id: string): Promise<OrderDto> {
     const order = await this.ordersService.findOne(id);
     return toOrderDto(order);
   }
 
   @Patch(':id')
-  @Roles('STAFF', 'ADMIN')
+  @Roles('ADMIN')
   async update(
     @Param('id') id: string,
     @Body() dto: UpdateOrderDto,

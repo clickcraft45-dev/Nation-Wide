@@ -126,7 +126,7 @@ describe('Notifications (e2e)', () => {
       create: {
         email: TEST_STAFF_EMAIL,
         passwordHash: await bcrypt.hash(TEST_STAFF_PASSWORD, 10),
-        role: 'STAFF',
+        role: 'ADMIN',
       },
     });
     staffAccessToken = await jwtService.signAsync(

@@ -18,7 +18,7 @@ import { UpdatePickupPartnerDto } from './dto/update-pickup-partner.dto';
 
 const PASSWORD_HASH_ROUNDS = 10;
 
-// There is no general AdminUser account-management endpoint anywhere in this codebase (STAFF/
+// There is no general AdminUser account-management endpoint anywhere in this codebase (ADMIN/
 // ADMIN rows are only ever created via the seed script) — this is a minimal, purpose-built one
 // scoped to role: PICKUP_PARTNER only, required so field executives can actually be onboarded.
 @Injectable()

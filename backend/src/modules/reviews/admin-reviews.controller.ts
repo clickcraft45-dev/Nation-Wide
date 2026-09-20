@@ -15,7 +15,7 @@ export class SetApprovedDto {
 /** Moderation. Nothing a customer writes reaches the homepage until it passes through here. */
 @Controller('admin/reviews')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('STAFF', 'ADMIN')
+@Roles('ADMIN')
 export class AdminReviewsController {
   constructor(private readonly reviews: ReviewsService) {}
 

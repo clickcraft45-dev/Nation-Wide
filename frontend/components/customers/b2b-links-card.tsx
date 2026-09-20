@@ -74,7 +74,7 @@ export function B2bLinksCard({
     apiClient
       .get<B2bLinkDto[]>(base)
       .then(setLinks)
-      // A STAFF user may read this page but only ADMIN may manage links; an empty card is the
+      // Only the top roles may manage links; an empty card is the
       // right outcome there, not an error banner.
       .catch(() => setLinks([]));
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -27,7 +27,7 @@ import { toRateDto } from '../pricing/rate.mapper';
 import { CreateRateProviderDto } from '../pricing/dto/create-rate-provider.dto';
 import { UpdateRateProviderDto } from '../pricing/dto/update-rate-provider.dto';
 
-// ADMIN only, not STAFF+ADMIN like the rest of this admin panel — rate providers feed directly
+// Rate providers feed directly
 // into the pricing engine, which controls company margin (Section: Rate card RBAC).
 @Controller('admin/rate-providers')
 @UseGuards(JwtAuthGuard, RolesGuard)

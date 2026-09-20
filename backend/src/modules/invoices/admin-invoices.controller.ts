@@ -28,7 +28,7 @@ import { QueryInvoicesDto } from './dto/query-invoices.dto';
 import { CreateCustomInvoiceDto } from './dto/create-custom-invoice.dto';
 
 // ADMIN only. Issuing a tax invoice is a financial act with a permanent, numbered record — the
-// same bar as pricing, not the wider STAFF access the operational screens get.
+// same bar as pricing.
 @Controller('admin/invoices')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('ADMIN')

@@ -23,10 +23,10 @@ import { AdminUserDialog } from "@/components/admin-users/admin-user-dialog";
 import { EditAdminUserDialog } from "@/components/admin-users/edit-admin-user-dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
-const ROLE_OPTIONS: ManagedAdminRole[] = ['STAFF', 'ADMIN', 'PICKUP_PARTNER'];
+const ROLE_OPTIONS: ManagedAdminRole[] = ['ADMIN', 'SUPER_ADMIN', 'PICKUP_PARTNER'];
 
 const ROLE_LABELS: Record<ManagedAdminRole, string> = {
-  STAFF: 'Staff',
+  SUPER_ADMIN: 'Super Admin',
   ADMIN: 'Admin',
   PICKUP_PARTNER: 'Pickup partner',
 };

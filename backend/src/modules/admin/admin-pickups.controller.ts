@@ -20,7 +20,7 @@ import { UpdatePickupStatusDto } from '../pickups/dto/update-pickup-status.dto';
 
 @Controller('admin/pickups')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('STAFF', 'ADMIN')
+@Roles('ADMIN')
 export class AdminPickupsController {
   constructor(private readonly pickupsService: PickupsService) {}
 

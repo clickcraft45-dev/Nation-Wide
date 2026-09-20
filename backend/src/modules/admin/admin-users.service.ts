@@ -24,12 +24,12 @@ const PASSWORD_HASH_ROUNDS = 10;
  * that role would be able to authenticate with no usable surface anywhere in the app.
  */
 const MANAGED_ROLES: Prisma.EnumAdminRoleFilter = {
-  in: ['STAFF', 'ADMIN', 'PICKUP_PARTNER'],
+  in: ['ADMIN', 'SUPER_ADMIN', 'PICKUP_PARTNER'],
 };
 
 /**
- * Staff/admin account management — the gap PickupPartnersService's own comment names: until now
- * STAFF/ADMIN rows could only be created by the seed script, and a role could never be changed.
+ * Admin account management — the gap PickupPartnersService's own comment names: until now
+ * Admin rows could only be created by the seed script, and a role could never be changed.
  *
  * DELETE exists only for accounts that never did anything. AdminUser is the target of thirteen
  * foreign keys (audit logs, quoted quotes, assigned pickups, issued invoices, ...) and Postgres
@@ -50,7 +50,7 @@ export class AdminUsersService {
   }
 
   async create(dto: CreateAdminUserDto, actorId: string): Promise<AdminUser> {
-    // Checked against the whole table, not just STAFF/ADMIN: email is globally unique, so a
+    // Checked against the whole table, not just admin rows: email is globally unique, so a
     // clash with a customer-facing pickup partner must report the conflict rather than a
     // confusing P2002 from Prisma.
     const existing = await this.prisma.adminUser.findUnique({
@@ -105,10 +105,16 @@ export class AdminUsersService {
       }
     }
 
-    // Losing the last active admin locks everyone out just as effectively as self-demotion.
-    const losingAdmin =
-      existing.role === 'ADMIN' &&
-      ((dto.role && dto.role !== 'ADMIN') || dto.isActive === false);
+    // Losing the last privileged account locks everyone out just as effectively as self-demotion.
+    // SUPER_ADMIN counts here too: it is the role that can reach everything, so demoting the last
+    // one is the very thing this guard exists to refuse.
+    const isPrivileged =
+      existing.role === 'ADMIN' || existing.role === 'SUPER_ADMIN';
+    const demoted =
+      dto.role !== undefined &&
+      dto.role !== 'ADMIN' &&
+      dto.role !== 'SUPER_ADMIN';
+    const losingAdmin = isPrivileged && (demoted || dto.isActive === false);
     if (losingAdmin && (await this.activeAdminCount()) <= 1) {
       throw new BadRequestException(
         'This is the last active admin — promote another admin first',
@@ -173,7 +179,9 @@ export class AdminUsersService {
     if (id === actorId) {
       throw new ForbiddenException('You cannot delete your own account');
     }
-    if (existing.role === 'ADMIN' && (await this.activeAdminCount()) <= 1) {
+    const privileged =
+      existing.role === 'ADMIN' || existing.role === 'SUPER_ADMIN';
+    if (privileged && (await this.activeAdminCount()) <= 1) {
       throw new BadRequestException(
         'This is the last active admin — promote another admin first',
       );
@@ -202,9 +210,11 @@ export class AdminUsersService {
     );
   }
 
+  // The account that can still reach everything. Deactivating or demoting the last one locks the
+  // company out of its own dashboards, and there is no way back in through the app.
   private activeAdminCount(): Promise<number> {
     return this.prisma.adminUser.count({
-      where: { role: 'ADMIN', isActive: true },
+      where: { role: { in: ['ADMIN', 'SUPER_ADMIN'] }, isActive: true },
     });
   }
 

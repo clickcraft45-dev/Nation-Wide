@@ -26,7 +26,7 @@ export function AdminUserDialog({
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
-  const [role, setRole] = useState<"STAFF" | "ADMIN">("STAFF");
+  const [role, setRole] = useState<"ADMIN" | "SUPER_ADMIN">("ADMIN");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { showToast } = useToast();
@@ -55,7 +55,7 @@ export function AdminUserDialog({
       setPassword("");
       setName("");
       setPhone("");
-      setRole("STAFF");
+      setRole("ADMIN");
     } catch (err) {
       setError(
         err instanceof ApiError && err.status === 400
@@ -95,9 +95,9 @@ export function AdminUserDialog({
               <NativeSelect
                 id="user-role"
                 value={role}
-                onChange={(e) => setRole(e.target.value as "STAFF" | "ADMIN")}
+                onChange={(e) => setRole(e.target.value as "ADMIN" | "SUPER_ADMIN")}
               >
-                <option value="STAFF">Staff</option>
+                <option value="SUPER_ADMIN">Super Admin</option>
                 <option value="ADMIN">Admin</option>
               </NativeSelect>
               <p className="text-xs text-muted-foreground">

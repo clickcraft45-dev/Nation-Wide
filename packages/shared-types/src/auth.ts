@@ -1,4 +1,6 @@
-export const ROLES = ["CUSTOMER", "STAFF", "ADMIN", "PICKUP_PARTNER"] as const;
+// SUPER_ADMIN sits above ADMIN and may do everything it can (see RolesGuard). STAFF was
+// retired — those accounts are ADMINs now.
+export const ROLES = ["CUSTOMER", "ADMIN", "SUPER_ADMIN", "PICKUP_PARTNER"] as const;
 
 export type Role = (typeof ROLES)[number];
 

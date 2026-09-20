@@ -679,7 +679,7 @@ describe('PickupRequestsService', () => {
     });
 
     it('rejects when the target account is not a PICKUP_PARTNER', async () => {
-      prisma.adminUser.findUnique.mockResolvedValue({ id: 'x', role: 'STAFF' });
+      prisma.adminUser.findUnique.mockResolvedValue({ id: 'x', role: 'ADMIN' });
       await expect(
         service.assignPartner('pr-1', 'x', 'admin-1'),
       ).rejects.toThrow(NotFoundException);

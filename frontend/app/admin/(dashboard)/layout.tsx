@@ -5,7 +5,12 @@ import { Spinner } from "@/components/ui/spinner";
 import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "@/state/auth-context";
 import { DashboardShell } from "@/components/layout/dashboard-shell";
-import { ADMIN_NAV_ITEMS, ADMIN_NAV_GROUPS, filterNavGroupsByRole } from "@/lib/nav-config";
+import {
+  ADMIN_NAV_ITEMS,
+  ADMIN_NAV_GROUPS,
+  canSeeNavItem,
+  filterNavGroupsByRole,
+} from "@/lib/nav-config";
 
 
 export default function AdminDashboardLayout({ children }: { children: React.ReactNode }) {
@@ -36,8 +41,8 @@ export default function AdminDashboardLayout({ children }: { children: React.Rea
     );
   }
 
-  const visibleNavItems = ADMIN_NAV_ITEMS.filter(
-    (item) => !item.roles || item.roles.includes(user.role),
+  const visibleNavItems = ADMIN_NAV_ITEMS.filter((item) =>
+    canSeeNavItem(item, user.role),
   );
   const visibleNavGroups = filterNavGroupsByRole(ADMIN_NAV_GROUPS, user.role);
 
