@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/toast";
+import { downloadBlob } from "@/lib/utils/download-blob";
 import { cn } from "@/lib/utils/cn";
 
 interface ImportRowChange {
@@ -66,12 +67,9 @@ export function SpreadsheetActions({
       const name =
         /filename="([^"]+)"/.exec(headers.get("Content-Disposition") ?? "")?.[1] ??
         `${resource}-${kind}.xlsx`;
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = name;
-      link.click();
-      URL.revokeObjectURL(url);
+      // The shared helper: an anchor that is actually in the document (Firefox ignores a
+      // detached one) and an object URL that outlives the click.
+      downloadBlob(blob, name);
     } catch (err) {
       showToast({ variant: "error", title: errorMessage(err, "Couldn't build that spreadsheet.") });
     } finally {

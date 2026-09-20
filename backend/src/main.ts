@@ -50,6 +50,9 @@ async function bootstrap() {
       'X-Rate-Card-Version',
       'X-Total-Count',
       'X-Request-Id',
+      // Without this every spreadsheet and PDF download falls back to a filename the client
+      // invents, because fetch() hides Content-Disposition on a cross-origin response.
+      'Content-Disposition',
     ],
   });
 

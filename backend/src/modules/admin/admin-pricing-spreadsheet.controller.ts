@@ -4,6 +4,7 @@ import {
   Get,
   Post,
   Res,
+  StreamableFile,
   UploadedFile,
   UseGuards,
   UseInterceptors,
@@ -45,7 +46,7 @@ export class AdminPricingSpreadsheetController {
   @Get('countries/export')
   async exportCountries(
     @Res({ passthrough: true }) res: Response,
-  ): Promise<Buffer> {
+  ): Promise<StreamableFile> {
     return this.send(
       res,
       'nationwide-countries',
@@ -54,7 +55,7 @@ export class AdminPricingSpreadsheetController {
   }
 
   @Get('countries/template')
-  countriesTemplate(@Res({ passthrough: true }) res: Response): Buffer {
+  countriesTemplate(@Res({ passthrough: true }) res: Response): StreamableFile {
     return this.send(
       res,
       'nationwide-countries-template',
@@ -83,7 +84,7 @@ export class AdminPricingSpreadsheetController {
   @Get('rate-cards/export')
   async exportRateCards(
     @Res({ passthrough: true }) res: Response,
-  ): Promise<Buffer> {
+  ): Promise<StreamableFile> {
     return this.send(
       res,
       'nationwide-rate-cards',
@@ -92,7 +93,7 @@ export class AdminPricingSpreadsheetController {
   }
 
   @Get('rate-cards/template')
-  rateCardsTemplate(@Res({ passthrough: true }) res: Response): Buffer {
+  rateCardsTemplate(@Res({ passthrough: true }) res: Response): StreamableFile {
     return this.send(
       res,
       'nationwide-rate-cards-template',
@@ -132,13 +133,19 @@ export class AdminPricingSpreadsheetController {
     return file.buffer;
   }
 
-  private send(res: Response, filename: string, body: Buffer): Buffer {
+  /**
+   * StreamableFile, never a bare Buffer. Nest hands whatever a handler returns to the Express
+   * adapter, which calls response.json() on anything that is an object — and a Buffer is one. A
+   * returned Buffer therefore went out as {"type":"Buffer","data":[80,75,3,4,...]} under an .xlsx
+   * filename, and Excel refused it as corrupt. StreamableFile is piped through untouched.
+   */
+  private send(res: Response, filename: string, body: Buffer): StreamableFile {
     const stamp = new Date().toISOString().slice(0, 10);
     res.set({
       'Content-Type': XLSX_MIME,
       'Content-Disposition': `attachment; filename="${filename}-${stamp}.xlsx"`,
       'Content-Length': String(body.length),
     });
-    return body;
+    return new StreamableFile(body);
   }
 }

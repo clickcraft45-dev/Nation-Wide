@@ -10,7 +10,12 @@ const API_ORIGIN = new URL(
 // The company logo is an <img> pointing at a presigned URL on the private S3 bucket, which is a
 // different origin from the API. Narrow to the bucket's own host rather than allowing all of
 // S3: set NEXT_PUBLIC_S3_ORIGIN to e.g. https://nationwide-logistics-s3.s3.ap-south-1.amazonaws.com.
-const S3_ORIGIN = process.env.NEXT_PUBLIC_S3_ORIGIN ?? "";
+// Defaulted, not left empty: an unset variable silently produced "img-src ... <nothing>" and the
+// company logo was blocked in production with no error anywhere. The value matches the bucket the
+// deploy workflow names.
+const S3_ORIGIN =
+  process.env.NEXT_PUBLIC_S3_ORIGIN ??
+  "https://nationwide-logistics-s3.s3.ap-south-1.amazonaws.com";
 
 // Cloudflare injects its Web Analytics beacon into every HTML response when the feature is on
 // for the zone. It is added at the edge, AFTER Next.js renders, so nothing in this repo requests
@@ -73,6 +78,10 @@ const CSP = [
   // reject with a bare SecurityError, and a blocked manifest-src silently makes the app
   // uninstallable with no console message at all.
   "worker-src 'self' blob:",
+  // The rate-card preview renders the generated PDF in an <iframe src="blob:...">. blob: is NOT
+  // covered by default-src 'self' — without this the preview is blocked in production (and only
+  // there, since nothing else embeds a blob), which is exactly how it failed.
+  "frame-src 'self' blob:",
   "manifest-src 'self'",
   "object-src 'none'",
   "base-uri 'self'",
