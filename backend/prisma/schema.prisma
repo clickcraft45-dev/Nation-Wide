@@ -1352,6 +1352,9 @@ model B2bLink {
   /// What this link is for, e.g. "Bengaluru warehouse" — several may exist per customer so one
   /// team's link can be revoked without cutting off the rest.
   label      String
+  /// Who at the business was handed this link. Recorded on the link, not the customer, because a
+  /// business may hold several and revoking one is a decision about a person, not the account.
+  contactName String? @map("contact_name")
 
   tokenHash String @unique @map("token_hash")
 

@@ -66,6 +66,18 @@ describe('B2bLinksService', () => {
     expect(data.label).toBe('Bengaluru');
   });
 
+  it('records who holds the link, and null rather than an empty name', async () => {
+    await service.create('customer-1', 'Bengaluru', 'admin-1', '  Priya  ');
+    await service.create('customer-1', 'Bengaluru', 'admin-1', '   ');
+
+    const calls = prisma.b2bLink.create.mock.calls as [
+      { data: Record<string, string | null> },
+    ][];
+    expect(calls[0][0].data.contactName).toBe('Priya');
+    // A blank box must not become an empty-string "contact" the manager then displays.
+    expect(calls[1][0].data.contactName).toBeNull();
+  });
+
   it('resolves a live token to its customer and records the use', async () => {
     const session = await service.resolve('some-token');
 

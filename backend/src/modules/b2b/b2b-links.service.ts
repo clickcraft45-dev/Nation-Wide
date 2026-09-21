@@ -16,6 +16,7 @@ export function toB2bLinkDto(link: B2bLink, url?: string): B2bLinkDto {
   return {
     id: link.id,
     label: link.label,
+    contactName: link.contactName,
     customerId: link.customerId,
     lastUsedAt: link.lastUsedAt?.toISOString() ?? null,
     revokedAt: link.revokedAt?.toISOString() ?? null,
@@ -45,6 +46,7 @@ export class B2bLinksService {
     customerId: string,
     label: string,
     actorId: string,
+    contactName?: string,
   ): Promise<B2bLinkDto> {
     const customer = await this.prisma.customer.findUnique({
       where: { id: customerId },
@@ -59,6 +61,7 @@ export class B2bLinksService {
       data: {
         customerId,
         label: label.trim(),
+        contactName: contactName?.trim() || null,
         tokenHash: hashToken(token),
         createdByAdminId: actorId,
       },
@@ -69,7 +72,7 @@ export class B2bLinksService {
         action: 'B2B_LINK_CREATED',
         entity: 'B2bLink',
         entityId: link.id,
-        after: { customerId, label: link.label },
+        after: { customerId, label: link.label, contactName: link.contactName },
       },
     });
     return toB2bLinkDto(link, this.urlFor(token));

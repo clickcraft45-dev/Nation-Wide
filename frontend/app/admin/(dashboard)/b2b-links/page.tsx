@@ -10,6 +10,8 @@ import { Badge } from "@/components/ui/badge";
 import { SearchInput } from "@/components/ui/search-input";
 import { Input, Label } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogClose } from "@/components/ui/dialog";
+import { SegmentedControl } from "@/components/ui/segmented-control";
+import { PhoneInput } from "@/components/ui/phone-input";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   Table,
@@ -165,7 +167,14 @@ export default function AdminB2bLinksPage() {
           <TableBody>
             {visible.map((link) => (
               <TableRow key={link.id}>
-                <TableCell className="font-medium">{link.label}</TableCell>
+                <TableCell className="font-medium">
+                  {link.label}
+                  {link.contactName ? (
+                    <span className="block text-xs font-normal text-muted-foreground">
+                      held by {link.contactName}
+                    </span>
+                  ) : null}
+                </TableCell>
                 <TableCell>
                   <Link
                     href={`/admin/customers/${link.customerId}`}
@@ -226,10 +235,16 @@ export default function AdminB2bLinksPage() {
  */
 function GenerateLinkDialog({ onCreated }: { onCreated: () => void }) {
   const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState<"existing" | "new">("existing");
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<CustomerDto[]>([]);
   const [customer, setCustomer] = useState<CustomerDto | null>(null);
   const [label, setLabel] = useState("");
+  const [contactName, setContactName] = useState("");
+  // Only for the "new business" path — the account is created, then the link issued against it.
+  const [businessName, setBusinessName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [created, setCreated] = useState<B2bLinkDto | null>(null);
   const { showToast } = useToast();
@@ -253,13 +268,31 @@ function GenerateLinkDialog({ onCreated }: { onCreated: () => void }) {
     return () => clearTimeout(timer);
   }, [query]);
 
+  const isValid =
+    label.trim().length > 0 &&
+    (mode === "existing"
+      ? customer !== null
+      : businessName.trim().length > 1 && /^\+[1-9]\d{7,14}$/.test(phone));
+
   async function create() {
-    if (!customer) return;
     setIsSaving(true);
     try {
-      const link = await apiClient.post<B2bLinkDto>(`/admin/customers/${customer.id}/b2b-links`, {
+      // A new business is created first, then the link is issued against it — the same account
+      // the rest of the app bills, not a second kind of customer record.
+      const account =
+        mode === "existing"
+          ? customer!
+          : await apiClient.post<CustomerDto>("/customers", {
+              name: businessName.trim(),
+              phone: phone.trim(),
+              email: email.trim() || undefined,
+              consentSource: "admin_b2b_link",
+            });
+      const link = await apiClient.post<B2bLinkDto>(`/admin/customers/${account.id}/b2b-links`, {
         label: label.trim(),
+        contactName: contactName.trim() || undefined,
       });
+      setCustomer(account);
       setCreated(link);
       onCreated();
     } catch (err) {
@@ -273,7 +306,12 @@ function GenerateLinkDialog({ onCreated }: { onCreated: () => void }) {
     setOpen(false);
     setCreated(null);
     setCustomer(null);
+    setMode("existing");
     setLabel("");
+    setContactName("");
+    setBusinessName("");
+    setEmail("");
+    setPhone("");
     setQuery("");
   }
 
@@ -320,61 +358,117 @@ function GenerateLinkDialog({ onCreated }: { onCreated: () => void }) {
             </div>
           ) : (
             <div className="space-y-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="b2b-customer">Business</Label>
-                {customer ? (
-                  <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-sm">
-                    <span>
-                      {customer.name}
-                      <span className="block text-xs text-muted-foreground">
-                        {customer.email ?? customer.phone}
-                      </span>
-                    </span>
-                    <Button variant="secondary" size="sm" onClick={() => setCustomer(null)}>
-                      Change
-                    </Button>
-                  </div>
-                ) : (
-                  <>
-                    <Input
-                      id="b2b-customer"
-                      placeholder="Search by name, phone or email…"
-                      value={query}
-                      onChange={(e) => setQuery(e.target.value)}
-                    />
-                    {results.length > 0 && (
-                      <ul className="max-h-48 divide-y divide-border overflow-y-auto rounded-lg border border-border">
-                        {results.map((result) => (
-                          <li key={result.id}>
-                            <button
-                              type="button"
-                              className="w-full px-3 py-2 text-left text-sm hover:bg-muted"
-                              onClick={() => setCustomer(result)}
-                            >
-                              {result.name}
-                              <span className="block text-xs text-muted-foreground">
-                                {result.email ?? result.phone}
-                              </span>
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </>
-                )}
-              </div>
+              <SegmentedControl
+                ariaLabel="Which business"
+                value={mode}
+                onChange={(next) => {
+                  setMode(next);
+                  setCustomer(null);
+                }}
+                options={[
+                  { value: "existing", label: "Existing business" },
+                  { value: "new", label: "New business" },
+                ]}
+              />
 
-              <div className="space-y-1.5">
-                <Label htmlFor="b2b-label">What is it for?</Label>
-                <Input
-                  id="b2b-label"
-                  placeholder="Bengaluru warehouse, despatch desk…"
-                  value={label}
-                  onChange={(e) => setLabel(e.target.value)}
-                />
-                <p className="text-xs text-muted-foreground">
+              {mode === "new" ? (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <Label htmlFor="b2b-business">Business name</Label>
+                    <Input
+                      id="b2b-business"
+                      placeholder="Sunrise Exports Pvt Ltd"
+                      value={businessName}
+                      onChange={(e) => setBusinessName(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="b2b-phone">Phone</Label>
+                    <PhoneInput id="b2b-phone" value={phone} onChange={setPhone} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="b2b-email">Email</Label>
+                    <Input
+                      id="b2b-email"
+                      type="email"
+                      placeholder="despatch@sunrise.in"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground sm:col-span-2">
+                    This creates the customer account the shipments are billed to. The email is
+                    optional here, but it is what a portal login would later be sent to.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <Label htmlFor="b2b-customer">Business</Label>
+                  {customer ? (
+                    <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-sm">
+                      <span>
+                        {customer.name}
+                        <span className="block text-xs text-muted-foreground">
+                          {customer.email ?? customer.phone}
+                        </span>
+                      </span>
+                      <Button variant="secondary" size="sm" onClick={() => setCustomer(null)}>
+                        Change
+                      </Button>
+                    </div>
+                  ) : (
+                    <>
+                      <Input
+                        id="b2b-customer"
+                        placeholder="Search by name, phone or email…"
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                      />
+                      {results.length > 0 && (
+                        <ul className="max-h-48 divide-y divide-border overflow-y-auto rounded-lg border border-border">
+                          {results.map((result) => (
+                            <li key={result.id}>
+                              <button
+                                type="button"
+                                className="w-full px-3 py-2 text-left text-sm hover:bg-muted"
+                                onClick={() => setCustomer(result)}
+                              >
+                                {result.name}
+                                <span className="block text-xs text-muted-foreground">
+                                  {result.email ?? result.phone}
+                                </span>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="b2b-label">What is it for?</Label>
+                  <Input
+                    id="b2b-label"
+                    placeholder="Bengaluru warehouse, despatch desk…"
+                    value={label}
+                    onChange={(e) => setLabel(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="b2b-contact">Handed to (optional)</Label>
+                  <Input
+                    id="b2b-contact"
+                    placeholder="Priya, despatch manager"
+                    value={contactName}
+                    onChange={(e) => setContactName(e.target.value)}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground sm:col-span-2">
                   Several links per business is fine — one team&apos;s can be revoked without
-                  cutting off the rest.
+                  cutting off the rest, which is easier when you know who holds which.
                 </p>
               </div>
 
@@ -384,11 +478,7 @@ function GenerateLinkDialog({ onCreated }: { onCreated: () => void }) {
                     Cancel
                   </Button>
                 </DialogClose>
-                <Button
-                  size="sm"
-                  disabled={!customer || !label.trim() || isSaving}
-                  onClick={create}
-                >
+                <Button size="sm" disabled={!isValid || isSaving} onClick={create}>
                   Generate
                 </Button>
               </div>

@@ -10,7 +10,7 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
-import { IsString, MaxLength, MinLength } from 'class-validator';
+import { IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import type { B2bLinkDto } from '@nationwide/shared-types';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -25,6 +25,12 @@ class CreateB2bLinkDto {
   @MinLength(1)
   @MaxLength(80)
   label!: string;
+
+  /** Who at the business is being handed the link — optional, for the manager's own record. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  contactName?: string;
 }
 
 // Issuing a link lets its holder place orders billed to that customer, so ADMIN only — the same
@@ -75,7 +81,7 @@ export class AdminB2bLinksController {
     @Body() dto: CreateB2bLinkDto,
     @CurrentUser() user: JwtPayload,
   ): Promise<B2bLinkDto> {
-    return this.links.create(customerId, dto.label, user.sub);
+    return this.links.create(customerId, dto.label, user.sub, dto.contactName);
   }
 
   @Patch(':id/revoke')

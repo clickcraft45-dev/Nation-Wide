@@ -10,6 +10,8 @@ import type { PickupTimeSlot, ShipmentTypeCode } from "./quote";
 export interface B2bLinkDto {
   id: string;
   label: string;
+  /** Who at the business was handed this link, when an admin recorded it. */
+  contactName: string | null;
   customerId: string;
   lastUsedAt: string | null; // ISO 8601
   revokedAt: string | null; // ISO 8601
@@ -20,6 +22,7 @@ export interface B2bLinkDto {
 
 export interface CreateB2bLinkDto {
   label: string;
+  contactName?: string;
 }
 
 /** A link listed on the cross-customer manager, where the customer is not implied by the page. */
