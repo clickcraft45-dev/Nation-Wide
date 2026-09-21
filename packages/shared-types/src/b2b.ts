@@ -22,6 +22,15 @@ export interface CreateB2bLinkDto {
   label: string;
 }
 
+/** A link listed on the cross-customer manager, where the customer is not implied by the page. */
+export interface B2bLinkOverviewDto extends B2bLinkDto {
+  customerName: string;
+  customerEmail: string | null;
+  /** Whether that customer also has a portal login, not just this link. */
+  customerIsB2b: boolean;
+  createdByEmail: string | null;
+}
+
 /** What an admin gets back after inviting a business onto the portal. */
 export interface B2bInviteResultDto {
   email: string;

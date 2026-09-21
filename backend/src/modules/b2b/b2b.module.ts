@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { B2bController } from './b2b.controller';
 import { AdminB2bLinksController } from './admin-b2b-links.controller';
+import { AdminB2bLinksOverviewController } from './admin-b2b-links-overview.controller';
 import { B2bLinksService } from './b2b-links.service';
 import { B2bAccountsService } from './b2b-accounts.service';
 import { B2bAccessGuard } from './b2b-access.guard';
@@ -21,7 +22,11 @@ import { MailModule } from '../mail/mail.module';
     // The invite email that brings a business onto the portal.
     MailModule,
   ],
-  controllers: [B2bController, AdminB2bLinksController],
+  controllers: [
+    B2bController,
+    AdminB2bLinksController,
+    AdminB2bLinksOverviewController,
+  ],
   providers: [B2bLinksService, B2bAccountsService, B2bAccessGuard],
   exports: [B2bLinksService, B2bAccountsService],
 })

@@ -77,56 +77,7 @@ function escapeHtml(value: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// 1. New pickup-partner application — internal alert to the operations inbox
-// ---------------------------------------------------------------------------
-
-export interface PartnerApplicationEmailInput {
-  name: string;
-  email: string;
-  phone: string;
-  serviceArea: string;
-  note?: string | null;
-  reviewUrl: string;
-}
-
-export function partnerApplicationReceived(
-  input: PartnerApplicationEmailInput,
-  to: string,
-): OutboundEmail {
-  const name = escapeHtml(input.name);
-  const details = [
-    row('Name', name),
-    row('Email', escapeHtml(input.email)),
-    row('Phone', escapeHtml(input.phone)),
-    row('Service area', escapeHtml(input.serviceArea)),
-    input.note ? row('Note', escapeHtml(input.note)) : '',
-  ].join('');
-
-  return {
-    to,
-    subject: `New pickup partner application — ${input.name}`,
-    // Replying goes to the applicant, so ops can answer without copying the address out.
-    replyTo: input.email,
-    html: shell(
-      'New pickup partner application',
-      `<p style="${P}">Someone applied to become a pickup partner. Approving creates their partner account; rejecting leaves no account behind.</p>
-       <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;margin:18px 0;">${details}</table>
-       ${button(input.reviewUrl, 'Review application')}
-       <p style="${MUTED}">You are receiving this because you are on the NationWide operations inbox.</p>`,
-    ),
-    text: `New pickup partner application
-
-Name:         ${input.name}
-Email:        ${input.email}
-Phone:        ${input.phone}
-Service area: ${input.serviceArea}${input.note ? `\nNote:         ${input.note}` : ''}
-
-Review it: ${input.reviewUrl}`,
-  };
-}
-
-// ---------------------------------------------------------------------------
-// 1b. B2B portal invitation — sent to the business by an admin
+// 1. B2B portal invitation — sent to the business by an admin
 // ---------------------------------------------------------------------------
 
 export interface B2bInviteEmailInput {

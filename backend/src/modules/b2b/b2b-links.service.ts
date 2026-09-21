@@ -2,7 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHash, randomBytes } from 'node:crypto';
 import type { B2bLink } from '@prisma/client';
-import type { B2bLinkDto } from '@nationwide/shared-types';
+import type { B2bLinkDto, B2bLinkOverviewDto } from '@nationwide/shared-types';
 import { PrismaService } from '../../database/prisma.service';
 import { publicFrontendUrl } from '../../common/config/public-urls';
 
@@ -80,6 +80,31 @@ export class B2bLinksService {
       where: { customerId },
       orderBy: { createdAt: 'desc' },
     });
+  }
+
+  /**
+   * Every link ever issued, across customers — the one screen that answers "who can order in our
+   * name right now", which is a question the per-customer card cannot answer.
+   *
+   * Revoked links stay listed behind a flag rather than disappearing: a revoked link is the record
+   * that access was withdrawn, and hiding it makes the history look like it never existed.
+   */
+  async findAll(includeRevoked: boolean): Promise<B2bLinkOverviewDto[]> {
+    const links = await this.prisma.b2bLink.findMany({
+      where: includeRevoked ? {} : { revokedAt: null },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        customer: { select: { name: true, email: true, isB2b: true } },
+        createdBy: { select: { email: true } },
+      },
+    });
+    return links.map((link) => ({
+      ...toB2bLinkDto(link),
+      customerName: link.customer.name,
+      customerEmail: link.customer.email,
+      customerIsB2b: link.customer.isB2b,
+      createdByEmail: link.createdBy?.email ?? null,
+    }));
   }
 
   async revoke(id: string, actorId: string): Promise<B2bLink> {

@@ -18,8 +18,8 @@ import {
   Settings,
   User,
   Tag,
-  ClipboardCheck,
   ClipboardList,
+  Link2,
   Crown,
   UserCog,
   ShieldCheck,
@@ -71,8 +71,10 @@ export const ADMIN_NAV_GROUPS: NavGroup[] = [
       { label: "Pickup Requests", href: "/admin/pickup-requests", icon: ClipboardList },
       { label: "Warehouse Drop-offs", href: "/admin/warehouse-dropoffs", icon: Warehouse },
       { label: "Pickup Partners", href: "/admin/pickup-partners", icon: UserCog },
-      { label: "Partner Applications", href: "/admin/partner-applications", icon: ClipboardCheck },
       { label: "Customers", href: "/admin/customers", icon: Users },
+      // ADMIN-only, matching AdminB2bLinksController: whoever holds a link can place orders
+      // billed to that customer, so issuing one is the same bar as company settings.
+      { label: "B2B Links", href: "/admin/b2b-links", icon: Link2, roles: ["ADMIN"] },
       // ADMIN-only, matching AdminUsersController: anything less lets a STAFF account promote
       // itself to ADMIN, which makes the role boundary decorative.
       { label: "Staff & Admins", href: "/admin/users", icon: ShieldCheck, roles: ["ADMIN"] },

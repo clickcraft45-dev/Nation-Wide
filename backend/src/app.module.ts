@@ -15,7 +15,6 @@ import { AuthModule } from './modules/auth/auth.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { MailModule } from './modules/mail/mail.module';
 import { ReviewsModule } from './modules/reviews/reviews.module';
-import { PartnerApplicationsModule } from './modules/partner-applications/partner-applications.module';
 import { CustomersModule } from './modules/customers/customers.module';
 import { B2bModule } from './modules/b2b/b2b.module';
 import { OrdersModule } from './modules/orders/orders.module';
@@ -44,7 +43,6 @@ import { ExpensesModule } from './modules/expenses/expenses.module';
     MailModule,
     ReviewsModule,
     AdminModule,
-    PartnerApplicationsModule,
     CustomersModule,
     B2bModule,
     ShipmentsModule,
