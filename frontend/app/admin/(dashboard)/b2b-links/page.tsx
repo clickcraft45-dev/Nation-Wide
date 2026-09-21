@@ -347,6 +347,9 @@ function GenerateLinkDialog({ onCreated }: { onCreated: () => void }) {
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
+                {created.emailedTo
+                  ? `Emailed to ${created.emailedTo}. `
+                  : "No email on file for this business, so nothing was sent — copy it across yourself. "}
                 Anyone with this URL can request pickups billed to {customer?.name}. Revoke it from
                 the list if it goes astray.
               </p>

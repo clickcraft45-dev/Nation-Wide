@@ -12,6 +12,7 @@ describe('B2bLinksService', () => {
     };
     auditLog: { create: jest.Mock };
   };
+  let mail: { send: jest.Mock };
   let service: B2bLinksService;
 
   const LINK = {
@@ -38,12 +39,52 @@ describe('B2bLinksService', () => {
       },
       auditLog: { create: jest.fn().mockResolvedValue(undefined) },
     };
+    mail = { send: jest.fn().mockResolvedValue(true) };
     service = new B2bLinksService(
       prisma as never,
       {
         get: () => 'https://nationwide.example',
       } as never,
+      mail as never,
     );
+  });
+
+  it('emails the link to the business that will use it', async () => {
+    prisma.customer.findUnique.mockResolvedValue({
+      id: 'customer-1',
+      name: 'Sunrise Exports',
+      email: 'despatch@sunrise.in',
+    });
+
+    const result = await service.create(
+      'customer-1',
+      'Bengaluru warehouse',
+      'admin-1',
+      'Priya',
+    );
+
+    const sent = mail.send.mock.calls[0][0] as {
+      to: string;
+      text: string;
+    };
+    expect(sent.to).toBe('despatch@sunrise.in');
+    expect(sent.text).toContain(result.url);
+    expect(result.emailedTo).toBe('despatch@sunrise.in');
+  });
+
+  it('still issues the link when the business has no email on file', async () => {
+    prisma.customer.findUnique.mockResolvedValue({
+      id: 'customer-1',
+      name: 'Sunrise Exports',
+      email: null,
+    });
+
+    const result = await service.create('customer-1', 'Warehouse', 'admin-1');
+
+    expect(mail.send).not.toHaveBeenCalled();
+    // The URL is still handed back — the admin copies it out of the dialog instead.
+    expect(result.url).toContain('/b2b/');
+    expect(result.emailedTo).toBeNull();
   });
 
   it('stores only a hash of the token and hands back the link once', async () => {

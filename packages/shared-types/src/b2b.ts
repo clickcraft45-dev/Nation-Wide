@@ -18,6 +18,11 @@ export interface B2bLinkDto {
   createdAt: string; // ISO 8601
   /** Only on the create response. Show it once, then it is gone. */
   url?: string;
+  /**
+   * Only on the create response: the address the link was mailed to, or null when the business
+   * has no email on file or the send failed. The dialog still shows the URL either way.
+   */
+  emailedTo?: string | null;
 }
 
 export interface CreateB2bLinkDto {

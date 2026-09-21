@@ -1,10 +1,12 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHash, randomBytes } from 'node:crypto';
 import type { B2bLink } from '@prisma/client';
 import type { B2bLinkDto, B2bLinkOverviewDto } from '@nationwide/shared-types';
 import { PrismaService } from '../../database/prisma.service';
 import { publicFrontendUrl } from '../../common/config/public-urls';
+import { MailService } from '../mail/mail.service';
+import { b2bLinkIssued } from '../mail/mail.templates';
 
 // Same rule as PasswordResetToken and Review: store a hash, never the token. A leak of this table
 // must not hand anyone the ability to order in a customer's name.
@@ -36,9 +38,12 @@ export function toB2bLinkDto(link: B2bLink, url?: string): B2bLinkDto {
  */
 @Injectable()
 export class B2bLinksService {
+  private readonly logger = new Logger(B2bLinksService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly mail: MailService,
   ) {}
 
   /** Returns the DTO with the one and only sight of the token, as a ready-to-send URL. */
@@ -50,7 +55,7 @@ export class B2bLinksService {
   ): Promise<B2bLinkDto> {
     const customer = await this.prisma.customer.findUnique({
       where: { id: customerId },
-      select: { id: true },
+      select: { id: true, name: true, email: true },
     });
     if (!customer) {
       throw new NotFoundException(`Customer ${customerId} not found`);
@@ -75,7 +80,34 @@ export class B2bLinksService {
         after: { customerId, label: link.label, contactName: link.contactName },
       },
     });
-    return toB2bLinkDto(link, this.urlFor(token));
+    const url = this.urlFor(token);
+    // Mailed at the moment it is issued, because only the hash is kept — there is no later
+    // "resend". A business with no address on file simply gets it copied out of the dialog, so a
+    // missing email must not fail the issue itself.
+    let emailedTo: string | null = null;
+    if (customer.email) {
+      const sent = await this.mail
+        .send(
+          b2bLinkIssued({
+            email: customer.email,
+            companyName: customer.name,
+            contactName: link.contactName,
+            label: link.label,
+            url,
+          }),
+        )
+        .catch((error: unknown) => {
+          this.logger.warn(
+            `B2B link ${link.id} created but not emailed: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+          return false;
+        });
+      if (sent) emailedTo = customer.email;
+    }
+
+    return { ...toB2bLinkDto(link, url), emailedTo };
   }
 
   findAllForCustomer(customerId: string): Promise<B2bLink[]> {

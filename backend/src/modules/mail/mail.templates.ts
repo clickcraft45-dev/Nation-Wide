@@ -77,6 +77,61 @@ function escapeHtml(value: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// 0. Standing ordering link — sent to the business that will use it
+// ---------------------------------------------------------------------------
+
+export interface B2bLinkEmailInput {
+  email: string;
+  /** The business the shipments are billed to. */
+  companyName: string;
+  /** Who it was addressed to, when the admin recorded a name. */
+  contactName?: string | null;
+  /** What the link is for, e.g. "Bengaluru warehouse". */
+  label: string;
+  url: string;
+}
+
+/**
+ * The link itself, mailed to the business.
+ *
+ * The URL is the credential — anyone holding it can book shipments billed to this account — so the
+ * mail says so plainly rather than reading like a newsletter. It is sent once, at the moment the
+ * admin issues it: the server keeps only a hash, so it cannot be re-sent later.
+ */
+export function b2bLinkIssued(input: B2bLinkEmailInput): OutboundEmail {
+  const greeting = input.contactName
+    ? escapeHtml(input.contactName)
+    : escapeHtml(input.companyName);
+  return {
+    to: input.email,
+    subject: `Your NationWide ordering link — ${input.label}`,
+    html: shell(
+      'Your ordering link',
+      `<p style="${P}">Hello ${greeting},</p>
+       <p style="${P}">Here is your NationWide ordering link for
+        <strong>${escapeHtml(input.label)}</strong>. Open it to request pickups billed to
+        ${escapeHtml(input.companyName)} — several shipments in one collection, with your addresses
+        and regular contents saved for next time. No password needed.</p>
+       ${button(input.url, 'Open your ordering link')}
+       <p style="${MUTED}">Treat this link like a key: anyone who has it can place orders on your
+        account. Keep it to the people who need it, and tell us if it goes astray — we will cancel
+        it and issue another.</p>`,
+    ),
+    text: `Your NationWide ordering link
+
+Hello ${input.contactName ?? input.companyName},
+
+Here is your ordering link for ${input.label}. Open it to request pickups billed to
+${input.companyName} — no password needed:
+
+${input.url}
+
+Treat this link like a key: anyone who has it can place orders on your account. Tell us if it
+goes astray and we will cancel it and issue another.`,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // 1. B2B portal invitation — sent to the business by an admin
 // ---------------------------------------------------------------------------
 

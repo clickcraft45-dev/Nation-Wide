@@ -21,8 +21,6 @@ import {
   ClipboardList,
   Link2,
   Crown,
-  UserCog,
-  ShieldCheck,
   CalendarClock,
   Home,
   type LucideIcon,
@@ -70,14 +68,12 @@ export const ADMIN_NAV_GROUPS: NavGroup[] = [
       { label: "Orders", href: "/admin/orders", icon: Package },
       { label: "Pickup Requests", href: "/admin/pickup-requests", icon: ClipboardList },
       { label: "Warehouse Drop-offs", href: "/admin/warehouse-dropoffs", icon: Warehouse },
-      { label: "Pickup Partners", href: "/admin/pickup-partners", icon: UserCog },
-      { label: "Customers", href: "/admin/customers", icon: Users },
+      // One directory for customers, businesses, partners and staff — the slider picks the
+      // audience, and the create button follows it.
+      { label: "People", href: "/admin/people", icon: Users },
       // ADMIN-only, matching AdminB2bLinksController: whoever holds a link can place orders
       // billed to that customer, so issuing one is the same bar as company settings.
       { label: "B2B Links", href: "/admin/b2b-links", icon: Link2, roles: ["ADMIN"] },
-      // ADMIN-only, matching AdminUsersController: anything less lets a STAFF account promote
-      // itself to ADMIN, which makes the role boundary decorative.
-      { label: "Staff & Admins", href: "/admin/users", icon: ShieldCheck, roles: ["ADMIN"] },
     ],
   },
   {
@@ -177,10 +173,7 @@ export const CUSTOMER_TAB_ITEMS: NavItem[] = [
   { label: "Profile", href: "/profile", icon: User },
 ];
 
-export function findNavItemForPath(
-  pathname: string,
-  items: NavItem[],
-): NavItem | undefined {
+export function findNavItemForPath(pathname: string, items: NavItem[]): NavItem | undefined {
   return [...items]
     .sort((a, b) => b.href.length - a.href.length)
     .find((item) => pathname === item.href || pathname.startsWith(`${item.href}/`));

@@ -17,16 +17,19 @@ import { PasswordInput } from "@/components/ui/password-input";
 export function AdminUserDialog({
   trigger,
   onSaved,
+  defaultRole = "ADMIN",
 }: {
   trigger: ReactNode;
   onSaved: (user: AdminUserDto) => void;
+  /** Preselects the role when the caller already knows which kind is being created. */
+  defaultRole?: "ADMIN" | "SUPER_ADMIN";
 }) {
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
-  const [role, setRole] = useState<"ADMIN" | "SUPER_ADMIN">("ADMIN");
+  const [role, setRole] = useState<"ADMIN" | "SUPER_ADMIN">(defaultRole);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { showToast } = useToast();
@@ -55,7 +58,7 @@ export function AdminUserDialog({
       setPassword("");
       setName("");
       setPhone("");
-      setRole("ADMIN");
+      setRole(defaultRole);
     } catch (err) {
       setError(
         err instanceof ApiError && err.status === 400
