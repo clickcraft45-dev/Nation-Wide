@@ -1,16 +1,27 @@
 import type { Expense } from '@prisma/client';
-import type { ExpenseCategoryCode, ExpenseDto } from '@nationwide/shared-types';
-import type { PaymentMethodCode } from '@nationwide/shared-types';
+import type { ExpenseDto, PaymentMethodCode } from '@nationwide/shared-types';
 
-type ExpenseWithRecorder = Expense & {
+type ExpenseWithRelations = Expense & {
   recordedBy?: { id: string; email: string } | null;
+  category?: { name: string; parent?: { name: string } | null } | null;
 };
 
-export function toExpenseDto(expense: ExpenseWithRecorder): ExpenseDto {
+/** "Cleaning → Sanitiser" for a subcategory, so a row says where it sits without a second lookup. */
+export function categoryLabel(
+  category?: { name: string; parent?: { name: string } | null } | null,
+): string {
+  if (!category) return 'Uncategorised';
+  return category.parent
+    ? `${category.parent.name} → ${category.name}`
+    : category.name;
+}
+
+export function toExpenseDto(expense: ExpenseWithRelations): ExpenseDto {
   return {
     id: expense.id,
     expenseDate: expense.expenseDate.toISOString(),
-    category: expense.category as ExpenseCategoryCode,
+    categoryId: expense.categoryId,
+    categoryName: categoryLabel(expense.category),
     amount: expense.amount,
     currency: expense.currency,
     paymentMethod: expense.paymentMethod as PaymentMethodCode,

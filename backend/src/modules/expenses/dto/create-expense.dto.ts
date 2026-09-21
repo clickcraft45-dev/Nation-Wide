@@ -2,6 +2,7 @@ import { Type } from 'class-transformer';
 import {
   IsDate,
   IsEnum,
+  IsUUID,
   IsNumber,
   IsOptional,
   IsPositive,
@@ -9,15 +10,15 @@ import {
   MaxLength,
   MinLength,
 } from 'class-validator';
-import { ExpenseCategory, PaymentMethod } from '@prisma/client';
+import { PaymentMethod } from '@prisma/client';
 
 export class CreateExpenseDto {
   @Type(() => Date)
   @IsDate()
   expenseDate!: Date;
 
-  @IsEnum(ExpenseCategory)
-  category!: ExpenseCategory;
+  @IsUUID()
+  categoryId!: string;
 
   @IsNumber({ maxDecimalPlaces: 2 })
   @IsPositive()

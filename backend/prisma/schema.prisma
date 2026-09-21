@@ -508,6 +508,7 @@ model RateProvider {
 
   zones             Zone[]
   zoneCountries     ZoneCountry[]
+  fuelSurchargeUpdates FuelSurchargeUpdate[]
   remoteAreas       RemoteArea[]
   rateQuoteOptions  RateQuoteOption[]
   rateCardDocuments RateCardDocument[]
@@ -811,6 +812,7 @@ model AdminUser {
   pushSubscriptions          PushSubscription[]
   reviewedPartnerApplications PartnerApplication[] @relation("PartnerApplicationReviewedBy")
   createdB2bLinks             B2bLink[]            @relation("B2bLinkCreatedBy")
+  fuelSurchargeUpdates        FuelSurchargeUpdate[] @relation("FuelSurchargeAppliedBy")
   approvedReviews             Review[]             @relation("ReviewApprovedBy")
   recordedExpenses            Expense[]            @relation("ExpenseRecordedBy")
 
@@ -1415,19 +1417,25 @@ model B2bLink {
 
 /// What the money went on. Coarse on purpose — this is what a P&L line looks like, not an
 /// accounting chart of accounts; anything finer belongs in `description`.
-enum ExpenseCategory {
-  SALARY
-  RENT
-  UTILITIES
-  FUEL
-  PACKAGING
-  COURIER_PARTNER
-  MARKETING
-  OFFICE_SUPPLIES
-  TRAVEL
-  MAINTENANCE
-  TAXES_FEES
-  OTHER
+/// An expense heading an admin created, optionally nested one level ("Cleaning" → "Sanitiser").
+///
+/// A table rather than an enum: the headings a business spends under are its own, and adding one
+/// should not need a migration and a deploy. One level of nesting only — the screen shows a
+/// category and its subcategories, and a tree deeper than that is a filing system nobody keeps up.
+model ExpenseCategory {
+  id       String  @id @default(uuid())
+  name     String
+  parentId String? @map("parent_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  parent   ExpenseCategory?  @relation("Subcategories", fields: [parentId], references: [id])
+  children ExpenseCategory[] @relation("Subcategories")
+  expenses Expense[]
+
+  @@index([parentId])
+  @@map("expense_categories")
 }
 
 /// Money the company spent. The mirror of Invoice/Receipt (money coming in), kept as a plain
@@ -1437,8 +1445,8 @@ model Expense {
   id          String          @id @default(uuid())
   /// When the money was spent, which is rarely when the row was typed — reporting windows use
   /// this, never createdAt.
-  expenseDate DateTime        @map("expense_date")
-  category    ExpenseCategory
+  expenseDate DateTime @map("expense_date")
+  categoryId  String   @map("category_id")
   amount      Float
   currency    String          @default("INR")
   paymentMethod PaymentMethod @map("payment_method")
@@ -1454,9 +1462,36 @@ model Expense {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  recordedBy AdminUser @relation("ExpenseRecordedBy", fields: [recordedByAdminId], references: [id])
+  recordedBy AdminUser        @relation("ExpenseRecordedBy", fields: [recordedByAdminId], references: [id])
+  category   ExpenseCategory @relation(fields: [categoryId], references: [id])
 
   @@index([expenseDate])
-  @@index([category])
+  @@index([categoryId])
   @@map("expenses")
+}
+
+/// A change to a carrier's fuel surcharge, kept as the last five per carrier.
+///
+/// The surcharge moves weekly and feeds every quote, so "what did we change it to, and when" has
+/// to be answerable. Five is what the screen shows; older rows are pruned on write, because an
+/// unbounded log of a number that changes every Monday is a table nobody reads.
+model FuelSurchargeUpdate {
+  id              String @id @default(uuid())
+  rateProviderId  String @map("rate_provider_id")
+  percent         Float
+  /// What it was before, so a row reads as a change rather than a reading.
+  previousPercent Float  @map("previous_percent")
+  /// CARRIER_SITE when taken from the carrier's published page, MANUAL when an admin typed it.
+  source          String
+  /// What the source called it, e.g. "CW 40".
+  label           String?
+
+  appliedByAdminId String   @map("applied_by_admin_id")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  rateProvider RateProvider @relation(fields: [rateProviderId], references: [id], onDelete: Cascade)
+  appliedBy    AdminUser    @relation("FuelSurchargeAppliedBy", fields: [appliedByAdminId], references: [id])
+
+  @@index([rateProviderId, createdAt])
+  @@map("fuel_surcharge_updates")
 }

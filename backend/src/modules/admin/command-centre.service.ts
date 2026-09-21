@@ -65,7 +65,7 @@ export class CommandCentreService {
         select: { amount: true, expenseDate: true },
       }),
       this.prisma.expense.groupBy({
-        by: ['category'],
+        by: ['categoryId'],
         where: { expenseDate: { gte: since } },
         _sum: { amount: true },
       }),
@@ -130,6 +130,18 @@ export class CommandCentreService {
       if (bucket) bucket.expenses += expense.amount;
     }
 
+    // groupBy hands back category ids; the chart needs the headings they stand for.
+    const spendCategories = await this.prisma.expenseCategory.findMany({
+      where: { id: { in: expensesByCategory.map((row) => row.categoryId) } },
+      include: { parent: { select: { name: true } } },
+    });
+    const categoryNameById = new Map(
+      spendCategories.map((c) => [
+        c.id,
+        c.parent ? `${c.parent.name} → ${c.name}` : c.name,
+      ]),
+    );
+
     const partnerIds = partnerLeaderboard
       .map((row) => row.assignedPartnerId)
       .filter((id): id is string => id !== null);
@@ -172,7 +184,7 @@ export class CommandCentreService {
       },
       expensesByCategory: expensesByCategory
         .map((row) => ({
-          category: row.category,
+          category: categoryNameById.get(row.categoryId) ?? 'Uncategorised',
           amount: round2(row._sum.amount ?? 0),
         }))
         .sort((a, b) => b.amount - a.amount),

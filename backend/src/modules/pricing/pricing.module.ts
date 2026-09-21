@@ -7,10 +7,12 @@ import { RatesService } from './rates.service';
 import { PricingEngineService } from './pricing-engine.service';
 import { PricingOverviewService } from './pricing-overview.service';
 import { PricingSpreadsheetService } from './pricing-spreadsheet.service';
+import { FuelSurchargeService } from './fuel-surcharge.service';
 
 @Module({
   controllers: [CountriesController],
   providers: [
+    FuelSurchargeService,
     PricingSpreadsheetService,
     CountriesService,
     RateProvidersService,
@@ -20,6 +22,7 @@ import { PricingSpreadsheetService } from './pricing-spreadsheet.service';
     PricingOverviewService,
   ],
   exports: [
+    FuelSurchargeService,
     PricingSpreadsheetService,
     CountriesService,
     RateProvidersService,

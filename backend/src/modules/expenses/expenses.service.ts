@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma, type ExpenseCategory } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
+import { categoryLabel } from './expense.mapper';
 import { CreateExpenseDto } from './dto/create-expense.dto';
 import { QueryExpensesDto } from './dto/query-expenses.dto';
 
@@ -18,7 +19,14 @@ export class ExpensesService {
    */
   async list(filters: QueryExpensesDto) {
     const where: Prisma.ExpenseWhereInput = {};
-    if (filters.category) where.category = filters.category;
+    // Filtering by a parent takes its subcategories with it: nobody picking "Cleaning"
+    // means "Cleaning but not the things filed under it".
+    if (filters.categoryId) {
+      where.OR = [
+        { categoryId: filters.categoryId },
+        { category: { parentId: filters.categoryId } },
+      ];
+    }
     if (filters.from || filters.to) {
       where.expenseDate = {
         ...(filters.from ? { gte: filters.from } : {}),
@@ -27,10 +35,16 @@ export class ExpensesService {
     }
     if (filters.search) {
       const contains = filters.search;
-      where.OR = [
-        { paidTo: { contains, mode: 'insensitive' } },
-        { description: { contains, mode: 'insensitive' } },
-        { referenceNo: { contains, mode: 'insensitive' } },
+      // AND, not another OR: a search inside a category filter must narrow it, not widen it back
+      // out to every expense matching the text.
+      where.AND = [
+        {
+          OR: [
+            { paidTo: { contains, mode: 'insensitive' } },
+            { description: { contains, mode: 'insensitive' } },
+            { referenceNo: { contains, mode: 'insensitive' } },
+          ],
+        },
       ];
     }
 
@@ -40,7 +54,10 @@ export class ExpensesService {
         orderBy: { expenseDate: 'desc' },
         skip: filters.skip ?? 0,
         take: filters.take ?? 50,
-        include: { recordedBy: RECORDED_BY },
+        include: {
+          recordedBy: RECORDED_BY,
+          category: { include: { parent: { select: { name: true } } } },
+        },
       }),
       this.prisma.expense.aggregate({
         where,
@@ -48,26 +65,30 @@ export class ExpensesService {
         _count: true,
       }),
       this.prisma.expense.groupBy({
-        by: ['category'],
+        by: ['categoryId'],
         where,
         _sum: { amount: true },
       }),
     ]);
+
+    // One lookup for the headings the grouped totals refer to — groupBy returns ids, and a
+    // dashboard showing uuids is no dashboard.
+    const categories = await this.prisma.expenseCategory.findMany({
+      where: { id: { in: grouped.map((row) => row.categoryId) } },
+      include: { parent: { select: { name: true } } },
+    });
+    const categoryById = new Map(categories.map((c) => [c.id, c]));
 
     return {
       items,
       total: aggregate._count,
       totalAmount: aggregate._sum.amount ?? 0,
       byCategory: grouped
-        .map(
-          (row: {
-            category: ExpenseCategory;
-            _sum: { amount: number | null };
-          }) => ({
-            category: row.category,
-            amount: row._sum.amount ?? 0,
-          }),
-        )
+        .map((row) => ({
+          categoryId: row.categoryId,
+          categoryName: categoryLabel(categoryById.get(row.categoryId)),
+          amount: row._sum.amount ?? 0,
+        }))
         .sort((a, b) => b.amount - a.amount),
     };
   }
@@ -75,7 +96,10 @@ export class ExpensesService {
   create(dto: CreateExpenseDto, adminId: string) {
     return this.prisma.expense.create({
       data: { ...dto, recordedByAdminId: adminId },
-      include: { recordedBy: RECORDED_BY },
+      include: {
+        recordedBy: RECORDED_BY,
+        category: { include: { parent: { select: { name: true } } } },
+      },
     });
   }
 

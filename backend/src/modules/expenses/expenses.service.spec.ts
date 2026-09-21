@@ -12,6 +12,7 @@ describe('ExpensesService', () => {
       update: jest.Mock;
       delete: jest.Mock;
     };
+    expenseCategory: { findMany: jest.Mock };
   };
   let service: ExpensesService;
 
@@ -24,12 +25,18 @@ describe('ExpensesService', () => {
           .fn()
           .mockResolvedValue({ _sum: { amount: 7500 }, _count: 3 }),
         groupBy: jest.fn().mockResolvedValue([
-          { category: 'FUEL', _sum: { amount: 2500 } },
-          { category: 'RENT', _sum: { amount: 5000 } },
+          { categoryId: 'cat-fuel', _sum: { amount: 2500 } },
+          { categoryId: 'cat-rent', _sum: { amount: 5000 } },
         ]),
         create: jest.fn().mockResolvedValue({ id: 'exp-1' }),
         update: jest.fn().mockResolvedValue({ id: 'exp-1' }),
         delete: jest.fn().mockResolvedValue({ id: 'exp-1' }),
+      },
+      expenseCategory: {
+        findMany: jest.fn().mockResolvedValue([
+          { id: 'cat-fuel', name: 'Fuel', parent: null },
+          { id: 'cat-rent', name: 'Rent', parent: { name: 'Premises' } },
+        ]),
       },
     };
     service = new ExpensesService(prisma as never);
@@ -46,18 +53,38 @@ describe('ExpensesService', () => {
     expect(listWhere.expenseDate).toEqual({ gte: from, lte: to });
     expect(result.totalAmount).toBe(7500);
     expect(result.total).toBe(3);
+    // Named, not uuid'd, and a subcategory says where it sits.
     expect(result.byCategory).toEqual([
-      { category: 'RENT', amount: 5000 },
-      { category: 'FUEL', amount: 2500 },
+      { categoryId: 'cat-rent', categoryName: 'Premises → Rent', amount: 5000 },
+      { categoryId: 'cat-fuel', categoryName: 'Fuel', amount: 2500 },
     ]);
+  });
+
+  it('filters by a category together with everything filed under it', async () => {
+    await service.list({ categoryId: 'cat-cleaning' });
+
+    const where = prisma.expense.findMany.mock.calls[0][0].where;
+    expect(where.OR).toEqual([
+      { categoryId: 'cat-cleaning' },
+      { category: { parentId: 'cat-cleaning' } },
+    ]);
+  });
+
+  it('narrows a category filter by the search rather than widening past it', async () => {
+    await service.list({ categoryId: 'cat-cleaning', search: 'acme' });
+
+    const where = prisma.expense.findMany.mock.calls[0][0].where;
+    // The category stays on OR; the text sits under AND, so the two conditions compose.
+    expect(where.OR).toHaveLength(2);
+    expect(where.AND[0].OR).toHaveLength(3);
   });
 
   it('searches vendor, description and reference together', async () => {
     await service.list({ search: 'indian oil' });
 
     const where = prisma.expense.findMany.mock.calls[0][0].where;
-    expect(where.OR).toHaveLength(3);
-    expect(where.OR[0]).toEqual({
+    expect(where.AND[0].OR).toHaveLength(3);
+    expect(where.AND[0].OR[0]).toEqual({
       paidTo: { contains: 'indian oil', mode: 'insensitive' },
     });
   });

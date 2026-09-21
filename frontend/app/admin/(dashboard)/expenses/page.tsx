@@ -1,12 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Wallet, Pencil, Trash2 } from "lucide-react";
-import {
-  EXPENSE_CATEGORIES,
-  EXPENSE_CATEGORY_LABELS,
-  type ExpenseListDto,
-} from "@nationwide/shared-types";
+import { Wallet, Pencil, Trash2, FolderTree } from "lucide-react";
+import type { ExpenseCategoryDto, ExpenseListDto } from "@nationwide/shared-types";
 import { apiClient, errorMessage } from "@/lib/api-client";
 import { SearchInput } from "@/components/ui/search-input";
 import { NativeSelect } from "@/components/ui/select";
@@ -29,6 +25,10 @@ import {
   ExpenseFormDialog,
   type ExpenseFormValues,
 } from "@/components/expenses/expense-form-dialog";
+import {
+  ManageCategoriesDialog,
+  categoryOptions,
+} from "@/components/expenses/manage-categories-dialog";
 
 const rupees = (n: number) => `₹${n.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 
@@ -44,6 +44,7 @@ export default function AdminExpensesPage() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("");
+  const [categories, setCategories] = useState<ExpenseCategoryDto[]>([]);
   // Defaults to this month — the window an admin actually asks about, and it keeps the first
   // load off the whole ledger.
   const [from, setFrom] = useState(startOfThisMonth);
@@ -55,7 +56,8 @@ export default function AdminExpensesPage() {
     setError(null);
     const params = new URLSearchParams();
     if (search.trim()) params.set("search", search.trim());
-    if (category) params.set("category", category);
+    // A parent category brings everything filed under it — the server widens this to its children.
+    if (category) params.set("categoryId", category);
     if (from) params.set("from", new Date(`${from}T00:00:00`).toISOString());
     // Inclusive of the end day: a "to" of the 30th must include the 30th's expenses.
     if (to) params.set("to", new Date(`${to}T23:59:59`).toISOString());
@@ -76,14 +78,33 @@ export default function AdminExpensesPage() {
     load();
   }, [load]);
 
+  const loadCategories = useCallback(() => {
+    apiClient
+      .get<ExpenseCategoryDto[]>("/admin/expense-categories")
+      .then(setCategories)
+      // The headings failing to load must not take the ledger down with them; the filter just
+      // stays empty and the toast on the next action says why.
+      .catch(() => setCategories([]));
+  }, []);
+
+  useEffect(() => {
+    loadCategories();
+  }, [loadCategories]);
+
   async function save(values: ExpenseFormValues, id?: string) {
     try {
       if (id) await apiClient.patch(`/admin/expenses/${id}`, values);
       else await apiClient.post("/admin/expenses", values);
-      showToast({ variant: "success", title: id ? "Expense updated" : "Expense recorded" });
+      showToast({
+        variant: "success",
+        title: id ? "Expense updated" : "Expense recorded",
+      });
       load();
     } catch (err) {
-      showToast({ variant: "error", title: errorMessage(err, "Couldn't save the expense.") });
+      showToast({
+        variant: "error",
+        title: errorMessage(err, "Couldn't save the expense."),
+      });
     }
   }
 
@@ -93,7 +114,10 @@ export default function AdminExpensesPage() {
       showToast({ variant: "success", title: "Expense deleted" });
       load();
     } catch (err) {
-      showToast({ variant: "error", title: errorMessage(err, "Couldn't delete the expense.") });
+      showToast({
+        variant: "error",
+        title: errorMessage(err, "Couldn't delete the expense."),
+      });
     }
   }
 
@@ -108,10 +132,27 @@ export default function AdminExpensesPage() {
             What the company spent — salaries, rent, fuel, packaging and the rest.
           </p>
         </div>
-        <ExpenseFormDialog
-          trigger={<Button size="sm">Record expense</Button>}
-          onSubmit={(values) => save(values)}
-        />
+        <div className="flex gap-2">
+          <ManageCategoriesDialog
+            categories={categories}
+            onChanged={() => {
+              loadCategories();
+              // Totals and the category column are named from these, so the ledger reloads too.
+              load();
+            }}
+            trigger={
+              <Button variant="secondary" size="sm">
+                <FolderTree className="mr-1.5 h-3.5 w-3.5" aria-hidden />
+                Manage categories
+              </Button>
+            }
+          />
+          <ExpenseFormDialog
+            categories={categories}
+            trigger={<Button size="sm">Record expense</Button>}
+            onSubmit={(values) => save(values)}
+          />
+        </div>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3">
@@ -119,7 +160,7 @@ export default function AdminExpensesPage() {
         <StatCard label="Expenses recorded" value={data?.total ?? 0} />
         <StatCard
           label="Biggest category"
-          value={topCategory ? EXPENSE_CATEGORY_LABELS[topCategory.category] : "—"}
+          value={topCategory ? topCategory.categoryName : "—"}
           caption={topCategory ? rupees(topCategory.amount) : undefined}
         />
       </div>
@@ -140,9 +181,9 @@ export default function AdminExpensesPage() {
           aria-label="Filter by category"
         >
           <option value="">All categories</option>
-          {EXPENSE_CATEGORIES.map((c) => (
-            <option key={c} value={c}>
-              {EXPENSE_CATEGORY_LABELS[c]}
+          {categoryOptions(categories).map((option) => (
+            <option key={option.id} value={option.id}>
+              {option.label}
             </option>
           ))}
         </NativeSelect>
@@ -197,7 +238,7 @@ export default function AdminExpensesPage() {
             {data.items.map((expense) => (
               <TableRow key={expense.id}>
                 <TableCell>{new Date(expense.expenseDate).toLocaleDateString("en-IN")}</TableCell>
-                <TableCell>{EXPENSE_CATEGORY_LABELS[expense.category]}</TableCell>
+                <TableCell>{expense.categoryName}</TableCell>
                 <TableCell>{expense.paidTo}</TableCell>
                 <TableCell className="text-muted-foreground">
                   {expense.description ?? "—"}
@@ -208,6 +249,7 @@ export default function AdminExpensesPage() {
                 <TableCell>
                   <div className="flex gap-1">
                     <ExpenseFormDialog
+                      categories={categories}
                       expense={expense}
                       trigger={
                         <Button variant="secondary" size="sm" aria-label="Edit expense">

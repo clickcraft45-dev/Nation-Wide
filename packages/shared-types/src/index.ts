@@ -17,4 +17,5 @@ export * from "./registered-company";
 export * from "./parcel";
 export * from "./b2b";
 export * from "./command-centre";
+export * from "./fuel-surcharge";
 export * from "./expense";

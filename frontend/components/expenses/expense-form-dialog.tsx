@@ -1,17 +1,12 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import {
-  EXPENSE_CATEGORIES,
-  EXPENSE_CATEGORY_LABELS,
-  type ExpenseCategoryCode,
-  type ExpenseDto,
-  type PaymentMethodCode,
-} from "@nationwide/shared-types";
+import type { ExpenseCategoryDto, ExpenseDto, PaymentMethodCode } from "@nationwide/shared-types";
 import { Dialog, DialogContent, DialogClose } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/select";
+import { categoryOptions } from "@/components/expenses/manage-categories-dialog";
 
 const METHODS: { value: PaymentMethodCode; label: string }[] = [
   { value: "CASH", label: "Cash" },
@@ -21,7 +16,7 @@ const METHODS: { value: PaymentMethodCode; label: string }[] = [
 
 export interface ExpenseFormValues {
   expenseDate: string;
-  category: ExpenseCategoryCode;
+  categoryId: string;
   amount: number;
   paymentMethod: PaymentMethodCode;
   paidTo: string;
@@ -36,10 +31,12 @@ export interface ExpenseFormValues {
  */
 export function ExpenseFormDialog({
   trigger,
+  categories,
   expense,
   onSubmit,
 }: {
   trigger: ReactNode;
+  categories: ExpenseCategoryDto[];
   /** Omitted when recording a new expense. */
   expense?: ExpenseDto;
   onSubmit: (values: ExpenseFormValues) => Promise<void>;
@@ -51,7 +48,8 @@ export function ExpenseFormDialog({
   const [expenseDate, setExpenseDate] = useState(
     (expense?.expenseDate ?? new Date().toISOString()).slice(0, 10),
   );
-  const [category, setCategory] = useState<ExpenseCategoryCode>(expense?.category ?? "OTHER");
+  const options = categoryOptions(categories);
+  const [categoryId, setCategoryId] = useState(expense?.categoryId ?? "");
   const [amount, setAmount] = useState(expense?.amount?.toString() ?? "");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethodCode>(
     expense?.paymentMethod ?? "BANK_TRANSFER",
@@ -60,14 +58,16 @@ export function ExpenseFormDialog({
   const [description, setDescription] = useState(expense?.description ?? "");
   const [referenceNo, setReferenceNo] = useState(expense?.referenceNo ?? "");
 
-  const isValid = Number(amount) > 0 && paidTo.trim().length >= 2 && expenseDate !== "";
+  // A category is required: the whole point of the ledger is knowing what the money went on.
+  const isValid =
+    Number(amount) > 0 && paidTo.trim().length >= 2 && expenseDate !== "" && categoryId !== "";
 
   async function save() {
     setIsSaving(true);
     try {
       await onSubmit({
         expenseDate: new Date(`${expenseDate}T00:00:00`).toISOString(),
-        category,
+        categoryId,
         amount: Number(amount),
         paymentMethod,
         paidTo: paidTo.trim(),
@@ -114,12 +114,13 @@ export function ExpenseFormDialog({
                 <Label htmlFor="expense-category">Category</Label>
                 <NativeSelect
                   id="expense-category"
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value as ExpenseCategoryCode)}
+                  value={categoryId}
+                  onChange={(e) => setCategoryId(e.target.value)}
                 >
-                  {EXPENSE_CATEGORIES.map((c) => (
-                    <option key={c} value={c}>
-                      {EXPENSE_CATEGORY_LABELS[c]}
+                  <option value="">Choose a category…</option>
+                  {options.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
                     </option>
                   ))}
                 </NativeSelect>

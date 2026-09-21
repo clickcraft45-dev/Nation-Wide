@@ -23,12 +23,18 @@ describe('CommandCentreService', () => {
           .fn()
           .mockResolvedValue([{ amount: 600, expenseDate: thisMonth }]),
         groupBy: jest.fn().mockResolvedValue([
-          { category: 'SALARY', _sum: { amount: 400 } },
-          { category: 'FUEL', _sum: { amount: 200 } },
+          { categoryId: 'cat-salary', _sum: { amount: 400 } },
+          { categoryId: 'cat-fuel', _sum: { amount: 200 } },
         ]),
         aggregate: jest.fn().mockResolvedValue({ _sum: { amount: 100 } }),
       },
       customer: { count: jest.fn().mockResolvedValue(42) },
+      expenseCategory: {
+        findMany: jest.fn().mockResolvedValue([
+          { id: 'cat-salary', name: 'Salary', parent: null },
+          { id: 'cat-fuel', name: 'Fuel', parent: null },
+        ]),
+      },
       adminUser: {
         groupBy: jest.fn().mockResolvedValue([
           { role: 'ADMIN', isActive: true, _count: { _all: 3 } },
@@ -114,6 +120,17 @@ describe('CommandCentreService', () => {
       expenses: 0,
       profit: 0,
     });
+  });
+
+  it('names the spend categories rather than charting their ids', async () => {
+    const { service } = harness();
+
+    const result = await service.get();
+
+    expect(result.expensesByCategory).toEqual([
+      { category: 'Salary', amount: 400 },
+      { category: 'Fuel', amount: 200 },
+    ]);
   });
 
   it('counts the people by role, keeping deactivated accounts separate', async () => {

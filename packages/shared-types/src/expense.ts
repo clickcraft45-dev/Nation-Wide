@@ -1,42 +1,32 @@
 import type { PaymentMethodCode } from "./order";
 
-export const EXPENSE_CATEGORIES = [
-  "SALARY",
-  "RENT",
-  "UTILITIES",
-  "FUEL",
-  "PACKAGING",
-  "COURIER_PARTNER",
-  "MARKETING",
-  "OFFICE_SUPPLIES",
-  "TRAVEL",
-  "MAINTENANCE",
-  "TAXES_FEES",
-  "OTHER",
-] as const;
+/**
+ * An expense heading, with its subcategories nested one level deep.
+ *
+ * `spent` includes everything filed under the subcategories too — a parent reading ₹0 while a
+ * child under it holds ₹4,000 reads as a bug rather than as a subtotal.
+ */
+export interface ExpenseCategoryDto {
+  id: string;
+  name: string;
+  parentId: string | null;
+  spent: number;
+  children: ExpenseCategoryDto[];
+}
 
-export type ExpenseCategoryCode = (typeof EXPENSE_CATEGORIES)[number];
-
-export const EXPENSE_CATEGORY_LABELS: Record<ExpenseCategoryCode, string> = {
-  SALARY: "Salary",
-  RENT: "Rent",
-  UTILITIES: "Utilities",
-  FUEL: "Fuel",
-  PACKAGING: "Packaging",
-  COURIER_PARTNER: "Courier Partner",
-  MARKETING: "Marketing",
-  OFFICE_SUPPLIES: "Office Supplies",
-  TRAVEL: "Travel",
-  MAINTENANCE: "Maintenance",
-  TAXES_FEES: "Taxes & Fees",
-  OTHER: "Other",
-};
+export interface CreateExpenseCategoryDto {
+  name: string;
+  /** Omit for a top-level category; set to nest one level under it. */
+  parentId?: string;
+}
 
 /** One line in the company's outgoing-money ledger. */
 export interface ExpenseDto {
   id: string;
   expenseDate: string; // ISO 8601
-  category: ExpenseCategoryCode;
+  categoryId: string;
+  /** The heading as shown, e.g. "Cleaning" or "Cleaning → Sanitiser". */
+  categoryName: string;
   amount: number;
   currency: string;
   paymentMethod: PaymentMethodCode;
@@ -54,5 +44,5 @@ export interface ExpenseListDto {
   /** Summed amount for the filter, ignoring pagination — the page's headline number. */
   totalAmount: number;
   /** Same window, split by category, biggest first. */
-  byCategory: { category: ExpenseCategoryCode; amount: number }[];
+  byCategory: { categoryId: string; categoryName: string; amount: number }[];
 }

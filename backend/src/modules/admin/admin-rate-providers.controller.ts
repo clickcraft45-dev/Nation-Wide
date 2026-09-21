@@ -3,12 +3,23 @@ import {
   Controller,
   Get,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Query,
   UseGuards,
 } from '@nestjs/common';
+import {
+  IsIn,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Max,
+  Min,
+} from 'class-validator';
 import type {
+  FuelSurchargeCheckDto,
+  FuelSurchargeUpdateDto,
   CountryDetailDto,
   ProviderCountryDto,
   RateDto,
@@ -26,6 +37,21 @@ import { RatesService } from '../pricing/rates.service';
 import { toRateDto } from '../pricing/rate.mapper';
 import { CreateRateProviderDto } from '../pricing/dto/create-rate-provider.dto';
 import { UpdateRateProviderDto } from '../pricing/dto/update-rate-provider.dto';
+import { FuelSurchargeService } from '../pricing/fuel-surcharge.service';
+
+class ApplyFuelSurchargeBody {
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  percent!: number;
+
+  @IsIn(['CARRIER_SITE', 'MANUAL'])
+  source!: 'CARRIER_SITE' | 'MANUAL';
+
+  @IsOptional()
+  @IsString()
+  label?: string;
+}
 
 // Rate providers feed directly
 // into the pricing engine, which controls company margin (Section: Rate card RBAC).
@@ -36,7 +62,34 @@ export class AdminRateProvidersController {
   constructor(
     private readonly rateProvidersService: RateProvidersService,
     private readonly ratesService: RatesService,
+    private readonly fuelSurcharge: FuelSurchargeService,
   ) {}
+
+  /**
+   * What each carrier is charging, what its published page says, and the last five changes.
+   *
+   * Declared above the ':id' routes so 'fuel-surcharges' isn't swallowed as a provider id.
+   * Reading a page never changes a price — applying below is what does.
+   */
+  @Get('fuel-surcharges')
+  fuelSurcharges(): Promise<FuelSurchargeCheckDto[]> {
+    return this.fuelSurcharge.check();
+  }
+
+  @Post(':id/fuel-surcharge')
+  applyFuelSurcharge(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ApplyFuelSurchargeBody,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<FuelSurchargeUpdateDto[]> {
+    return this.fuelSurcharge.apply(
+      id,
+      dto.percent,
+      user.sub,
+      dto.source,
+      dto.label,
+    );
+  }
 
   @Get()
   async findAll(): Promise<RateProviderDto[]> {

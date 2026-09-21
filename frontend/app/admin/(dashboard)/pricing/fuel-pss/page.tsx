@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState, ErrorState } from "@/components/ui/page-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RateProviderDialog } from "@/components/pricing/rate-provider-dialog";
+import { FuelSurchargePanel } from "@/components/pricing/fuel-surcharge-panel";
 
 // Fuel Charge % and PSS/kg live once per provider (RateProvider), not per rate — updating either
 // here affects every shipment quoted for that provider immediately, with no duplicate values
@@ -39,9 +40,11 @@ export default function FuelAndPssPage() {
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        Fuel Charge % applies to Base Rate only; PSS is a flat rate per kg. Both apply
-        automatically to every quote for that provider — there&apos;s nothing to set per rate.
+        Fuel Charge % applies to Base Rate only; PSS is a flat rate per kg. Both apply automatically
+        to every quote for that provider — there&apos;s nothing to set per rate.
       </p>
+
+      <FuelSurchargePanel />
 
       {isLoading && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">

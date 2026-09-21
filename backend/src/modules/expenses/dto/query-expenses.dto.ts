@@ -1,19 +1,18 @@
 import { Transform, Type } from 'class-transformer';
 import {
   IsDate,
-  IsEnum,
+  IsUUID,
   IsInt,
   IsOptional,
   IsString,
   Max,
   Min,
 } from 'class-validator';
-import { ExpenseCategory } from '@prisma/client';
 
 export class QueryExpensesDto {
   @IsOptional()
-  @IsEnum(ExpenseCategory)
-  category?: ExpenseCategory;
+  @IsUUID()
+  categoryId?: string;
 
   @IsOptional()
   @Type(() => Date)
