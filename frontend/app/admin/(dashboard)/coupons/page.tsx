@@ -19,6 +19,7 @@ import { EmptyState, ErrorState } from "@/components/ui/page-state";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/components/ui/toast";
+import { DateField } from "@/components/ui/date-field";
 
 const rupees = (n: number) => `₹${n.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 
@@ -146,11 +147,14 @@ export default function AdminCouponsPage() {
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="coupon-expiry">Expires (optional)</Label>
-              <Input
+              <DateField
                 id="coupon-expiry"
-                type="date"
+                title="Coupon expiry"
+                subtitle="Leave empty for a code that never expires"
+                placeholder="Never expires"
                 value={expiresAt}
-                onChange={(e) => setExpiresAt(e.target.value)}
+                clearable
+                onChange={setExpiresAt}
               />
             </div>
             <div className="space-y-1.5">

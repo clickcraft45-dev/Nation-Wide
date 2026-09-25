@@ -19,6 +19,15 @@ export interface DateFieldProps
   className?: string;
   /** Align the popover to the right edge when the field sits at the end of a row. */
   align?: "start" | "end";
+  /**
+   * Offer a "Clear" action in the calendar footer, which emits "". For a filter, an empty date
+   * is a meaningful answer ("everything up to now") and the native picker had its own Clear —
+   * dropping it while replacing that picker would take a capability away.
+   *
+   * It lives in the footer rather than as an x inside the trigger because the trigger is itself
+   * a button, and a button inside a button is invalid markup that behaves differently per browser.
+   */
+  clearable?: boolean;
 }
 
 const GAP = 8;
@@ -69,6 +78,7 @@ export function DateField({
   disabled,
   className,
   align = "start",
+  clearable = false,
   ...calendarProps
 }: DateFieldProps) {
   const [open, setOpen] = useState(false);
@@ -161,6 +171,20 @@ export function DateField({
           >
             <Calendar
               {...calendarProps}
+              footer={
+                clearable && value ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onChange("");
+                      setOpen(false);
+                    }}
+                    className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    Clear
+                  </button>
+                ) : undefined
+              }
               title={title}
               subtitle={subtitle ?? (value ? formatIsoLong(value) : placeholder)}
               selected={value || null}

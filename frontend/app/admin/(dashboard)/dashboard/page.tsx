@@ -31,6 +31,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@
 import { OrderStatusBadge } from "@/components/ui/status-badge";
 import { EmptyState, ErrorState } from "@/components/ui/page-state";
 import { Skeleton } from "@/components/ui/skeleton";
+import { DateField } from "@/components/ui/date-field";
 import { cn } from "@/lib/utils/cn";
 
 function displayName(email: string): string {
@@ -269,31 +270,29 @@ export default function AdminDashboardHomePage() {
           <p className="text-sm text-muted-foreground">Here&apos;s what&apos;s happening today.</p>
         </div>
 
-        {/* Native <input type="date"> rather than a picker component: it is already localised,
-            keyboard-accessible and touch-friendly on every target browser, and the app has no
-            other date-range control to stay consistent with. */}
+        {/* The app's own calendar, not the browser's. The native control paints a system-styled
+            dialog that ignores the theme entirely, and it looked like a different application
+            every time it opened. */}
         <div className="flex flex-wrap items-end gap-3">
-          <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
+          <div className="flex w-40 flex-col gap-1 text-xs font-medium text-muted-foreground">
             From
-            <input
-              type="date"
+            <DateField
+              title="Report from"
               value={from}
               max={to}
-              onChange={(e) => e.target.value && setFrom(e.target.value)}
-              className="rounded-lg border border-border bg-card px-2.5 py-1.5 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              onChange={(iso) => iso && setFrom(iso)}
             />
-          </label>
-          <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
+          </div>
+          <div className="flex w-40 flex-col gap-1 text-xs font-medium text-muted-foreground">
             To
-            <input
-              type="date"
+            <DateField
+              title="Report to"
               value={to}
               min={from}
               max={todayIso()}
-              onChange={(e) => e.target.value && setTo(e.target.value)}
-              className="rounded-lg border border-border bg-card px-2.5 py-1.5 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              onChange={(iso) => iso && setTo(iso)}
             />
-          </label>
+          </div>
           <div className="flex rounded-lg border border-border p-0.5">
             {RANGE_PRESETS.map((preset) => {
               const presetFrom = addDaysIso(todayIso(), -(preset.days - 1));

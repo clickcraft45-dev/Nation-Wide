@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogClose } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/select";
+import { DateField } from "@/components/ui/date-field";
 // categoryOptions flattened parent and child into one list; the two are now chosen separately,
 // so the parent list and its children are read straight off the tree.
 
@@ -51,8 +52,9 @@ export function ExpenseFormDialog({
 }) {
   const [open, setOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  // ponytail: native <input type="date">, not the DateField calendar — this is an admin typing a
-  // date they already know, not picking one off a month view.
+  // Was a native <input type="date"> on the reasoning that an admin types a date they already
+  // know. The theme wins: a browser-painted dialog in the middle of a themed form reads as a
+  // different application, and the shared DateField takes typed input to the same yyyy-mm-dd value.
   const [expenseDate, setExpenseDate] = useState(
     (expense?.expenseDate ?? new Date().toISOString()).slice(0, 10),
   );
@@ -113,11 +115,11 @@ export function ExpenseFormDialog({
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="expense-date">Date</Label>
-                <Input
+                <DateField
                   id="expense-date"
-                  type="date"
+                  title="Date of the expense"
                   value={expenseDate}
-                  onChange={(e) => setExpenseDate(e.target.value)}
+                  onChange={setExpenseDate}
                 />
               </div>
               <div className="space-y-1.5">

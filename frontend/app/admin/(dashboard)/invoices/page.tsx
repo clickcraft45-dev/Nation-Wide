@@ -10,6 +10,7 @@ import type {
 } from "@nationwide/shared-types";
 import { apiClient, ApiError, errorMessage, fieldErrors } from "@/lib/api-client";
 import { CustomerPicker } from "@/components/customers/customer-picker";
+import { DateField } from "@/components/ui/date-field";
 import {
   CustomInvoiceLines,
   customInvoiceLinesTotal,
@@ -338,24 +339,21 @@ export default function AdminInvoicesPage() {
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="space-y-1">
               <span className="text-xs font-medium text-muted-foreground">From</span>
-              {/* Native date inputs — the browser already ships a calendar, a locale, and
-                  keyboard support that no picker component here would improve on. */}
-              <input
-                type="date"
+              {/* The app's own calendar — see components/ui/date-field. */}
+              <DateField
+                title="Bill from"
                 value={from}
-                max={to}
-                onChange={(e) => setFrom(e.target.value)}
-                className="glass-field h-10 w-full rounded-lg px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                max={to || undefined}
+                onChange={setFrom}
               />
             </label>
             <label className="space-y-1">
               <span className="text-xs font-medium text-muted-foreground">To</span>
-              <input
-                type="date"
+              <DateField
+                title="Bill to"
                 value={to}
-                min={from}
-                onChange={(e) => setTo(e.target.value)}
-                className="glass-field h-10 w-full rounded-lg px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                min={from || undefined}
+                onChange={setTo}
               />
             </label>
           </div>

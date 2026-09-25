@@ -6,7 +6,7 @@ import type { ExpenseCategoryDto, ExpenseDto, ExpenseListDto } from "@nationwide
 import { apiClient, errorMessage } from "@/lib/api-client";
 import { SearchInput } from "@/components/ui/search-input";
 import { NativeSelect } from "@/components/ui/select";
-import { Input, Label } from "@/components/ui/input";
+import { Label } from "@/components/ui/input";
 import {
   Table,
   TableHeader,
@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { StatCard } from "@/components/ui/stat-card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/toast";
+import { DateField } from "@/components/ui/date-field";
 import { useAuth } from "@/state/auth-context";
 import {
   ExpenseFormDialog,
@@ -229,22 +230,26 @@ export default function AdminExpensesPage() {
         </NativeSelect>
         <div className="space-y-1.5">
           <Label htmlFor="expense-from">From</Label>
-          <Input
+          <DateField
             id="expense-from"
-            type="date"
+            title="Spending from"
             className="sm:w-40"
             value={from}
-            onChange={(e) => setFrom(e.target.value)}
+            max={to || undefined}
+            clearable
+            onChange={setFrom}
           />
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="expense-to">To</Label>
-          <Input
+          <DateField
             id="expense-to"
-            type="date"
+            title="Spending to"
             className="sm:w-40"
             value={to}
-            onChange={(e) => setTo(e.target.value)}
+            min={from || undefined}
+            clearable
+            onChange={setTo}
           />
         </div>
       </div>
