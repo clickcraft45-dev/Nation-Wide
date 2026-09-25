@@ -9,6 +9,7 @@ import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { AppService } from './app.service';
 import { PrismaModule } from './database/prisma.module';
 import { RedisModule } from './database/redis.module';
+import { RedisService } from './database/redis.service';
 import { StorageModule } from './database/storage.module';
 import { validateEnv } from './common/config/env.validation';
 import { AuthModule } from './modules/auth/auth.module';
@@ -27,6 +28,8 @@ import { PincodesModule } from './modules/pincodes/pincodes.module';
 import { InvoicesModule } from './modules/invoices/invoices.module';
 import { ReceiptsModule } from './modules/receipts/receipts.module';
 import { ExpensesModule } from './modules/expenses/expenses.module';
+import { CouponsModule } from './modules/coupons/coupons.module';
+import { RedisThrottlerStorage } from './common/throttler/redis-throttler.storage';
 
 @Module({
   imports: [
@@ -35,7 +38,17 @@ import { ExpensesModule } from './modules/expenses/expenses.module';
     // Sensitive endpoints (login/register/refresh/change-password/quote+pickup-request creation/
     // payment collection) apply a much stricter @Throttle override directly on the route to
     // blunt brute-force/credential-stuffing/spam without rate-limiting the rest of the API.
-    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 300 }]),
+    // Counters live in Redis (see RedisThrottlerStorage), not in each process's memory: with
+    // WEB_CONCURRENCY > 1 the default in-memory storage gives every worker its own allowance,
+    // which quietly multiplies every limit here — including the login ones — by the worker count.
+    ThrottlerModule.forRootAsync({
+      imports: [RedisModule],
+      inject: [RedisService],
+      useFactory: (redis: RedisService) => ({
+        throttlers: [{ ttl: 60_000, limit: 300 }],
+        storage: new RedisThrottlerStorage(redis),
+      }),
+    }),
     PrismaModule,
     RedisModule,
     StorageModule,
@@ -55,6 +68,7 @@ import { ExpensesModule } from './modules/expenses/expenses.module';
     InvoicesModule,
     ReceiptsModule,
     ExpensesModule,
+    CouponsModule,
   ],
   controllers: [AppController, HealthController],
   providers: [

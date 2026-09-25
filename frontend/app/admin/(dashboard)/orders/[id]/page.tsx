@@ -18,6 +18,10 @@ import { OrderStatusBadge } from "@/components/ui/status-badge";
 import { ShipmentAwbCard } from "@/components/orders/shipment-awb-card";
 import { OrderTrackingPanel } from "@/components/orders/order-tracking-panel";
 import { ParcelContentsCard } from "@/components/shipment/parcel-contents-card";
+import { OrderPickupCard } from "@/components/orders/order-pickup-card";
+import { OrderPaymentCard } from "@/components/orders/order-payment-card";
+import { OrderDocumentsCard } from "@/components/orders/order-documents-card";
+import { AwbHistoryCard } from "@/components/orders/awb-history-card";
 
 export default function AdminOrderDetailPage() {
   const params = useParams<{ id: string }>();
@@ -142,7 +146,13 @@ export default function AdminOrderDetailPage() {
                 </CardContent>
               </Card>
 
+              {pickup && <OrderPickupCard pickup={pickup} />}
+
               {pickup && <ParcelContentsCard pickup={pickup} showPickupLink />}
+
+              <OrderPaymentCard order={order} onChanged={() => setReloadKey((k) => k + 1)} />
+
+              <OrderDocumentsCard orderId={order.id} customerId={order.customerId} />
 
               <Card>
                 <CardHeader>
@@ -173,8 +183,9 @@ export default function AdminOrderDetailPage() {
 
             {/* Sticky, because the left column is the long one — the journey should stay on
                 screen while an admin scrolls a multi-shipment order. */}
-            <aside className="lg:sticky lg:top-4 lg:self-start">
+            <aside className="space-y-6 lg:sticky lg:top-4 lg:self-start">
               <OrderTrackingPanel shipments={order.shipments} />
+              <AwbHistoryCard shipments={order.shipments} />
             </aside>
           </div>
         </>

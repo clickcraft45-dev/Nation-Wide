@@ -133,6 +133,9 @@ export function RateProviderDialog({
                       />
                     </div>
                   </div>
+                  <p className="text-xs text-muted-foreground">
+                    Margin is set by weight under Margins, not here.
+                  </p>
                 </div>
               </>
             )}

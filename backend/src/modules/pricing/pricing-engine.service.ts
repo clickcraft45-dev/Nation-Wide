@@ -119,10 +119,34 @@ export function calculateFinalPrice(
   };
 }
 
+/**
+ * The margin a carrier charges at this weight, from its band ladder.
+ *
+ * The band that contains the weight charges its flat amount plus its per-kg rate on the weight
+ * above the band's own floor — so "flat 1000 to 10 kg, then 100/kg to 20 kg" is 1000 at 8 kg and
+ * 1500 at 15 kg. No band covering the weight means no margin from this ladder at all, which is
+ * what an unconfigured provider looks like.
+ */
+export function marginFromBands(
+  bands: {
+    fromKg: number;
+    toKg: number | null;
+    flatAmount: number;
+    perKgAmount: number;
+  }[],
+  weightKg: number,
+): number {
+  const band = bands.find(
+    (b) => weightKg >= b.fromKg && (b.toKg == null || weightKg < b.toKg),
+  );
+  if (!band) return 0;
+  return round2(band.flatAmount + band.perKgAmount * (weightKg - band.fromKg));
+}
+
 const withActiveWeightSlabs = {
   include: {
     weightSlabs: { where: { isActive: true } },
-    zone: { include: { rateProvider: true } },
+    zone: { include: { rateProvider: { include: { marginBands: true } } } },
   },
 };
 type EligibleRateCard = Prisma.RateCardGetPayload<typeof withActiveWeightSlabs>;
@@ -201,6 +225,7 @@ export class PricingEngineService {
   > {
     const provider = await this.prisma.rateProvider.findUnique({
       where: { id: input.rateProviderId },
+      include: { marginBands: true },
     });
     if (!provider) {
       throw new NotFoundException(
@@ -214,7 +239,9 @@ export class PricingEngineService {
       pssPerKg: provider.pssPerKg,
       weightKg: input.weightKg,
       gstPercent: input.gstPercent ?? 0,
-      nationwideCut: input.nationwideCut ?? 0,
+      nationwideCut:
+        input.nationwideCut ||
+        marginFromBands(provider.marginBands, input.weightKg),
     });
 
     return {
@@ -239,7 +266,12 @@ export class PricingEngineService {
       pssPerKg: rateCard.zone.rateProvider.pssPerKg,
       weightKg,
       gstPercent: slab.gstPercent,
-      nationwideCut: slab.nationwideCut,
+      // A slab with no margin of its own falls back to the provider's margin ladder, so a
+      // carrier-wide cut is set once by weight rather than on every slab. A slab that sets its
+      // own margin still wins.
+      nationwideCut:
+        slab.nationwideCut ||
+        marginFromBands(rateCard.zone.rateProvider.marginBands, weightKg),
     });
 
     return {

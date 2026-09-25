@@ -13,8 +13,17 @@ const baseShipment = {
   // string the caller passed in — getStatus now accepts an AWB or an order id too.
   internalTrackingNumber: 'NW-1',
   providerId: 'provider-1',
-  provider: { id: 'provider-1', adapterClass: 'StubShippingProviderAdapter' },
-  order: { customerId: 'customer-1' },
+  provider: {
+    id: 'provider-1',
+    code: 'DHL',
+    name: 'DHL Express',
+    adapterClass: 'StubShippingProviderAdapter',
+  },
+  order: {
+    customerId: 'customer-1',
+    customer: { name: 'Asha Menon' },
+    quote: { items: [{ description: 'Saree', quantity: 2, unitValue: 1200 }] },
+  },
 };
 
 describe('TrackingService', () => {
@@ -80,6 +89,7 @@ describe('TrackingService', () => {
       providerRegistry as never,
       configService as never,
       notificationsService as never,
+      { requestFeedback: jest.fn().mockResolvedValue(undefined) } as never,
     );
   });
 
@@ -181,6 +191,10 @@ describe('TrackingService', () => {
 
     expect(result).toEqual({
       internalTrackingNumber: 'NW-1',
+      customerName: 'Asha Menon',
+      items: [{ description: 'Saree', quantity: 2, unitValue: 1200 }],
+      // No AWB mapped yet, so there is no carrier page to send anyone to.
+      carrier: null,
       currentStatus: null,
       currentStatusLabel: 'Tracking not yet available',
       lastUpdated: null,
@@ -188,6 +202,36 @@ describe('TrackingService', () => {
     });
     expect(providerRegistry.resolve).not.toHaveBeenCalled();
     expect(redis.cacheSet).not.toHaveBeenCalled();
+  });
+
+  it('names the sender, its contents, and a deep link to the carrier page for the mapped AWB', async () => {
+    prisma.shipment.findUnique.mockResolvedValue({
+      ...baseShipment,
+      externalTrackingNumbers: [
+        {
+          id: 'ext-1',
+          providerId: 'provider-1',
+          externalTrackingNumber: 'JD0123456789',
+        },
+      ],
+    });
+    providerRegistry.resolve.mockReturnValue({
+      trackShipment: jest.fn().mockResolvedValue({ events: [] }),
+    });
+
+    const result = await service.getStatus('NW-1');
+
+    expect(result.customerName).toBe('Asha Menon');
+    expect(result.items).toEqual([
+      { description: 'Saree', quantity: 2, unitValue: 1200 },
+    ]);
+    expect(result.carrier).toEqual({
+      code: 'DHL',
+      name: 'DHL Express',
+      trackingNumber: 'JD0123456789',
+      trackingUrl:
+        'https://www.dhl.com/in-en/home/tracking/tracking-express.html?submit=1&tracking-id=JD0123456789',
+    });
   });
 
   it('fetches from the provider on a cache miss, persists new events, and caches the result', async () => {

@@ -31,6 +31,11 @@ export class UpdateRateProviderDto {
   pssPerKg?: number;
 
   @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  defaultNationwideCut?: number;
+
+  @IsOptional()
   @IsString()
   reason?: string;
 }

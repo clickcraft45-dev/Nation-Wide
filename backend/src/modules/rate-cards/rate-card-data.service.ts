@@ -45,10 +45,10 @@ export interface RateCardCountryColumn {
 }
 
 export interface RateCardData {
-  // Internal only — used by RateCardDocumentsService to persist the FK and by the admin history
-  // list, but the template must never render it (the provider is deliberately never named on the
-  // customer-facing document).
+  // Used by RateCardDocumentsService to persist the FK and by the admin history list.
   rateProviderId: string;
+  // Named on the document itself — customers asked which carrier the rates are for.
+  rateProviderName: string;
   shipmentType: ShipmentTypeCode;
   effectiveDate: string;
   countries: RateCardCountryColumn[];
@@ -172,6 +172,7 @@ export class RateCardDataService {
 
     return {
       rateProviderId: provider.id,
+      rateProviderName: provider.name,
       shipmentType: input.shipmentType,
       effectiveDate: input.effectiveDate,
       countries: resolvedCountries.map((c) => ({

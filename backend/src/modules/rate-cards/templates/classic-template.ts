@@ -219,6 +219,17 @@ function buildStyles(
       justifyContent: 'space-between',
     },
     pageFooterText: { fontSize: 7, color: '#71717a' },
+    // A4 is 595x842pt; a 300pt mark sits centred behind the content at a weight that photocopies
+    // without swallowing the table underneath.
+    watermark: {
+      position: 'absolute',
+      top: 271,
+      left: 148,
+      width: 300,
+      height: 300,
+      opacity: 0.05,
+      objectFit: 'contain',
+    },
   });
 }
 
@@ -314,6 +325,7 @@ export async function renderClassicTemplate(
   // ponytail: the header is always the bundled white wordmark on black — an uploaded company logo
   // (logoBuffer) has no guaranteed contrast on black, so it is not placed here.
   const wordmark = brandAsset('wordmark-white.png');
+  const watermark = brandAsset('mark-black.png');
 
   const badges: {
     kind: 'safe' | 'reliable' | 'fast' | 'global';
@@ -334,6 +346,10 @@ export async function renderClassicTemplate(
       return h(
         Page,
         { size: 'A4', style: styles.page, key: pageIndex },
+        // Watermark first so every later element paints over it; fixed, so it repeats per page.
+        watermark
+          ? h(Image, { style: styles.watermark, src: watermark, fixed: true })
+          : null,
         // Header
         h(
           View,
@@ -387,6 +403,16 @@ export async function renderClassicTemplate(
         h(
           View,
           { style: styles.infoRow },
+          h(
+            View,
+            { style: styles.infoCard },
+            h(
+              View,
+              null,
+              h(Text, { style: styles.infoLabel }, 'Service Provider'),
+              h(Text, { style: styles.infoValue }, data.rateProviderName),
+            ),
+          ),
           h(
             View,
             { style: styles.infoCard },

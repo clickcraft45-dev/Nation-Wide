@@ -8,7 +8,7 @@ import { apiClient, errorMessage } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { SearchInput } from "@/components/ui/search-input";
-import { Input, Label } from "@/components/ui/input";
+import { Input, Label, FieldError } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogClose } from "@/components/ui/dialog";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { PhoneInput } from "@/components/ui/phone-input";
@@ -247,6 +247,9 @@ function GenerateLinkDialog({ onCreated }: { onCreated: () => void }) {
   const [phone, setPhone] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [created, setCreated] = useState<B2bLinkDto | null>(null);
+  // Shown inside the dialog as well as in a toast — a duplicate phone is a correction to make
+  // right here in the form, not a message to read after the dialog covers it.
+  const [formError, setFormError] = useState<string | null>(null);
   const { showToast } = useToast();
 
   useEffect(() => {
@@ -276,6 +279,7 @@ function GenerateLinkDialog({ onCreated }: { onCreated: () => void }) {
 
   async function create() {
     setIsSaving(true);
+    setFormError(null);
     try {
       // A new business is created first, then the link is issued against it — the same account
       // the rest of the app bills, not a second kind of customer record.
@@ -296,7 +300,9 @@ function GenerateLinkDialog({ onCreated }: { onCreated: () => void }) {
       setCreated(link);
       onCreated();
     } catch (err) {
-      showToast({ variant: "error", title: errorMessage(err, "Couldn't generate the link.") });
+      const message = errorMessage(err, "Couldn't generate the link.");
+      setFormError(message);
+      showToast({ variant: "error", title: message });
     } finally {
       setIsSaving(false);
     }
@@ -313,6 +319,7 @@ function GenerateLinkDialog({ onCreated }: { onCreated: () => void }) {
     setEmail("");
     setPhone("");
     setQuery("");
+    setFormError(null);
   }
 
   return (
@@ -474,6 +481,8 @@ function GenerateLinkDialog({ onCreated }: { onCreated: () => void }) {
                   cutting off the rest, which is easier when you know who holds which.
                 </p>
               </div>
+
+              {formError && <FieldError>{formError}</FieldError>}
 
               <div className="flex justify-end gap-2">
                 <DialogClose asChild>

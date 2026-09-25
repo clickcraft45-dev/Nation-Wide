@@ -11,6 +11,8 @@ import { EmptyState, ErrorState } from "@/components/ui/page-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RateProviderDialog } from "@/components/pricing/rate-provider-dialog";
 import { FuelSurchargePanel } from "@/components/pricing/fuel-surcharge-panel";
+import { MarginBandsDialog } from "@/components/pricing/margin-bands-dialog";
+import { BackLink } from "@/components/ui/back-link";
 
 // Fuel Charge % and PSS/kg live once per provider (RateProvider), not per rate — updating either
 // here affects every shipment quoted for that provider immediately, with no duplicate values
@@ -39,9 +41,11 @@ export default function FuelAndPssPage() {
 
   return (
     <div className="space-y-4">
+      <BackLink href="/admin/pricing/dashboard">Back to pricing</BackLink>
       <p className="text-sm text-muted-foreground">
-        Fuel Charge % applies to Base Rate only; PSS is a flat rate per kg. Both apply automatically
-        to every quote for that provider — there&apos;s nothing to set per rate.
+        Fuel Charge % applies to Base Rate only; PSS is a flat rate per kg. Margin bands set the
+        NationWide cut by weight — a rate that carries its own margin keeps it. All three apply
+        automatically to every quote for that provider.
       </p>
 
       <FuelSurchargePanel />
@@ -76,20 +80,47 @@ export default function FuelAndPssPage() {
                   <dd className="text-right text-foreground">{p.fuelChargePercent}%</dd>
                   <dt className="text-muted-foreground">PSS</dt>
                   <dd className="text-right text-foreground">₹{p.pssPerKg} / kg</dd>
+                  <dt className="text-muted-foreground">Margin</dt>
+                  <dd className="text-right text-foreground">
+                    {p.marginBands.length === 0
+                      ? "Per rate"
+                      : `${p.marginBands.length} band${p.marginBands.length > 1 ? "s" : ""}`}
+                  </dd>
                   <dt className="text-muted-foreground">Last Updated</dt>
                   <dd className="text-right text-foreground">
                     {new Date(p.updatedAt).toLocaleDateString("en-IN")}
                   </dd>
                 </dl>
-                <RateProviderDialog
-                  provider={p}
-                  onSaved={() => load()}
-                  trigger={
-                    <Button size="sm" className="w-full">
-                      Update
-                    </Button>
-                  }
-                />
+                {p.marginBands.length > 0 && (
+                  <ul className="space-y-0.5 text-xs text-muted-foreground">
+                    {p.marginBands.map((band) => (
+                      <li key={band.id}>
+                        {band.fromKg}–{band.toKg ?? "∞"} kg: ₹{band.flatAmount.toLocaleString("en-IN")}
+                        {band.perKgAmount > 0 ? ` + ₹${band.perKgAmount}/kg` : ""}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <div className="flex gap-2">
+                  <RateProviderDialog
+                    provider={p}
+                    onSaved={() => load()}
+                    trigger={
+                      <Button size="sm" className="w-full">
+                        Update
+                      </Button>
+                    }
+                  />
+                  <MarginBandsDialog
+                    provider={p}
+                    onSaved={() => load()}
+                    trigger={
+                      <Button size="sm" variant="secondary" className="w-full">
+                        Margins
+                      </Button>
+                    }
+                  />
+                </div>
               </CardContent>
             </Card>
           ))}

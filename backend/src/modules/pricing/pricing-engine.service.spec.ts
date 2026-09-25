@@ -49,6 +49,7 @@ function makeRateCard(overrides: Record<string, unknown> = {}) {
         name: 'Test Provider',
         fuelChargePercent: decimal(10),
         pssPerKg: decimal(25),
+        marginBands: [],
       },
     },
     weightSlabs: [makeSlab()],
@@ -111,6 +112,53 @@ describe('PricingEngineService', () => {
     // pssPerKg 25 × 12kg = 300 — same rate card/slab the 2kg case uses, proving PSS scales with
     // the requested weight rather than staying fixed at the old per-slab amount.
     expect(option.pssAmount).toBe(300);
+  });
+
+  it("falls back to the provider's margin ladder only when the slab sets none", async () => {
+    const withBands = (slabCut: number) =>
+      makeRateCard({
+        zone: {
+          id: 'zone-1',
+          rateProviderId: 'provider-1',
+          name: 'Zone A',
+          rateProvider: {
+            id: 'provider-1',
+            name: 'Test Provider',
+            fuelChargePercent: decimal(10),
+            pssPerKg: decimal(25),
+            // Flat 1000 to 10kg, then 1000 + 100/kg above 10.
+            marginBands: [
+              { fromKg: 0, toKg: 10, flatAmount: 1000, perKgAmount: 0 },
+              { fromKg: 10, toKg: 20, flatAmount: 1000, perKgAmount: 100 },
+            ],
+          },
+        },
+        weightSlabs: [
+          makeSlab({
+            weightFromKg: decimal(0),
+            weightToKg: decimal(20),
+            nationwideCut: decimal(slabCut),
+          }),
+        ],
+      });
+
+    const quote = async (weightKg: number) =>
+      (
+        await service.computeQuotesForRequest({
+          destinationCountryName: 'USA',
+          weightKg,
+          shipmentType: 'PACKAGE',
+        })
+      )[0];
+
+    prisma.rateCard.findMany.mockResolvedValue([withBands(0)]);
+    // Inside the flat band, and then 1000 + 100 x 5kg above the 10kg floor.
+    expect((await quote(2)).nationwideCut).toBe(1000);
+    expect((await quote(15)).nationwideCut).toBe(1500);
+
+    prisma.rateCard.findMany.mockResolvedValue([withBands(100)]);
+    // A slab that sets its own margin is never overridden by the ladder.
+    expect((await quote(15)).nationwideCut).toBe(100);
   });
 
   it('never computes fuel charge or GST on NationWide Cut', async () => {

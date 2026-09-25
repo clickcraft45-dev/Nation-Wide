@@ -8,6 +8,7 @@ import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import type {
+  ShipmentItemDto,
   TrackingResultDto,
   TrackingStatusCode,
 } from '@nationwide/shared-types';
@@ -19,11 +20,20 @@ import type { NormalizedTrackingEvent } from '../provider-integration/interfaces
 import { NotificationsService } from '../notifications/notifications.service';
 import { templateForTrackingStatus } from '../notifications/templates';
 import { trackingCacheKey } from './tracking-cache-key';
+import { carrierTrackingUrl } from './carrier-tracking-url';
 
 const DEFAULT_PROVIDER_TIMEOUT_MS = 6000;
 const DEFAULT_ACTIVE_TTL_SECONDS = 300;
 const DEFAULT_TERMINAL_TTL_SECONDS = 86400;
 const TERMINAL_STATUSES: TrackingStatusCode[] = ['DELIVERED'];
+
+/** Everything about the parcel that does not come from the scan feed: who sent it, what is in it,
+ *  and which carrier is carrying it. Threaded through the builders so the DTO says the same thing
+ *  on the live path, the cached path and the stale-data fallback. */
+type ShipmentDetails = Pick<
+  TrackingResultDto,
+  'customerName' | 'items' | 'carrier'
+>;
 
 @Injectable()
 export class TrackingService {
@@ -63,10 +73,26 @@ export class TrackingService {
     const externalTrackingNumber = shipment.externalTrackingNumbers.find(
       (etn) => etn.providerId === shipment.providerId,
     );
+    const details: ShipmentDetails = {
+      customerName: shipment.order.customer.name,
+      items: (shipment.order.quote?.items as ShipmentItemDto[] | null) ?? [],
+      carrier: externalTrackingNumber
+        ? {
+            code: shipment.provider.code,
+            name: shipment.provider.name,
+            trackingNumber: externalTrackingNumber.externalTrackingNumber,
+            trackingUrl: carrierTrackingUrl(
+              shipment.provider.code,
+              externalTrackingNumber.externalTrackingNumber,
+            ),
+          }
+        : null,
+    };
+
     if (!externalTrackingNumber) {
       // Shipment exists, but no carrier tracking number has been mapped yet (Section 3: staff
       // maps this manually, or a future real adapter's createShipment() call would set it).
-      return this.buildDto(internalTrackingNumber, null, null, []);
+      return this.buildDto(internalTrackingNumber, details, null, null, []);
     }
 
     const correlationId = randomUUID();
@@ -113,10 +139,14 @@ export class TrackingService {
         `Provider lookup failed for ${internalTrackingNumber} [correlationId=${correlationId}]`,
         error instanceof Error ? error.stack : String(error),
       );
-      return this.buildFallbackDto(internalTrackingNumber, shipment.id);
+      return this.buildFallbackDto(internalTrackingNumber, details, shipment.id);
     }
 
-    const dto = await this.buildDtoFromDb(internalTrackingNumber, shipment.id);
+    const dto = await this.buildDtoFromDb(
+      internalTrackingNumber,
+      details,
+      shipment.id,
+    );
     await this.cacheResult(cacheKey, dto);
     return dto;
   }
@@ -141,7 +171,15 @@ export class TrackingService {
     const include = {
       provider: true,
       externalTrackingNumbers: true,
-      order: { select: { customerId: true } },
+      order: {
+        select: {
+          customerId: true,
+          customer: { select: { name: true } },
+          // Contents live on the quote the order was accepted from — the commercial-invoice
+          // lines the customer (or the pickup partner at the door) filled in.
+          quote: { select: { items: true } },
+        },
+      },
     } as const;
 
     return this.prisma.shipment
@@ -181,6 +219,7 @@ export class TrackingService {
 
   private async buildFallbackDto(
     internalTrackingNumber: string,
+    details: ShipmentDetails,
     shipmentId: string,
   ): Promise<TrackingResultDto> {
     const hasPriorData =
@@ -192,7 +231,7 @@ export class TrackingService {
     }
     // Serve the last-known state rather than an error page (Section 4 reliability NFR) — the
     // lastUpdated timestamp in the response communicates staleness to the customer.
-    return this.buildDtoFromDb(internalTrackingNumber, shipmentId);
+    return this.buildDtoFromDb(internalTrackingNumber, details, shipmentId);
   }
 
   private async persistNewEvents(
@@ -272,6 +311,7 @@ export class TrackingService {
 
   private async buildDtoFromDb(
     internalTrackingNumber: string,
+    details: ShipmentDetails,
     shipmentId: string,
   ): Promise<TrackingResultDto> {
     const [shipment, events] = await Promise.all([
@@ -285,6 +325,7 @@ export class TrackingService {
 
     return this.buildDto(
       internalTrackingNumber,
+      details,
       shipment.currentStatus as TrackingStatusCode | null,
       shipment.lastSyncedAt,
       events.map((event) => ({
@@ -298,12 +339,14 @@ export class TrackingService {
 
   private buildDto(
     internalTrackingNumber: string,
+    details: ShipmentDetails,
     currentStatus: TrackingStatusCode | null,
     lastUpdated: Date | null,
     events: TrackingResultDto['events'],
   ): TrackingResultDto {
     return {
       internalTrackingNumber,
+      ...details,
       currentStatus,
       currentStatusLabel: currentStatus
         ? (events.find((e) => e.status === currentStatus)?.displayLabel ??

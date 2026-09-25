@@ -1,8 +1,11 @@
 import {
+  IsNumber,
   IsOptional,
   IsString,
   Matches,
+  Max,
   MaxLength,
+  Min,
   MinLength,
 } from 'class-validator';
 
@@ -104,4 +107,28 @@ export class UpdateCompanySettingsDto {
   @IsString()
   @MaxLength(2000)
   restrictedItemsNotice?: string;
+
+  // Cancellation charges, and the warehouse the per-km half is measured from. Read off the
+  // active template when a customer cancels — see OrdersService.quoteCancellation.
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  cancellationBaseFee?: number;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  cancellationPerKmFee?: number;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 6 })
+  @Min(-90)
+  @Max(90)
+  warehouseLatitude?: number;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 6 })
+  @Min(-180)
+  @Max(180)
+  warehouseLongitude?: number;
 }

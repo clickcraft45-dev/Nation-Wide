@@ -118,6 +118,7 @@ describe('AuthService', () => {
       prisma as never,
       jwtService as never,
       configService as never,
+      { sendPasswordReset: jest.fn().mockResolvedValue(undefined) } as never,
     );
   });
 

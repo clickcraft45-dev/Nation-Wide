@@ -11,6 +11,7 @@
 | `JWT_ACCESS_EXPIRES_IN` | Yes | `15m` | Any `ms`-parseable duration string |
 | `JWT_REFRESH_EXPIRES_IN` | Yes | `7d` | Any `ms`-parseable duration string |
 | `PORT` | No | `4000` | HTTP port the NestJS app listens on |
+| `WEB_CONCURRENCY` | No | `1` | Worker processes to fork. One Node process uses ONE core whatever the box has (~520 req/s on a cached read, ~190 req/s on a DB read, measured). Set it to the core count to use the rest. Each worker opens its own Prisma pool, so keep `WEB_CONCURRENCY` x `connection_limit` (on `DATABASE_URL`) under Postgres' `max_connections` |
 | `FRONTEND_URL` | Yes | — | Used for CORS `origin` — a comma-separated ALLOW-LIST, so a preview domain can be permitted alongside production |
 | `PUBLIC_FRONTEND_URL` | No (recommended in prod) | first non-localhost entry of `FRONTEND_URL` | The ONE canonical public origin customer-facing links are built against: password resets, review invitations, and the B2B ordering link handed to a business. Set it explicitly wherever `FRONTEND_URL` lists more than one origin — see `common/config/public-urls.ts` |
 | `BREVO_API_KEY` | No (email is skipped without it) | unset | Brevo (Sendinblue) transactional-email key. Unset means every send is logged and skipped rather than failing — which is why a missing key is silent: password-reset emails, review invitations and the B2B-request alert simply never arrive |
@@ -25,6 +26,7 @@
 | `ICL_TRACKING_API_URL` | No | ICL's production URL | Only relevant once `shipping_providers.adapter_class` is switched to `ICLShippingProviderAdapter` |
 | `ICL_API_USER_ID` | No (until ICL is live) | `changeme` | Real value must come from ICL directly — never commit a real value here |
 | `ICL_API_PASSWORD` | No (until ICL is live) | `changeme` | Same as above |
+| `ROUTING_URL` | No | OSRM public demo server | The OSRM instance that measures the driving distance behind a cancellation fee. Self-host for production — the demo server is rate-limited. Unreachable means the fee falls back to straight-line distance, labelled as such to the customer |
 | `SEED_ADMIN_EMAIL` | No | `admin@nationwide.dev` | Seed script only — override before seeding anything beyond local dev |
 | `SEED_ADMIN_PASSWORD` | No | `ChangeMe123!` | Seed script only — **must** be overridden outside local dev |
 | `SEED_PICKUP_PARTNER_EMAIL` | No | `partner@nationwide.dev` | Seed script only |

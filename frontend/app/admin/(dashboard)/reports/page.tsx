@@ -38,25 +38,44 @@ export default function AdminReportsPage() {
   const [to, setTo] = useState(todayIso);
   const [day, setDay] = useState(todayIso);
 
+  // Orders are fetched unfiltered on purpose: the calendar below plots volume for every day on
+  // record, not just the report range, and the day picker can land outside it.
   useEffect(() => {
     Promise.all([
       apiClient.get<OrderDto[]>("/orders"),
-      apiClient.get<CustomerDto[]>("/customers"),
       apiClient.get<ShippingProviderDto[]>("/shipping-providers"),
     ])
-      .then(([o, c, p]) => {
+      .then(([o, p]) => {
         setOrders(o);
-        setCustomers(c);
         setProviders(p);
       })
       .finally(() => setIsLoading(false));
   }, []);
+
+  // Customers, by contrast, are only ever counted within the range — so the range is a query,
+  // not a filter run over every account the business has ever had.
+  useEffect(() => {
+    let cancelled = false;
+    apiClient
+      .get<CustomerDto[]>(`/customers?createdFrom=${from}&createdTo=${to}`)
+      .then((c) => {
+        if (!cancelled) setCustomers(c);
+      })
+      .catch(() => {
+        if (!cancelled) setCustomers([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [from, to]);
 
   const days = useMemo(() => daysBetween(from, to), [from, to]);
   const rangeOrders = useMemo(
     () => orders.filter((o) => o.createdAt.slice(0, 10) >= from && o.createdAt.slice(0, 10) <= to),
     [orders, from, to],
   );
+  // Already scoped by the query above; kept as a guard for the moment between a range change
+  // and its response landing.
   const rangeCustomers = useMemo(
     () => customers.filter((c) => c.createdAt.slice(0, 10) >= from && c.createdAt.slice(0, 10) <= to),
     [customers, from, to],

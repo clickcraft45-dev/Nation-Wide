@@ -48,6 +48,12 @@ export class PartnerPickupRequestsController {
     return this.pickupRequestsService.getDashboardSummary(user.sub);
   }
 
+  // Also ahead of :id — "due-approvers" is a fixed path, not a pickup request id.
+  @Get('due-approvers')
+  listDueApprovers(): Promise<{ id: string; name: string }[]> {
+    return this.pickupRequestsService.listDueApprovers();
+  }
+
   @Get()
   async findAll(
     @Query() query: QueryPickupRequestsDto,

@@ -6,6 +6,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Put,
   Query,
   UseGuards,
 } from '@nestjs/common';
@@ -37,6 +38,7 @@ import { RatesService } from '../pricing/rates.service';
 import { toRateDto } from '../pricing/rate.mapper';
 import { CreateRateProviderDto } from '../pricing/dto/create-rate-provider.dto';
 import { UpdateRateProviderDto } from '../pricing/dto/update-rate-provider.dto';
+import { SetMarginBandsDto } from '../pricing/dto/set-margin-bands.dto';
 import { FuelSurchargeService } from '../pricing/fuel-surcharge.service';
 
 class ApplyFuelSurchargeBody {
@@ -100,6 +102,22 @@ export class AdminRateProvidersController {
   @Get(':id')
   async findOne(@Param('id') id: string): Promise<RateProviderDto> {
     const provider = await this.rateProvidersService.findOne(id);
+    return toRateProviderDto(provider);
+  }
+
+  // The whole margin ladder at once — see RateProvidersService.setMarginBands for why it is a
+  // replace rather than per-band CRUD.
+  @Put(':id/margin-bands')
+  async setMarginBands(
+    @Param('id') id: string,
+    @Body() dto: SetMarginBandsDto,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<RateProviderDto> {
+    const provider = await this.rateProvidersService.setMarginBands(
+      id,
+      dto,
+      user.sub,
+    );
     return toRateProviderDto(provider);
   }
 

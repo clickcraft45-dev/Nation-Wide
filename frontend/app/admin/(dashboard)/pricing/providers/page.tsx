@@ -12,6 +12,7 @@ import { EmptyState, ErrorState } from "@/components/ui/page-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RateProviderDialog } from "@/components/pricing/rate-provider-dialog";
 import { SpreadsheetActions } from "@/components/pricing/spreadsheet-actions";
+import { BackLink } from "@/components/ui/back-link";
 
 export default function PricingProvidersPage() {
   const [providers, setProviders] = useState<RateProviderDto[]>([]);
@@ -37,6 +38,7 @@ export default function PricingProvidersPage() {
 
   return (
     <div className="space-y-4">
+      <BackLink href="/admin/pricing/dashboard">Back to pricing</BackLink>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">
           Pick a provider to manage its countries, weight categories, and rates.

@@ -63,17 +63,32 @@ export class CustomersService {
   // the admin quote wizard's customer search) keeps getting the full array with zero extra
   // query cost and no response-shape change.
   async findAll(
-    params: PaginationParams & { search?: string } = {},
+    params: PaginationParams & {
+      search?: string;
+      createdFrom?: string;
+      createdTo?: string;
+    } = {},
   ): Promise<{ data: PublicCustomer[]; total: number | null }> {
-    const where: Prisma.CustomerWhereInput = params.search
-      ? {
-          OR: [
-            { name: { contains: params.search, mode: 'insensitive' } },
-            { email: { contains: params.search, mode: 'insensitive' } },
-            { phone: { contains: params.search, mode: 'insensitive' } },
-          ],
-        }
-      : {};
+    const where: Prisma.CustomerWhereInput = {};
+    if (params.search) {
+      where.OR = [
+        { name: { contains: params.search, mode: 'insensitive' } },
+        { email: { contains: params.search, mode: 'insensitive' } },
+        { phone: { contains: params.search, mode: 'insensitive' } },
+      ];
+    }
+    // `createdTo` has to run to the end of its day or the final day of a window is dropped —
+    // same bounds OrdersService.buildWhere uses, so the two lists agree on what "in range" means.
+    if (params.createdFrom || params.createdTo) {
+      where.createdAt = {
+        ...(params.createdFrom
+          ? { gte: new Date(`${params.createdFrom}T00:00:00.000Z`) }
+          : {}),
+        ...(params.createdTo
+          ? { lte: new Date(`${params.createdTo}T23:59:59.999Z`) }
+          : {}),
+      };
+    }
     const paging = resolvePagination(params);
     const [data, total] = await Promise.all([
       this.prisma.customer.findMany({

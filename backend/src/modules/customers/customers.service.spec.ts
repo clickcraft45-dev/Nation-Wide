@@ -102,4 +102,46 @@ describe('CustomersService', () => {
       ).rejects.toThrow(ConflictException);
     });
   });
+
+  describe('findAll date range', () => {
+    beforeEach(() => {
+      prisma.customer.findMany.mockResolvedValue([]);
+    });
+
+    it('bounds the window to whole UTC days, so the last day is not dropped', async () => {
+      await service.findAll({
+        createdFrom: '2026-09-01',
+        createdTo: '2026-09-07',
+      });
+
+      const { where } = prisma.customer.findMany.mock.calls[0][0] as {
+        where: { createdAt: { gte: Date; lte: Date } };
+      };
+      expect(where.createdAt.gte.toISOString()).toBe(
+        '2026-09-01T00:00:00.000Z',
+      );
+      expect(where.createdAt.lte.toISOString()).toBe(
+        '2026-09-07T23:59:59.999Z',
+      );
+    });
+
+    it('combines a search with the window rather than replacing it', async () => {
+      await service.findAll({ search: 'priya', createdFrom: '2026-09-01' });
+
+      const { where } = prisma.customer.findMany.mock.calls[0][0] as {
+        where: { OR?: unknown[]; createdAt?: unknown };
+      };
+      expect(where.OR).toHaveLength(3);
+      expect(where.createdAt).toBeDefined();
+    });
+
+    it('filters on nothing when neither bound is given', async () => {
+      await service.findAll({});
+
+      const { where } = prisma.customer.findMany.mock.calls[0][0] as {
+        where: Record<string, unknown>;
+      };
+      expect(where).toEqual({});
+    });
+  });
 });

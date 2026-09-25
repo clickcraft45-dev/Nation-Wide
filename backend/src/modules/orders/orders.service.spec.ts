@@ -15,7 +15,11 @@ describe('OrdersService', () => {
     customerId: 'customer-1',
     status: 'PENDING' as const,
   };
-  const orderWithShipments = { ...order, shipments: [{ id: 'shipment-1' }] };
+  const orderWithShipments = {
+    ...order,
+    shipments: [{ id: 'shipment-1', externalTrackingNumbers: [] }],
+    pickupRequest: { pickupLatitude: 17.3995, pickupLongitude: 78.4867 },
+  };
   const iclProvider = { id: 'provider-1', code: 'ICL' };
 
   let prisma: {
@@ -27,12 +31,16 @@ describe('OrdersService', () => {
     };
     shippingProvider: { findUnique: jest.Mock };
     auditLog: { create: jest.Mock };
+    companySettings: { findFirst: jest.Mock };
+    pickupRequest: { updateMany: jest.Mock };
   };
   let customersService: { findOne: jest.Mock };
   let shipmentsService: { createForOrder: jest.Mock };
   let notificationsService: { enqueue: jest.Mock };
-  let invoices: { generateForOrder: jest.Mock };
+  let invoices: { generateForOrder: jest.Mock; issueCustom: jest.Mock };
   let receipts: { issueAndSendQuietly: jest.Mock };
+  let routing: { distanceKm: jest.Mock };
+  let coupons: { redeem: jest.Mock };
   let service: OrdersService;
 
   beforeEach(() => {
@@ -47,6 +55,16 @@ describe('OrdersService', () => {
       shippingProvider: {
         findUnique: jest.fn().mockResolvedValue(iclProvider),
       },
+      pickupRequest: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      companySettings: {
+        findFirst: jest.fn().mockResolvedValue({
+          cancellationBaseFee: 500,
+          cancellationPerKmFee: 20,
+          // The Hyderabad warehouse, with the pickup fixture ~1.6km away.
+          warehouseLatitude: 17.385,
+          warehouseLongitude: 78.4867,
+        }),
+      },
     };
     customersService = {
       findOne: jest.fn().mockResolvedValue({ id: 'customer-1' }),
@@ -60,8 +78,22 @@ describe('OrdersService', () => {
     notificationsService = { enqueue: jest.fn().mockResolvedValue(undefined) };
     invoices = {
       generateForOrder: jest.fn().mockResolvedValue({ id: 'inv-1' }),
+      issueCustom: jest.fn().mockResolvedValue({ id: 'inv-2' }),
     };
     receipts = { issueAndSendQuietly: jest.fn().mockResolvedValue(undefined) };
+    // The road distance the routing engine would answer with — 2.1km of streets between two
+    // points 1.6km apart in a straight line, which is the whole reason roads are measured.
+    routing = {
+      distanceKm: jest.fn().mockResolvedValue({ km: 2.1, source: 'road' }),
+    };
+
+    coupons = {
+      redeem: jest.fn().mockResolvedValue({
+        id: 'coupon-1',
+        code: 'SAVE500',
+        discountAmount: 500,
+      }),
+    };
 
     service = new OrdersService(
       prisma as never,
@@ -70,6 +102,8 @@ describe('OrdersService', () => {
       notificationsService as never,
       invoices as never,
       receipts as never,
+      routing as never,
+      coupons as never,
     );
   });
 
@@ -279,6 +313,137 @@ describe('OrdersService', () => {
       await service.findAll({});
 
       expect(whereOf().shipments).toBeUndefined();
+    });
+  });
+
+  describe('cancellation', () => {
+    it('charges the base fee plus the per-km rate over the warehouse-to-pickup distance', async () => {
+      const quote = await service.quoteCancellation('order-1');
+
+      // 2.1km of road at 20/km, on top of the 500 base.
+      expect(quote.distanceKm).toBe(2.1);
+      expect(quote.distanceSource).toBe('road');
+      expect(quote.totalFee).toBe(542);
+      expect(quote.isCancellable).toBe(true);
+    });
+
+    it('charges the base fee alone when the pickup address has no coordinates', async () => {
+      routing.distanceKm.mockResolvedValue(null);
+      prisma.order.findUnique.mockResolvedValue({
+        ...orderWithShipments,
+        pickupRequest: { pickupLatitude: null, pickupLongitude: null },
+      });
+
+      const quote = await service.quoteCancellation('order-1');
+
+      expect(quote.distanceKm).toBeNull();
+      expect(quote.distanceSource).toBeNull();
+      expect(quote.totalFee).toBe(500);
+    });
+
+    it('says so when it had to fall back to the straight line', async () => {
+      routing.distanceKm.mockResolvedValue({
+        km: 1.6,
+        source: 'straight-line',
+      });
+
+      const quote = await service.quoteCancellation('order-1');
+
+      expect(quote.distanceSource).toBe('straight-line');
+      expect(quote.totalFee).toBe(532);
+    });
+
+    it('refuses to cancel once an AWB has been mapped', async () => {
+      prisma.order.findUnique.mockResolvedValue({
+        ...orderWithShipments,
+        shipments: [
+          {
+            id: 'shipment-1',
+            externalTrackingNumbers: [{ externalTrackingNumber: 'AWB-1' }],
+          },
+        ],
+      });
+
+      await expect(
+        service.cancel('order-1', undefined, 'admin-1'),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.order.update).not.toHaveBeenCalled();
+    });
+
+    it("never cancels another customer's order", async () => {
+      await expect(
+        service.cancel('order-1', undefined, 'customer-2', 'customer-2'),
+      ).rejects.toThrow(NotFoundException);
+      expect(prisma.order.update).not.toHaveBeenCalled();
+    });
+
+    it('freezes the fee it quoted onto the cancelled order', async () => {
+      await service.cancel(
+        'order-1',
+        'Changed my mind',
+        'customer-1',
+        'customer-1',
+      );
+
+      expect(prisma.order.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: 'CANCELLED',
+            cancellationFee: 542,
+            cancellationDistanceKm: 2.1,
+            cancellationDistanceSource: 'road',
+            cancellationReason: 'Changed my mind',
+          }),
+        }),
+      );
+    });
+  });
+
+  describe('what a cancellation drags with it', () => {
+    it('calls off the pickup, so no partner is sent to a door for nothing', async () => {
+      await service.cancel('order-1', 'Not needed', 'customer-1', 'customer-1');
+
+      expect(prisma.pickupRequest.updateMany).toHaveBeenCalledWith({
+        where: { orderId: 'order-1', status: { not: 'COMPLETED' } },
+        data: { status: 'CANCELLED', rejectionReason: 'Not needed' },
+      });
+    });
+
+    it('bills the cancellation charge as its own invoice', async () => {
+      await service.cancel('order-1', undefined, 'admin-1');
+
+      expect(invoices.issueCustom).toHaveBeenCalledWith(
+        expect.objectContaining({
+          customerId: 'customer-1',
+          grossAmount: 542,
+        }),
+        'admin-1',
+      );
+    });
+
+    it('raises no invoice when the cancellation is free', async () => {
+      prisma.companySettings.findFirst.mockResolvedValue({
+        cancellationBaseFee: 0,
+        cancellationPerKmFee: 0,
+        warehouseLatitude: null,
+        warehouseLongitude: null,
+      });
+
+      await service.cancel('order-1', undefined, 'admin-1');
+
+      expect(invoices.issueCustom).not.toHaveBeenCalled();
+    });
+
+    it('still cancels when the charge cannot be invoiced', async () => {
+      // No GSTIN on file is the normal reason, and it must not strand a customer mid-cancel.
+      invoices.issueCustom.mockRejectedValue(
+        new Error('company settings incomplete'),
+      );
+
+      await expect(
+        service.cancel('order-1', undefined, 'admin-1'),
+      ).resolves.toBeDefined();
+      expect(prisma.order.update).toHaveBeenCalled();
     });
   });
 });

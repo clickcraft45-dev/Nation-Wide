@@ -24,6 +24,7 @@ import {
   CalendarClock,
   Home,
   type LucideIcon,
+  TicketPercent,
 } from "lucide-react";
 import type { Role } from "@nationwide/shared-types";
 
@@ -80,6 +81,13 @@ export const ADMIN_NAV_GROUPS: NavGroup[] = [
     label: "Finance",
     items: [
       { label: "Payments", href: "/admin/payments", icon: CreditCard },
+      // ADMIN-only, matching AdminCouponsController: a coupon is money off an invoice.
+      {
+        label: "Coupons",
+        href: "/admin/coupons",
+        icon: TicketPercent,
+        roles: ["ADMIN"],
+      },
       // ADMIN-only, matching the controller: issuing a tax invoice is a financial act with a
       // permanent numbered record, not an operational one.
       {

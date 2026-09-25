@@ -109,6 +109,12 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethodCode>("CASH");
   const [paymentReference, setPaymentReference] = useState("");
   const [isCollectingPayment, setIsCollectingPayment] = useState(false);
+  // "Take the payment later": nobody pays at the door, and an admin has to be named as having
+  // approved it. The list is fetched when the payment step is reached.
+  const [isDue, setIsDue] = useState(false);
+  const [dueApprovedByAdminId, setDueApprovedByAdminId] = useState("");
+  const [dueNote, setDueNote] = useState("");
+  const [dueApprovers, setDueApprovers] = useState<{ id: string; name: string }[]>([]);
 
   // Acceptance checklist state.
   const [parcelPackedProperly, setParcelPackedProperly] = useState(false);
@@ -158,6 +164,16 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  // Who may approve a "pay later", fetched once the parcel is verified and payment is the next
+  // thing to happen. Kept out of the initial load because most pickups are simply paid for.
+  useEffect(() => {
+    if (!pickup?.verifiedAt || dueApprovers.length > 0) return;
+    apiClient
+      .get<{ id: string; name: string }[]>(`${api}/due-approvers`)
+      .then(setDueApprovers)
+      .catch(() => setDueApprovers([]));
+  }, [pickup?.verifiedAt, dueApprovers.length, api]);
 
   // Auto-recalculate whenever the weight settles (debounced) — the partner never has to
   // remember to tap a "Recalculate" button. Server-side is still the source of truth; this
@@ -280,18 +296,31 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
 
   async function handleCollectPayment() {
     if (!pickup?.verifiedPrice) return;
+    if (isDue && !dueApprovedByAdminId) {
+      showToast({ variant: "error", title: "Pick the admin who approved this due." });
+      return;
+    }
     setIsCollectingPayment(true);
     try {
       const updated = await apiClient.patch<PickupRequestDto>(
         `${api}/${id}/collect-payment`,
-        {
-          paymentMethod,
-          collectedAmount: pickup.verifiedPrice,
-          paymentReference: paymentReference.trim() || undefined,
-        },
+        isDue
+          ? {
+              deferred: true,
+              dueApprovedByAdminId,
+              dueNote: dueNote.trim() || undefined,
+            }
+          : {
+              paymentMethod,
+              collectedAmount: pickup.verifiedPrice,
+              paymentReference: paymentReference.trim() || undefined,
+            },
       );
       setPickup(updated);
-      showToast({ variant: "success", title: "Payment collected" });
+      showToast({
+        variant: "success",
+        title: isDue ? "Recorded as due — payment to follow" : "Payment collected",
+      });
     } catch {
       showToast({
         variant: "error",
@@ -362,7 +391,12 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
   const isOpen = mode === "partner" && isOpenRequest(pickup);
   const atWarehouse = pickup.dropAtWarehouse;
   const canReject = !isTerminal && !isOpen;
-  const step: Step = !pickup.arrivedAt ? "arrived" : !pickup.paymentCollectedAt ? "verify" : "complete";
+  const step: Step = !pickup.arrivedAt
+    ? "arrived"
+    : // A due settles the payment step as surely as cash does — the parcel moves on either way.
+      !pickup.paymentCollectedAt && !pickup.paymentDeferredAt
+      ? "verify"
+      : "complete";
   const showVerificationForm = step === "verify" && !pickup.verifiedAt;
   const showPaymentForm = step === "verify" && !!pickup.verifiedAt;
 
@@ -743,6 +777,71 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
                   </div>
 
                   <div>
+                    <Label>Payment</Label>
+                    <div className="mt-1.5 grid grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setIsDue(false)}
+                        className={cn(
+                          "rounded-lg border-2 py-3 text-center text-sm font-semibold",
+                          !isDue
+                            ? "border-primary bg-primary/5 text-primary"
+                            : "border-border text-muted-foreground",
+                        )}
+                      >
+                        Paying now
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setIsDue(true)}
+                        className={cn(
+                          "rounded-lg border-2 py-3 text-center text-sm font-semibold",
+                          isDue
+                            ? "border-primary bg-primary/5 text-primary"
+                            : "border-border text-muted-foreground",
+                        )}
+                      >
+                        Pay later (due)
+                      </button>
+                    </div>
+                  </div>
+
+                  {isDue && (
+                    <>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="due-approver">Approved by</Label>
+                        <select
+                          id="due-approver"
+                          value={dueApprovedByAdminId}
+                          onChange={(e) => setDueApprovedByAdminId(e.target.value)}
+                          className="h-11 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        >
+                          <option value="">Select the admin who approved…</option>
+                          {dueApprovers.map((admin) => (
+                            <option key={admin.id} value={admin.id}>
+                              {admin.name}
+                            </option>
+                          ))}
+                        </select>
+                        <p className="text-xs text-muted-foreground">
+                          Ring an admin before taking a parcel without payment — their name goes
+                          on the record.
+                        </p>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="due-note">Note (optional)</Label>
+                        <Input
+                          id="due-note"
+                          placeholder="Regular customer, settling on Monday"
+                          value={dueNote}
+                          onChange={(e) => setDueNote(e.target.value)}
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  {!isDue && (
+                  <div>
                     <Label>Payment Method</Label>
                     <div className="mt-1.5 grid grid-cols-2 gap-3">
                       {PARTNER_PAYMENT_METHODS.map((m) => (
@@ -762,8 +861,9 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
                       ))}
                     </div>
                   </div>
+                  )}
 
-                  {paymentMethod === "UPI" && (
+                  {!isDue && paymentMethod === "UPI" && (
                     <div className="space-y-1.5">
                       <Label htmlFor="payment-reference">UPI Reference Number (optional)</Label>
                       <Input
@@ -777,15 +877,21 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
               </Card>
 
               <ConfirmDialog
-                title="Confirm Payment"
-                description={`Amount: ${formatMoney(pickup.verifiedPrice, pickup.currency)} · Method: ${
-                  PARTNER_PAYMENT_METHODS.find((m) => m.value === paymentMethod)?.label
-                }. Are you sure the payment has been received?`}
-                confirmLabel="Confirm Payment"
+                title={isDue ? "Confirm Due" : "Confirm Payment"}
+                description={
+                  isDue
+                    ? `${formatMoney(pickup.verifiedPrice, pickup.currency)} will be left owing, approved by ${
+                        dueApprovers.find((a) => a.id === dueApprovedByAdminId)?.name ?? "—"
+                      }. The customer sees this as due in their portal.`
+                    : `Amount: ${formatMoney(pickup.verifiedPrice, pickup.currency)} · Method: ${
+                        PARTNER_PAYMENT_METHODS.find((m) => m.value === paymentMethod)?.label
+                      }. Are you sure the payment has been received?`
+                }
+                confirmLabel={isDue ? "Confirm Due" : "Confirm Payment"}
                 onConfirm={handleCollectPayment}
                 trigger={
                   <Button size="lg" className="w-full" isLoading={isCollectingPayment}>
-                    Mark Payment Collected
+                    {isDue ? "Record As Due" : "Mark Payment Collected"}
                   </Button>
                 }
               />
@@ -818,7 +924,14 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
                 label="Payment"
                 value={PARTNER_PAYMENT_METHODS.find((m) => m.value === pickup.paymentMethod)?.label ?? pickup.paymentMethod ?? "—"}
               />
-              <SummaryRow label="Payment Status" value="Collected" />
+              <SummaryRow
+                label="Payment Status"
+                value={
+                  pickup.paymentDeferredAt
+                    ? `Due — approved by ${pickup.paymentDueApprovedByAdminName ?? "an admin"}`
+                    : "Collected"
+                }
+              />
               <SummaryRow
                 label="Pickup Address"
                 value={

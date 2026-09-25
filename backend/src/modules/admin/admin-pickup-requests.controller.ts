@@ -51,6 +51,13 @@ class ResolveMapsUrlDto {
 export class AdminPickupRequestsController {
   constructor(private readonly pickupRequestsService: PickupRequestsService) {}
 
+  // Ahead of :id — a warehouse drop-off is worked on the same screen as a doorstep pickup, so
+  // the admin handling one picks an approver from the same list a partner would.
+  @Get('due-approvers')
+  listDueApprovers(): Promise<{ id: string; name: string }[]> {
+    return this.pickupRequestsService.listDueApprovers();
+  }
+
   @Get()
   async findAll(
     @Query() query: QueryPickupRequestsDto,

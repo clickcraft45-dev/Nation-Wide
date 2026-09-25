@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { ArrowUpDown, Package, Plus } from "lucide-react";
-import type { OrderDto, CustomerDto, ShippingProviderDto } from "@nationwide/shared-types";
+import type { OrderDto, ShippingProviderDto } from "@nationwide/shared-types";
 import { apiClient } from "@/lib/api-client";
 import { useDebouncedValue } from "@/lib/utils/use-debounced-value";
 import { Button } from "@/components/ui/button";
@@ -77,7 +77,6 @@ export default function AdminOrdersPage() {
 
   const [orders, setOrders] = useState<OrderDto[]>([]);
   const [total, setTotal] = useState(0);
-  const [customers, setCustomers] = useState<CustomerDto[]>([]);
   const [providers, setProviders] = useState<ShippingProviderDto[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -105,17 +104,17 @@ export default function AdminOrdersPage() {
     if (kpiStatus === "in-transit" || kpiStatus === "delivered") {
       params.set("trackingGroup", kpiStatus);
     }
+    // The customer table is not fetched here: every order already carries customerName, joined
+    // server-side for exactly this row. Providers are a short list and are fetched once.
     Promise.all([
       apiClient.getWithHeaders<OrderDto[]>(`/orders?${params.toString()}`),
-      customers.length === 0 ? apiClient.get<CustomerDto[]>("/customers") : Promise.resolve(customers),
       providers.length === 0
         ? apiClient.get<ShippingProviderDto[]>("/shipping-providers")
         : Promise.resolve(providers),
     ])
-      .then(([ordersRes, customersRes, providersRes]) => {
+      .then(([ordersRes, providersRes]) => {
         setOrders(ordersRes.data);
         setTotal(Number(ordersRes.headers.get("X-Total-Count") ?? ordersRes.data.length));
-        setCustomers(customersRes);
         setProviders(providersRes);
       })
       .catch(() => setError("Failed to load orders."))
@@ -130,10 +129,6 @@ export default function AdminOrdersPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, debouncedSearch, statusFilter, awbFilter, sortKey, sortDir, kpiStatus]);
 
-  const customerById = useMemo(
-    () => new Map(customers.map((c) => [c.id, c])),
-    [customers],
-  );
   const providerById = useMemo(
     () => new Map(providers.map((p) => [p.id, p])),
     [providers],
@@ -257,7 +252,6 @@ export default function AdminOrdersPage() {
             </TableHeader>
             <TableBody>
               {orders.map((order) => {
-                const customer = customerById.get(order.customerId);
                 const shipment = order.shipments[0];
                 const provider = shipment ? providerById.get(shipment.providerId) : undefined;
                 return (
@@ -276,7 +270,7 @@ export default function AdminOrdersPage() {
                         </span>
                       )}
                     </TableCell>
-                    <TableCell>{customer?.name ?? "—"}</TableCell>
+                    <TableCell>{order.customerName ?? "—"}</TableCell>
                     <TableCell className="whitespace-nowrap">
                       {order.origin ?? <span className="text-muted-foreground">—</span>}
                     </TableCell>

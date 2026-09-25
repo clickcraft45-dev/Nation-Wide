@@ -106,6 +106,12 @@ export function toPickupRequestDto(
     paymentCollectedAt: pickupRequest.paymentCollectedAt
       ? pickupRequest.paymentCollectedAt.toISOString()
       : null,
+    paymentDeferredAt: pickupRequest.paymentDeferredAt
+      ? pickupRequest.paymentDeferredAt.toISOString()
+      : null,
+    paymentDueApprovedByAdminName:
+      pickupRequest.paymentDueApprovedBy?.name ?? null,
+    paymentDueNote: pickupRequest.paymentDueNote,
 
     parcelPackedProperly: pickupRequest.parcelPackedProperly,
     weightVerifiedFlag: pickupRequest.weightVerifiedFlag,

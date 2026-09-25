@@ -1,3 +1,5 @@
+import type { ShipmentItemDto } from "./parcel";
+
 export const TRACKING_STATUS_CODES = [
   "PICKED_UP",
   "IN_TRANSIT",
@@ -15,8 +17,24 @@ export interface TrackingEventDto {
   location: string | null;
 }
 
+/** The carrier actually moving the parcel, once an AWB has been mapped to the shipment. */
+export interface TrackingCarrierDto {
+  code: string;
+  name: string;
+  /** The carrier's own AWB / tracking number. */
+  trackingNumber: string;
+  // null for carriers with no public tracking page (a reseller, say) — render the name as plain
+  // text rather than a dead link when this is null.
+  trackingUrl: string | null;
+}
+
 export interface TrackingResultDto {
   internalTrackingNumber: string;
+  /** Who booked the shipment, as it is on the order. */
+  customerName: string;
+  /** What is inside, when the order recorded it. Empty when the contents were never captured. */
+  items: ShipmentItemDto[];
+  carrier: TrackingCarrierDto | null;
   // null when the shipment exists but no carrier tracking number has been mapped yet
   currentStatus: TrackingStatusCode | null;
   currentStatusLabel: string;

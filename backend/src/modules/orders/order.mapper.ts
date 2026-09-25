@@ -28,6 +28,28 @@ export function toOrderDto(order: OrderWithShipments): OrderDto {
     paymentMethod: order.paymentMethod,
     paidAmount: order.paidAmount ? order.paidAmount : null,
     paidAt: order.paidAt ? order.paidAt.toISOString() : null,
+    paymentPayerName: order.paymentPayerName,
+    paymentNote: order.paymentNote,
+    refundedAmount: order.refundedAmount ?? null,
+    refundedAt: order.refundedAt ? order.refundedAt.toISOString() : null,
+    refundNote: order.refundNote,
+    couponCode: order.coupon?.code ?? null,
+    discountAmount: order.discountAmount ?? null,
+    dueAmount: order.dueAmount ?? null,
+    dueApprovedByAdminName: order.dueApprovedBy?.name ?? null,
+    cancelledAt: order.cancelledAt ? order.cancelledAt.toISOString() : null,
+    cancellationReason: order.cancellationReason,
+    cancellationFee: order.cancellationFee ?? null,
+    cancellationDistanceKm: order.cancellationDistanceKm ?? null,
+    cancellationDistanceSource:
+      (order.cancellationDistanceSource as 'road' | 'straight-line' | null) ??
+      null,
+    // The AWB is the cutoff: once a carrier has the parcel, cancelling is a support matter, so
+    // the button is not offered rather than offered and then refused.
+    isCancellableByCustomer:
+      order.status !== 'CANCELLED' &&
+      order.status !== 'COMPLETED' &&
+      order.shipments.every((s) => s.externalTrackingNumbers.length === 0),
     createdAt: order.createdAt.toISOString(),
     updatedAt: order.updatedAt.toISOString(),
     // Origin lives on the quote for an admin manual quote and on the pickup request for the

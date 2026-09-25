@@ -27,6 +27,12 @@ export interface CompanySettingsDto {
   stateName: string | null;
   stateCode: string | null; // GST state code, e.g. "36" for Telangana
   sacCode: string | null; // service accounting code, e.g. "996812" for courier
+  // What a customer pays for cancelling before an AWB is mapped, and the warehouse the per-km
+  // part is measured from. Read off the active template at cancellation time.
+  cancellationBaseFee: number;
+  cancellationPerKmFee: number;
+  warehouseLatitude: number | null;
+  warehouseLongitude: number | null;
   updatedAt: string; // ISO 8601
 }
 
@@ -55,6 +61,10 @@ export interface UpdateCompanySettingsDto {
   insuranceDisclaimer?: string;
   legalDisclaimer?: string;
   restrictedItemsNotice?: string;
+  cancellationBaseFee?: number;
+  cancellationPerKmFee?: number;
+  warehouseLatitude?: number;
+  warehouseLongitude?: number;
 }
 
 export const RATE_CARD_TEMPLATE_KEYS = ["CLASSIC"] as const;

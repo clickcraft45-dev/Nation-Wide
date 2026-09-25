@@ -35,6 +35,14 @@ class EnvironmentVariables {
   @Max(65535)
   PORT!: number;
 
+  // Worker processes to fork (see main.ts). Unset or 1 keeps the single-process behaviour; set
+  // it to the box's core count to use more than one core, and keep
+  // WEB_CONCURRENCY * DATABASE_URL's connection_limit under Postgres' max_connections.
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  WEB_CONCURRENCY?: number;
+
   // A comma-separated CORS allow-list, not a single address — see main.ts. Do not interpolate
   // it into a link; use publicFrontendUrl() for that.
   @IsOptional()
@@ -134,6 +142,12 @@ class EnvironmentVariables {
   @IsOptional()
   @IsString()
   ICL_API_PASSWORD?: string;
+
+  // The OSRM instance cancellation fees are measured against. Optional: unset falls back to the
+  // public demo server, which is rate-limited and fine only for development.
+  @IsOptional()
+  @IsString()
+  ROUTING_URL?: string;
 
   // Optional so the app still boots without Google sign-in configured — GoogleConfiguredGuard
   // gives a clear "not configured" response if /auth/google is hit before these are set, rather

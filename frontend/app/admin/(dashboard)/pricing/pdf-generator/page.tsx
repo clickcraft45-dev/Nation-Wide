@@ -5,6 +5,7 @@ import { FileClock, FilePlus2 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { RateCardsTab } from "@/components/pricing/rate-cards-tab";
 import { RateCardHistoryTab } from "@/components/pricing/rate-card-history-tab";
+import { BackLink } from "@/components/ui/back-link";
 
 type SubTab = "generate" | "history";
 
@@ -13,6 +14,7 @@ export default function PdfGeneratorPage() {
 
   return (
     <div className="page-enter space-y-5">
+      <BackLink href="/admin/pricing/dashboard">Back to pricing</BackLink>
       <div className="glass inline-flex rounded-2xl p-1.5">
         {(
           [

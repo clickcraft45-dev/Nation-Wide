@@ -3,7 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import type { Prisma, RateProvider } from '@prisma/client';
+import type { Prisma, ProviderMarginBand, RateProvider } from '@prisma/client';
 import {
   SHIPMENT_TYPES,
   type ShipmentTypeCode,
@@ -11,12 +11,14 @@ import {
 import { PrismaService } from '../../database/prisma.service';
 import { CreateRateProviderDto } from './dto/create-rate-provider.dto';
 import { UpdateRateProviderDto } from './dto/update-rate-provider.dto';
+import { SetMarginBandsDto } from './dto/set-margin-bands.dto';
 
 // OTHER shipments never get a rate (see CreateRateDto) — never offered as a "service" here.
 const RATEABLE_SHIPMENT_TYPES = SHIPMENT_TYPES.filter((t) => t !== 'OTHER');
 
 export type RateProviderWithCount = RateProvider & {
   _count: { zoneCountries: number };
+  marginBands?: ProviderMarginBand[];
 };
 
 export interface ProviderCountry {
@@ -57,6 +59,7 @@ export class RateProvidersService {
         _count: {
           select: { zoneCountries: { where: { country: { isActive: true } } } },
         },
+        marginBands: { orderBy: { fromKg: 'asc' } },
       },
     });
   }
@@ -197,7 +200,11 @@ export class RateProvidersService {
       });
     }
 
-    return { ...updated, _count: existing._count };
+    return {
+      ...updated,
+      _count: existing._count,
+      marginBands: existing.marginBands,
+    };
   }
 
   private groupRateCardsByZone<T extends { zoneId: string }>(
@@ -238,6 +245,84 @@ export class RateProvidersService {
     ).toISOString();
   }
 
+  /**
+   * Replace a provider's whole margin ladder.
+   *
+   * All-or-nothing rather than per-row CRUD: the bands only make sense as a set (they must not
+   * overlap and the ladder should not have holes), and an admin edits the table as a table.
+   */
+  async setMarginBands(
+    rateProviderId: string,
+    dto: SetMarginBandsDto,
+    actorId?: string,
+  ): Promise<RateProviderWithCount> {
+    const existing = await this.findOneOrThrow(rateProviderId);
+
+    const bands = [...dto.bands].sort((a, b) => a.fromKg - b.fromKg);
+    bands.forEach((band, i) => {
+      if (band.toKg != null && band.toKg <= band.fromKg) {
+        throw new BadRequestException(
+          `A band ending at ${band.toKg} kg cannot start at ${band.fromKg} kg`,
+        );
+      }
+      const next = bands[i + 1];
+      if (next && (band.toKg == null || next.fromKg < band.toKg)) {
+        throw new BadRequestException(
+          `Bands overlap at ${next.fromKg} kg — each band must end where the next begins`,
+        );
+      }
+    });
+
+    await this.prisma.$transaction([
+      this.prisma.providerMarginBand.deleteMany({ where: { rateProviderId } }),
+      ...bands.map((band) =>
+        this.prisma.providerMarginBand.create({
+          data: {
+            rateProviderId,
+            fromKg: band.fromKg,
+            toKg: band.toKg ?? null,
+            flatAmount: band.flatAmount,
+            perKgAmount: band.perKgAmount,
+          },
+        }),
+      ),
+    ]);
+
+    if (actorId) {
+      await this.prisma.auditLog.create({
+        data: {
+          actorId,
+          action: 'PROVIDER_MARGIN_BANDS_UPDATED',
+          entity: 'RateProvider',
+          entityId: rateProviderId,
+          before: {
+            marginBands: this.toBandSnapshot(existing.marginBands ?? []),
+          },
+          after: { marginBands: this.toBandSnapshot(bands) },
+          reason: dto.reason,
+        },
+      });
+    }
+
+    return this.findOneOrThrow(rateProviderId);
+  }
+
+  private toBandSnapshot(
+    bands: {
+      fromKg: number;
+      toKg?: number | null;
+      flatAmount: number;
+      perKgAmount: number;
+    }[],
+  ): Prisma.InputJsonValue {
+    return bands.map((b) => ({
+      fromKg: b.fromKg,
+      toKg: b.toKg ?? null,
+      flatAmount: b.flatAmount,
+      perKgAmount: b.perKgAmount,
+    }));
+  }
+
   private toConfigSnapshot(provider: RateProvider): Prisma.InputJsonValue {
     return {
       fuelChargePercent: provider.fuelChargePercent,
@@ -252,6 +337,7 @@ export class RateProvidersService {
         _count: {
           select: { zoneCountries: { where: { country: { isActive: true } } } },
         },
+        marginBands: { orderBy: { fromKg: 'asc' } },
       },
     });
     if (!provider) {

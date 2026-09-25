@@ -47,6 +47,10 @@ services:
     environment:
       REDIS_URL: redis://redis:6379
       PORT: 4000
+      # One Node process only ever uses one core. Two workers is the safe starting point for the
+      # small EC2 this runs on; raise it to the core count, and remember each worker opens its
+      # own Prisma pool against the host's Postgres (keep the total under max_connections).
+      WEB_CONCURRENCY: 2
 
 volumes:
   redis_data:

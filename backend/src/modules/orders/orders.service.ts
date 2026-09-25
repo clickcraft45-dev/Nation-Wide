@@ -13,7 +13,12 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { NOTIFICATION_TEMPLATES } from '../notifications/templates';
 import { InvoicesService } from '../invoices/invoices.service';
 import { ReceiptsService } from '../receipts/receipts.service';
-import type { UpdateOrderPaymentDto } from '@nationwide/shared-types';
+import { RoutingService } from '../routing/routing.service';
+import { CouponsService } from '../coupons/coupons.service';
+import type {
+  CancellationQuoteDto,
+  UpdateOrderPaymentDto,
+} from '@nationwide/shared-types';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
 import type { QueryOrdersDto, OrderSortKey } from './dto/query-orders.dto';
@@ -40,6 +45,10 @@ const withShipments = {
     // Just the name. A list view needs it to label the row, and joining it here is one query
     // instead of every caller fetching the whole customer table to build an id->name map.
     customer: { select: { name: true } },
+    // The code that discounted this order, and the admin who let it go out unpaid — both are
+    // display-only joins the Payments screen and the customer's own orders list read.
+    coupon: { select: { code: true } },
+    dueApprovedBy: { select: { name: true } },
     // The route columns the admin Orders table shows. An admin manual quote carries the whole
     // origin address; the self-service flow leaves those null and puts the pickup location on
     // the PickupRequest instead, so both are pulled and the mapper picks whichever exists.
@@ -52,7 +61,15 @@ const withShipments = {
         destCountry: true,
       },
     },
-    pickupRequest: { select: { pickupCity: true, pickupState: true } },
+    pickupRequest: {
+      select: {
+        pickupCity: true,
+        pickupState: true,
+        // The per-km half of a cancellation fee is measured from these.
+        pickupLatitude: true,
+        pickupLongitude: true,
+      },
+    },
   },
 };
 export type OrderWithShipments = Prisma.OrderGetPayload<typeof withShipments>;
@@ -68,6 +85,8 @@ export class OrdersService {
     private readonly notificationsService: NotificationsService,
     private readonly invoices: InvoicesService,
     private readonly receipts: ReceiptsService,
+    private readonly routing: RoutingService,
+    private readonly coupons: CouponsService,
   ) {}
 
   async create(dto: CreateOrderDto): Promise<OrderWithShipments> {
@@ -218,6 +237,18 @@ export class OrdersService {
     });
   }
 
+  /** The same lookup as findOne, but an order belonging to someone else simply does not exist. */
+  async findOneForCustomer(
+    id: string,
+    customerId: string,
+  ): Promise<OrderWithShipments> {
+    const order = await this.findOne(id);
+    if (order.customerId !== customerId) {
+      throw new NotFoundException(`Order ${id} not found`);
+    }
+    return order;
+  }
+
   async findOne(id: string): Promise<OrderWithShipments> {
     const order = await this.prisma.order.findUnique({
       where: { id },
@@ -255,6 +286,16 @@ export class OrdersService {
     actorId: string,
   ): Promise<OrderWithShipments> {
     const before = await this.findOne(id); // 404s if missing
+
+    // The discount is claimed before the payment is written, and only on the way to PAID: a code
+    // is validated and its redemption counted here, against the database, never taken on trust
+    // from whatever the admin screen previewed. paidAmount stays exactly what the admin typed —
+    // it is the money that actually changed hands — and the discount is recorded beside it.
+    const coupon =
+      dto.paymentStatus === 'PAID' && dto.couponCode
+        ? await this.coupons.redeem(dto.couponCode)
+        : null;
+
     await this.prisma.order.update({
       where: { id },
       data: {
@@ -263,6 +304,31 @@ export class OrdersService {
         paidAmount: dto.paymentStatus === 'PAID' ? dto.paidAmount : null,
         paidAt: dto.paymentStatus === 'PAID' ? new Date() : null,
         paymentMarkedByAdminId: actorId,
+        // Who paid and why it is worth noting stay with the payment they describe, so flipping
+        // an order back to PENDING does not leave last month's payer name on it.
+        paymentPayerName:
+          dto.paymentStatus === 'PAID' ? (dto.paymentPayerName ?? null) : null,
+        paymentNote:
+          dto.paymentStatus === 'PAID' ? (dto.paymentNote ?? null) : null,
+        // A refund is its own event: the amount is what went back, which is rarely the whole
+        // of what was paid.
+        refundedAmount:
+          dto.paymentStatus === 'REFUNDED'
+            ? (dto.refundedAmount ?? null)
+            : null,
+        refundedAt: dto.paymentStatus === 'REFUNDED' ? new Date() : null,
+        refundNote:
+          dto.paymentStatus === 'REFUNDED' ? (dto.refundNote ?? null) : null,
+        // A coupon belongs to the payment it discounted, so moving off PAID clears it. The
+        // redemption already counted stays counted — it was used.
+        couponId: coupon ? coupon.id : dto.paymentStatus === 'PAID' ? undefined : null,
+        discountAmount: coupon
+          ? coupon.discountAmount
+          : dto.paymentStatus === 'PAID'
+            ? undefined
+            : null,
+        // Recording a payment settles whatever was outstanding.
+        dueAmount: dto.paymentStatus === 'PAID' ? null : undefined,
       },
     });
 
@@ -279,12 +345,24 @@ export class OrdersService {
           paymentStatus: before.paymentStatus,
           paymentMethod: before.paymentMethod,
           paidAmount: before.paidAmount ? before.paidAmount : null,
+          paymentPayerName: before.paymentPayerName,
+          refundedAmount: before.refundedAmount ?? null,
         },
         after: {
           paymentStatus: dto.paymentStatus,
           paymentMethod: dto.paymentMethod ?? null,
           paidAmount:
             dto.paymentStatus === 'PAID' ? (dto.paidAmount ?? null) : null,
+          paymentPayerName:
+            dto.paymentStatus === 'PAID'
+              ? (dto.paymentPayerName ?? null)
+              : null,
+          refundedAmount:
+            dto.paymentStatus === 'REFUNDED'
+              ? (dto.refundedAmount ?? null)
+              : null,
+          couponCode: coupon?.code ?? null,
+          discountAmount: coupon?.discountAmount ?? null,
         },
       },
     });
@@ -318,6 +396,143 @@ export class OrdersService {
     return this.findOne(id);
   }
 
+  /**
+   * What cancelling this order would cost right now, and whether it may be cancelled at all.
+   *
+   * The cutoff is the AWB: until one is mapped nothing has been handed to a carrier, so the
+   * customer may still call it off themselves. Afterwards the parcel is in someone else's
+   * network and cancelling is a support conversation, not a button.
+   */
+  async quoteCancellation(id: string): Promise<CancellationQuoteDto> {
+    const order = await this.findOne(id); // 404s if missing
+    const settings = await this.prisma.companySettings.findFirst({
+      where: { isActive: true },
+    });
+    const baseFee = settings?.cancellationBaseFee ?? 0;
+    const perKmFee = settings?.cancellationPerKmFee ?? 0;
+
+    // The van drives roads, not great circles, so the per-km charge is the driving distance —
+    // a shortest-path search over the road network, run by the routing engine that holds it.
+    const distance = await this.routing.distanceKm(
+      settings?.warehouseLatitude ?? null,
+      settings?.warehouseLongitude ?? null,
+      order.pickupRequest?.pickupLatitude ?? null,
+      order.pickupRequest?.pickupLongitude ?? null,
+    );
+
+    const reason = this.cancellationBlockedReason(order);
+    return {
+      isCancellable: reason === null,
+      reason,
+      baseFee,
+      perKmFee,
+      distanceKm: distance?.km ?? null,
+      distanceSource: distance?.source ?? null,
+      // No coordinates means no measurable trip, so only the base fee stands rather than a
+      // guessed distance the customer would be charged for.
+      totalFee: round2(baseFee + perKmFee * (distance?.km ?? 0)),
+    };
+  }
+
+  private cancellationBlockedReason(order: OrderWithShipments): string | null {
+    if (order.status === 'CANCELLED') return 'This order is already cancelled.';
+    if (order.status === 'COMPLETED') return 'This order is already completed.';
+    if (order.shipments.some((s) => s.externalTrackingNumbers.length > 0)) {
+      return 'An AWB has been issued for this order — contact support to cancel it.';
+    }
+    return null;
+  }
+
+  /**
+   * Cancel an order and freeze the fee that was quoted for doing so.
+   *
+   * `customerId`, when given, scopes this to that customer's own order — the customer-facing
+   * route passes it so one account can never cancel another's.
+   */
+  async cancel(
+    id: string,
+    reason: string | undefined,
+    actorId: string,
+    customerId?: string,
+  ): Promise<OrderWithShipments> {
+    const order = await this.findOne(id);
+    if (customerId && order.customerId !== customerId) {
+      throw new NotFoundException(`Order ${id} not found`);
+    }
+    const blocked = this.cancellationBlockedReason(order);
+    if (blocked) throw new BadRequestException(blocked);
+
+    const quote = await this.quoteCancellation(id);
+    await this.prisma.order.update({
+      where: { id },
+      data: {
+        status: 'CANCELLED',
+        cancelledAt: new Date(),
+        cancellationReason: reason ?? null,
+        cancellationFee: quote.totalFee,
+        cancellationDistanceKm: quote.distanceKm,
+        cancellationDistanceSource: quote.distanceSource,
+      },
+    });
+
+    // The pickup dies with the order. Without this a partner is still dispatched to a door for
+    // a shipment nobody is sending — the request stays assigned and keeps showing on their list.
+    // A pickup already completed is left alone: it is a record of something that happened.
+    if (order.pickupRequest) {
+      // updateMany, not update: the status guard belongs in the where clause, and it makes this
+      // a no-op rather than a throw if the pickup was completed a moment ago.
+      await this.prisma.pickupRequest.updateMany({
+        where: { orderId: id, status: { not: 'COMPLETED' } },
+        data: {
+          status: 'CANCELLED',
+          rejectionReason: reason ?? 'Order cancelled',
+        },
+      });
+    }
+
+    // The fee is a supply the business made (a wasted trip), so it is billed rather than left as
+    // a number on a cancelled row. Swallows its own failure for the same reason the paid-order
+    // invoice does: the cancellation is the fact being recorded, and it must not be rolled back
+    // because the company's GSTIN is not filled in yet. The admin invoices screen is the retry.
+    if (quote.totalFee > 0) {
+      try {
+        await this.invoices.issueCustom(
+          {
+            customerId: order.customerId,
+            grossAmount: quote.totalFee,
+            description: `Cancellation charge for order ${id.slice(0, 8)}`,
+          },
+          actorId,
+        );
+      } catch (error) {
+        this.logger.warn(
+          `Order ${id} was cancelled but its cancellation charge could not be invoiced: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+    }
+
+    await this.prisma.auditLog.create({
+      data: {
+        actorId,
+        action: 'ORDER_CANCELLED',
+        entity: 'Order',
+        entityId: id,
+        before: { status: order.status },
+        after: {
+          status: 'CANCELLED',
+          cancellationFee: quote.totalFee,
+          cancellationDistanceKm: quote.distanceKm,
+          cancellationDistanceSource: quote.distanceSource,
+        },
+        reason,
+      },
+    });
+
+    return this.findOne(id);
+  }
+
   private async resolveProvider(providerCode?: string) {
     const code = providerCode ?? DEFAULT_PROVIDER_CODE;
     const provider = await this.prisma.shippingProvider.findUnique({
@@ -328,4 +543,8 @@ export class OrdersService {
     }
     return provider;
   }
+}
+
+function round2(value: number): number {
+  return Math.round(value * 100) / 100;
 }

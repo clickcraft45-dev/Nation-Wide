@@ -70,7 +70,11 @@ describe('PickupRequestsService', () => {
       updateMany: jest.Mock;
       count: jest.Mock;
     };
-    adminUser: { findUnique: jest.Mock; findMany: jest.Mock };
+    adminUser: {
+      findUnique: jest.Mock;
+      findFirst: jest.Mock;
+      findMany: jest.Mock;
+    };
     customer: { findUnique: jest.Mock; update: jest.Mock };
     order: { update: jest.Mock };
     auditLog: { create: jest.Mock };
@@ -106,6 +110,8 @@ describe('PickupRequestsService', () => {
         findUnique: jest
           .fn()
           .mockResolvedValue({ id: 'partner-1', role: 'PICKUP_PARTNER' }),
+        // The admin who approves a "pay later" — deferPayment looks one up by id and role.
+        findFirst: jest.fn().mockResolvedValue({ id: 'admin-1' }),
         findMany: jest.fn().mockResolvedValue([]),
       },
       customer: {
@@ -1007,6 +1013,54 @@ describe('PickupRequestsService', () => {
         'payment_collected',
         { amount: '970' },
       );
+    });
+
+    it('records an approved due instead of money, and names the admin who approved it', async () => {
+      prisma.pickupRequest.findUnique.mockResolvedValue({
+        ...basePickupRequest,
+        verifiedAt: new Date(),
+        verifiedPrice: decimalLike(970),
+      });
+
+      await service.collectPayment(
+        'pr-1',
+        {
+          deferred: true,
+          dueApprovedByAdminId: 'admin-1',
+          dueNote: 'Regular customer, pays on Monday',
+        } as never,
+        'partner-1',
+      );
+
+      expect(prisma.pickupRequest.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            paymentDeferredAt: expect.any(Date),
+            paymentDueApprovedByAdminId: 'admin-1',
+            paymentDueNote: 'Regular customer, pays on Monday',
+          }),
+        }),
+      );
+      // No money changed hands, so the customer is not told a payment was collected.
+      expect(notificationsService.enqueue).not.toHaveBeenCalled();
+    });
+
+    it('refuses a due that no active admin approved', async () => {
+      prisma.pickupRequest.findUnique.mockResolvedValue({
+        ...basePickupRequest,
+        verifiedAt: new Date(),
+        verifiedPrice: decimalLike(970),
+      });
+      prisma.adminUser.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.collectPayment(
+          'pr-1',
+          { deferred: true, dueApprovedByAdminId: 'admin-gone' } as never,
+          'partner-1',
+        ),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.pickupRequest.updateMany).not.toHaveBeenCalled();
     });
 
     it('rejects a double-collection race — the losing concurrent call records nothing', async () => {

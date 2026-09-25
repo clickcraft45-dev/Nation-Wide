@@ -18,6 +18,7 @@ import { SearchInput } from "@/components/ui/search-input";
 import { Label } from "@/components/ui/input";
 import { DateField } from "@/components/ui/date-field";
 import { useDebouncedValue } from "@/lib/utils/use-debounced-value";
+import { BackLink } from "@/components/ui/back-link";
 
 const WEIGHT_SLAB_FIELD_LABELS: Record<string, string> = {
   weightFromKg: "Weight from",
@@ -80,6 +81,7 @@ export default function RateHistoryPage() {
 
   return (
     <div className="space-y-4">
+      <BackLink href="/admin/pricing/dashboard">Back to pricing</BackLink>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
         <div className="sm:w-64">
           <SearchInput

@@ -18,6 +18,7 @@ import { NativeSelect } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { ZoneDialog } from "@/components/pricing/zone-dialog";
 import { ZoneCountriesDialog } from "@/components/pricing/zone-countries-dialog";
+import { BackLink } from "@/components/ui/back-link";
 
 export default function PricingZonesPage() {
   const [providers, setProviders] = useState<RateProviderDto[]>([]);
@@ -57,6 +58,7 @@ export default function PricingZonesPage() {
 
   return (
     <div className="space-y-4">
+      <BackLink href="/admin/pricing/dashboard">Back to pricing</BackLink>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <NativeSelect
           className="sm:w-56"

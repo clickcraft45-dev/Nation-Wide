@@ -11,7 +11,7 @@ import {
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import type { Response } from 'express';
-import type { OrderDto } from '@nationwide/shared-types';
+import type { CancellationQuoteDto, OrderDto } from '@nationwide/shared-types';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -21,6 +21,7 @@ import { toOrderDto } from './order.mapper';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
 import { QueryOrdersDto } from './dto/query-orders.dto';
+import { CancelOrderDto } from './dto/cancel-order.dto';
 import type { JwtPayload } from '../auth/types/jwt-payload.type';
 
 // Tighter than the lenient 300/min global default — a compromised/careless admin account
@@ -39,6 +40,34 @@ export class OrdersController {
   async findMine(@CurrentUser() user: JwtPayload): Promise<OrderDto[]> {
     const orders = await this.ordersService.findAllForCustomer(user.sub);
     return orders.map(toOrderDto);
+  }
+
+  // Both scoped to the caller's own order by customerId, and registered under 'me' for the same
+  // reason findMine is: an :id route with a role check would still read another account's order.
+  @Get('me/:id/cancellation-quote')
+  @Roles('CUSTOMER')
+  async quoteMyCancellation(
+    @Param('id') id: string,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<CancellationQuoteDto> {
+    await this.ordersService.findOneForCustomer(id, user.sub);
+    return this.ordersService.quoteCancellation(id);
+  }
+
+  @Post('me/:id/cancel')
+  @Roles('CUSTOMER')
+  async cancelMine(
+    @Param('id') id: string,
+    @Body() dto: CancelOrderDto,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<OrderDto> {
+    const order = await this.ordersService.cancel(
+      id,
+      dto.reason,
+      user.sub,
+      user.sub,
+    );
+    return toOrderDto(order);
   }
 
   @Throttle(ORDER_CREATE_THROTTLE)

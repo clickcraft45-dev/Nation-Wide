@@ -38,6 +38,38 @@ export interface OrderDto {
   paymentMethod: PaymentMethodCode | null;
   paidAmount: number | null;
   paidAt: string | null; // ISO 8601
+  /** Who handed the money over, and anything worth recording about how it was paid. */
+  paymentPayerName: string | null;
+  paymentNote: string | null;
+  /** Money sent back. Recorded rather than inferred: partial refunds are normal. */
+  refundedAmount: number | null;
+  refundedAt: string | null; // ISO 8601
+  refundNote: string | null;
+
+  /** The coupon that was applied, and the rupees it took off. Both null when none was used. */
+  couponCode: string | null;
+  discountAmount: number | null;
+
+  /**
+   * What the customer still owes on a parcel that was taken on a "pay later" approval, and the
+   * admin who approved it. Null on every order that was paid at the door or is simply unpaid —
+   * a due is an approved deferral, not just an absence of money.
+   */
+  dueAmount: number | null;
+  dueApprovedByAdminName: string | null;
+
+  cancelledAt: string | null; // ISO 8601
+  cancellationReason: string | null;
+  /** The fee actually charged, frozen at cancellation time. */
+  cancellationFee: number | null;
+  cancellationDistanceKm: number | null;
+  /** Whether that distance was driven along roads, or the straight line used as a fallback. */
+  cancellationDistanceSource: "road" | "straight-line" | null;
+  /**
+   * Whether the customer may still cancel this themselves: an order is theirs to call off until
+   * an AWB has been mapped, after which the carrier holds the parcel and it is a support matter.
+   */
+  isCancellableByCustomer: boolean;
   createdAt: string; // ISO 8601
   updatedAt: string; // ISO 8601
   /**
@@ -56,4 +88,32 @@ export interface UpdateOrderPaymentDto {
   paymentStatus: PaymentStatusCode;
   paymentMethod?: PaymentMethodCode;
   paidAmount?: number;
+  /** A discount code to apply; the server validates it and records what it took off. */
+  couponCode?: string;
+  /** Who paid, and a free-text note — both kept on PAID. */
+  paymentPayerName?: string;
+  paymentNote?: string;
+  /** How much went back, on REFUNDED. */
+  refundedAmount?: number;
+  refundNote?: string;
+}
+
+/** What cancelling now would cost, so the customer sees it before confirming. */
+export interface CancellationQuoteDto {
+  isCancellable: boolean;
+  /** Why not, when it is not: an AWB is mapped, or the order is already closed. */
+  reason: string | null;
+  baseFee: number;
+  perKmFee: number;
+  distanceKm: number | null;
+  /**
+   * How the distance was measured. "road" is the driving route; "straight-line" means the
+   * routing engine could not be reached, which the customer is told before they confirm.
+   */
+  distanceSource: "road" | "straight-line" | null;
+  totalFee: number;
+}
+
+export interface CancelOrderDto {
+  reason?: string;
 }

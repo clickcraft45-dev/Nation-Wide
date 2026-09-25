@@ -32,6 +32,10 @@ export function toCompanySettingsDto(
     stateName: settings.stateName,
     stateCode: settings.stateCode,
     sacCode: settings.sacCode,
+    cancellationBaseFee: settings.cancellationBaseFee,
+    cancellationPerKmFee: settings.cancellationPerKmFee,
+    warehouseLatitude: settings.warehouseLatitude,
+    warehouseLongitude: settings.warehouseLongitude,
     updatedAt: settings.updatedAt.toISOString(),
   };
 }

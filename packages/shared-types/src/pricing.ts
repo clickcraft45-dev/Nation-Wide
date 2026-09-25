@@ -10,6 +10,8 @@ export interface RateProviderDto {
   // by the shipment's weight at quote time. See RateProviderDto docs / pricing engine.
   fuelChargePercent: number;
   pssPerKg: number;
+  /** Margin by weight band, lowest band first. Empty until an admin sets it up. */
+  marginBands: ProviderMarginBandDto[];
   // Countries currently configured under this provider (via ZoneCountry) that are themselves
   // active — feeds the Providers grid without a second request per card.
   activeCountryCount: number;
@@ -28,6 +30,32 @@ export interface UpdateRateProviderDto {
   fuelChargePercent?: number;
   pssPerKg?: number;
   reason?: string;
+}
+
+/**
+ * One weight band of a carrier's NationWide margin.
+ *
+ * A band matches a chargeable weight in [fromKg, toKg) — `toKg: null` is the open-ended top band
+ * — and charges `flatAmount + perKgAmount * (weightKg - fromKg)`. So "flat 1000 up to 10 kg" is
+ * `{ fromKg: 0, toKg: 10, flatAmount: 1000, perKgAmount: 0 }`, and "1000 plus 100/kg to 20 kg" is
+ * `{ fromKg: 10, toKg: 20, flatAmount: 1000, perKgAmount: 100 }`.
+ */
+export interface ProviderMarginBandDto {
+  id: string;
+  fromKg: number;
+  toKg: number | null;
+  flatAmount: number;
+  perKgAmount: number;
+}
+
+/** The whole ladder, replaced in one call — bands are read and edited as a set. */
+export interface SetProviderMarginBandsDto {
+  bands: {
+    fromKg: number;
+    toKg?: number | null;
+    flatAmount: number;
+    perKgAmount: number;
+  }[];
 }
 
 export interface CountryDto {

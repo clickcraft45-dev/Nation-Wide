@@ -192,6 +192,13 @@ export interface PickupRequestDto {
   paymentReference: string | null;
   paymentNotes: string | null;
   paymentCollectedAt: string | null; // ISO 8601
+  /**
+   * Set instead of paymentCollectedAt when the parcel was taken on a "pay later" approval, with
+   * the admin who approved it. The amount owed is the verified price.
+   */
+  paymentDeferredAt: string | null; // ISO 8601
+  paymentDueApprovedByAdminName: string | null;
+  paymentDueNote: string | null;
 
   parcelPackedProperly: boolean | null;
   weightVerifiedFlag: boolean | null;

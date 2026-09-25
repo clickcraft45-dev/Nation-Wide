@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Users } from "lucide-react";
 import type { AdminUserDto, CustomerDto, ManagedAdminRole } from "@nationwide/shared-types";
 import { apiClient, ApiError, errorMessage } from "@/lib/api-client";
+import { useDebouncedValue } from "@/lib/utils/use-debounced-value";
 import {
   Table,
   TableHeader,
@@ -65,16 +66,24 @@ export default function AdminPeoplePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  // Typing settles before the lookup fires — one request per pause, not one per letter.
+  const debouncedSearch = useDebouncedValue(search, 250);
   const { showToast } = useToast();
   const { user: currentUser } = useAuth();
 
+  // One page of customers, not the whole table. An unbounded fetch here downloaded every account
+  // the business has ever had — on the server as one big query, over the wire, and then into a
+  // filter that ran on every keystroke. The search box asks the server instead, which is what it
+  // is for; staff is a short list and stays local.
   const load = useCallback(() => {
     setIsLoading(true);
     setError(null);
+    const term = debouncedSearch.trim();
+    const customersUrl = term
+      ? `/customers?search=${encodeURIComponent(term)}&pageSize=100`
+      : "/customers?pageSize=100";
     Promise.all([
-      // ponytail: one page of each is enough for a directory anyone reads with the search box.
-      // Add paging when a real account list outgrows it.
-      apiClient.get<CustomerDto[]>("/customers?pageSize=200"),
+      apiClient.get<CustomerDto[]>(customersUrl),
       apiClient.get<AdminUserDto[]>("/admin/users"),
     ])
       .then(([customerRows, staffRows]) => {
@@ -83,7 +92,7 @@ export default function AdminPeoplePage() {
       })
       .catch((err) => setError(errorMessage(err, "Failed to load accounts.")))
       .finally(() => setIsLoading(false));
-  }, []);
+  }, [debouncedSearch]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect

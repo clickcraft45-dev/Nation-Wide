@@ -15,6 +15,10 @@ import { cn } from "@/lib/utils/cn";
  *    compiles to nothing and the prop silently does nothing.
  *  - `prefers-reduced-motion` stops the rotation and the word cycling; a spinning 3-D object is
  *    exactly the kind of motion that setting exists to suppress.
+ *  - The rotation is a CSS keyframe, not a React state tick. It used to advance `time` on a 16ms
+ *    interval, which re-rendered this component ~60 times a second for the whole of every route
+ *    transition and every page load — on the main thread, competing with the very fetch and
+ *    hydration being waited on. CSS runs the same animation on the compositor for free.
  */
 
 const STATUSES = ["Fetching", "Fixing", "Updating", "Placing", "Syncing", "Processing"] as const;
@@ -29,7 +33,6 @@ const FACE_TRANSFORMS = [
   "rotateX(-90deg)",
 ];
 
-const ROTATION_TICK_MS = 16;
 const STATUS_TICK_MS = 600;
 
 /**
@@ -70,15 +73,8 @@ export function PrismFluxLoader({
   label?: string;
   className?: string;
 }) {
-  const [time, setTime] = useState(0);
   const [statusIndex, setStatusIndex] = useState(0);
   const reduceMotion = usePrefersReducedMotion();
-
-  useEffect(() => {
-    if (reduceMotion) return;
-    const id = setInterval(() => setTime((t) => t + 0.02 * speed), ROTATION_TICK_MS);
-    return () => clearInterval(id);
-  }, [speed, reduceMotion]);
 
   useEffect(() => {
     if (reduceMotion || label) return;
@@ -101,11 +97,15 @@ export function PrismFluxLoader({
     >
       <div
         className="relative"
+        // One turn every `speed` notches — the same pace the old interval produced, expressed as
+        // a duration so the browser animates it without waking React.
         style={{
           width: size,
           height: size,
           transformStyle: "preserve-3d",
-          transform: `rotateY(${time * 30}deg) rotateX(${time * 30}deg)`,
+          animation: reduceMotion
+            ? undefined
+            : `prism-tumble ${Math.max(12 / speed, 0.6)}s linear infinite`,
         }}
         aria-hidden
       >

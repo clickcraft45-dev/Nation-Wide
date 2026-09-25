@@ -172,10 +172,14 @@
 
 :root {
   /* Blur depth by elevation. Past ~32px the backdrop stops reading as "behind glass" and starts
-     reading as a grey fill — all of the cost, none of the effect. */
-  --glass-blur-field: 8px;
-  --glass-blur-surface: 18px;
-  --glass-blur-raised: 28px;
+     reading as a grey fill — all of the cost, none of the effect.
+     These sit well below that ceiling on purpose: a backdrop blur costs roughly in proportion to
+     its radius, it is paid per element per frame, and the app puts dozens of glass surfaces on a
+     screen at once. Halving the radii is invisible next to the saturation lift and the specular
+     rim, which are what actually read as glass, and it is the single cheapest thing available. */
+  --glass-blur-field: 5px;
+  --glass-blur-surface: 10px;
+  --glass-blur-raised: 16px;
 
   /* Saturation lift is what separates real glass from a grey overlay: blurring alone desaturates
      whatever is behind, so it gets pushed back up. Subtle here, because the palette is monochrome
@@ -221,22 +225,13 @@
     radial-gradient(46% 44% at 18% 92%, rgba(161, 161, 170, 0.44), transparent 64%),
     radial-gradient(70% 60% at 50% 50%, rgba(255, 255, 255, 0.5), transparent 70%),
     linear-gradient(160deg, #eceef2 0%, #dfe3ea 46%, #d5dae3 100%);
-  /* Slow drift, so the field under the panes is never quite the same twice. Three offset
-     durations on one keyframe means the loop point never lands on a recognisable frame. */
-  animation: ambient-drift 42s ease-in-out infinite;
-}
-
-@keyframes ambient-drift {
-  0%,
-  100% {
-    transform: scale(1.06) translate3d(0, 0, 0);
-  }
-  33% {
-    transform: scale(1.12) translate3d(-2%, 1.5%, 0);
-  }
-  66% {
-    transform: scale(1.08) translate3d(1.8%, -1.2%, 0);
-  }
+  /* Deliberately still.
+     This used to drift on a 42s loop. Every frame of that drift invalidated the backdrop, and
+     ~130 elements on screen carry `backdrop-filter`, so each of them re-sampled and re-blurred
+     the whole area behind it on every one of those frames — a permanent compositor load on every
+     screen in the app, for a movement nobody looks at. The wells are what the glass needs; their
+     wandering is not. Scaled up slightly so the gradient edges still sit off-screen. */
+  transform: scale(1.06);
 }
 
 /* A hairline grid over those wells, masked to fade at the edges. It gives the blur real detail to
@@ -253,6 +248,17 @@
   background-size: 56px 56px;
   -webkit-mask-image: radial-gradient(ellipse 90% 80% at 50% 40%, #000 20%, transparent 100%);
   mask-image: radial-gradient(ellipse 90% 80% at 50% 40%, #000 20%, transparent 100%);
+}
+
+/* The loading cube's tumble. A compositor-driven keyframe rather than a React state tick, so a
+   page that is waiting on a fetch is not also re-rendering sixty times a second. */
+@keyframes prism-tumble {
+  from {
+    transform: rotateY(0deg) rotateX(0deg);
+  }
+  to {
+    transform: rotateY(360deg) rotateX(360deg);
+  }
 }
 
 /* --------------------------------------------------------------------------
@@ -494,10 +500,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .app-ambient::before {
-    animation: none;
-  }
-
   .glass-interactive,
   .glass-sheen::after {
     transition: none;

@@ -84,6 +84,7 @@ describe('ShipmentsService', () => {
       prisma as never,
       redis as never,
       notificationsService as never,
+      { requestFeedback: jest.fn().mockResolvedValue(undefined) } as never,
     );
   });
 

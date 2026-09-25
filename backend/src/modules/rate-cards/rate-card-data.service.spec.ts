@@ -271,7 +271,7 @@ describe('RateCardDataService', () => {
     expect(data.prices).toEqual([[null]]);
   });
 
-  it('never includes the provider name or id anywhere but the internal rateProviderId field', async () => {
+  it('carries the provider name through, since the document names the carrier', async () => {
     const usa = { id: 'c-usa', code: 'US', name: 'USA' };
     prisma.zoneCountry.findUnique.mockResolvedValue(
       zoneCountryMembership('zone-1', usa),
@@ -289,7 +289,7 @@ describe('RateCardDataService', () => {
     });
 
     expect(data.rateProviderId).toBe('provider-1');
-    expect(JSON.stringify(data)).not.toContain('FedEx');
+    expect(data.rateProviderName).toBe('FedEx');
   });
 
   describe('listCountriesForProvider', () => {

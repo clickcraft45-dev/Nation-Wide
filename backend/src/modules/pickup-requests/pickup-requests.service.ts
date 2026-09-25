@@ -49,6 +49,8 @@ const withDetails = {
     assignedPartner: {
       select: { id: true, name: true, email: true, phone: true },
     },
+    // Named on the pickup and on the customer's order: who let this parcel go unpaid.
+    paymentDueApprovedBy: { select: { name: true } },
     quote: {
       select: {
         destName: true,
@@ -338,6 +340,24 @@ export class PickupRequestsService {
         ...withDetails,
       });
     });
+  }
+
+  /**
+   * The admins a partner may name as having approved a "pay later" at the door.
+   *
+   * Names and ids only. A partner rings an admin from the doorstep and has to record who said
+   * yes; without a list they would be typing a name into free text, which is not something the
+   * finance screens could ever hold anyone to.
+   */
+  async listDueApprovers(): Promise<{ id: string; name: string }[]> {
+    const admins = await this.prisma.adminUser.findMany({
+      where: { isActive: true, role: { in: ['ADMIN', 'SUPER_ADMIN'] } },
+      select: { id: true, name: true, email: true },
+      orderBy: { name: 'asc' },
+    });
+    // name is nullable on AdminUser; an admin with none is still someone a partner has to be
+    // able to point at, so they are listed by the address they sign in with.
+    return admins.map((admin) => ({ id: admin.id, name: admin.name ?? admin.email }));
   }
 
   // Every active partner sees an unclaimed request until one takes it (see claim).
@@ -1060,11 +1080,21 @@ export class PickupRequestsService {
         'Verify the parcel before collecting payment',
       );
     }
-    if (pickupRequest.paymentCollectedAt) {
+    if (pickupRequest.paymentCollectedAt || pickupRequest.paymentDeferredAt) {
       throw new BadRequestException(
-        'Payment has already been collected for this pickup request',
+        'Payment has already been settled for this pickup request',
       );
     }
+
+    if (dto.deferred) {
+      return this.deferPayment(pickupRequest, dto, partnerId);
+    }
+    // Everything below is a real collection, so the amounts are present — the DTO makes them
+    // required whenever deferred is not set.
+    const collectedAmount = dto.collectedAmount as number;
+    const paymentMethod = dto.paymentMethod as NonNullable<
+      CollectPaymentDto['paymentMethod']
+    >;
 
     const expectedPrice =
       pickupRequest.verifiedPrice ?? pickupRequest.estimatedPrice;
@@ -1072,9 +1102,9 @@ export class PickupRequestsService {
       expectedPrice * COLLECTED_AMOUNT_TOLERANCE_RATIO,
       COLLECTED_AMOUNT_TOLERANCE_FLOOR,
     );
-    if (Math.abs(dto.collectedAmount - expectedPrice) > tolerance) {
+    if (Math.abs(collectedAmount - expectedPrice) > tolerance) {
       throw new BadRequestException(
-        `Collected amount (${dto.collectedAmount}) is too far from the verified price ` +
+        `Collected amount (${collectedAmount}) is too far from the verified price ` +
           `(${expectedPrice}) — if this is legitimate, contact an admin to review and record it.`,
       );
     }
@@ -1084,10 +1114,10 @@ export class PickupRequestsService {
     // check above and both record a collection, double-charging the audit trail and sending the
     // customer two "payment collected" notifications for one real payment.
     const claim = await this.prisma.pickupRequest.updateMany({
-      where: { id, paymentCollectedAt: null },
+      where: { id, paymentCollectedAt: null, paymentDeferredAt: null },
       data: {
-        paymentMethod: dto.paymentMethod,
-        collectedAmount: dto.collectedAmount,
+        paymentMethod,
+        collectedAmount,
         paymentReference: dto.paymentReference ?? null,
         paymentNotes: dto.paymentNotes ?? null,
         paymentCollectedAt: new Date(),
@@ -1107,8 +1137,8 @@ export class PickupRequestsService {
         entityId: id,
         before: {},
         after: {
-          paymentMethod: dto.paymentMethod,
-          collectedAmount: dto.collectedAmount,
+          paymentMethod,
+          collectedAmount,
         },
       },
     });
@@ -1117,10 +1147,75 @@ export class PickupRequestsService {
       pickupRequest.customerId,
       'WHATSAPP',
       NOTIFICATION_TEMPLATES.PAYMENT_COLLECTED,
-      { amount: String(dto.collectedAmount) },
+      { amount: String(collectedAmount) },
     );
 
     return this.findOne(id);
+  }
+
+  /**
+   * The parcel goes without the money: an admin has approved letting this customer pay later.
+   *
+   * Recorded as its own event rather than as a zero-rupee collection, because "nobody paid, and
+   * X approved that" is a different fact from "the customer paid nothing". The amount owed rides
+   * onto the Order in acceptParcel, which is where the customer can see it.
+   */
+  private async deferPayment(
+    pickupRequest: PickupRequestWithDetails,
+    dto: CollectPaymentDto,
+    partnerId: string,
+  ): Promise<PickupRequestWithDetails> {
+    const approver = await this.prisma.adminUser.findFirst({
+      where: {
+        id: dto.dueApprovedByAdminId,
+        isActive: true,
+        role: { in: ['ADMIN', 'SUPER_ADMIN'] },
+      },
+      select: { id: true },
+    });
+    if (!approver) {
+      throw new BadRequestException(
+        'A due needs an active admin to approve it — pick one and try again',
+      );
+    }
+
+    const claim = await this.prisma.pickupRequest.updateMany({
+      where: {
+        id: pickupRequest.id,
+        paymentCollectedAt: null,
+        paymentDeferredAt: null,
+      },
+      data: {
+        paymentDeferredAt: new Date(),
+        paymentDueApprovedByAdminId: approver.id,
+        paymentDueNote: dto.dueNote ?? null,
+      },
+    });
+    if (claim.count === 0) {
+      throw new BadRequestException(
+        'Payment has already been settled for this pickup request',
+      );
+    }
+
+    const dueAmount =
+      pickupRequest.verifiedPrice ?? pickupRequest.estimatedPrice;
+
+    await this.prisma.auditLog.create({
+      data: {
+        actorId: partnerId,
+        action: 'PICKUP_REQUEST_PAYMENT_DEFERRED',
+        entity: 'PickupRequest',
+        entityId: pickupRequest.id,
+        before: {},
+        after: {
+          dueAmount,
+          approvedByAdminId: approver.id,
+          note: dto.dueNote ?? null,
+        },
+      },
+    });
+
+    return this.findOne(pickupRequest.id);
   }
 
   // The terminal action — only once weight is verified, payment is collected, and the parcel
@@ -1141,9 +1236,9 @@ export class PickupRequestsService {
     if (!pickupRequest.verifiedAt) {
       throw new BadRequestException('Verify the parcel before accepting it');
     }
-    if (!pickupRequest.paymentCollectedAt) {
+    if (!pickupRequest.paymentCollectedAt && !pickupRequest.paymentDeferredAt) {
       throw new BadRequestException(
-        'Collect payment before accepting the parcel',
+        'Collect payment (or record an approved due) before accepting the parcel',
       );
     }
 
@@ -1181,13 +1276,22 @@ export class PickupRequestsService {
     await this.prisma.$transaction([
       this.prisma.order.update({
         where: { id: order.id },
-        data: {
-          paymentStatus: 'PAID',
-          paymentMethod: pickupRequest.paymentMethod,
-          paidAmount: pickupRequest.collectedAmount ?? finalPrice,
-          paidAt: pickupRequest.paymentCollectedAt,
-          paymentMarkedByAdminId: partnerId,
-        },
+        // A deferred pickup produces an unpaid order carrying what is owed and who approved the
+        // wait — the customer sees it in their portal, and marking it paid later clears it.
+        data: pickupRequest.paymentDeferredAt
+          ? {
+              paymentStatus: 'PENDING',
+              dueAmount: finalPrice,
+              dueApprovedByAdminId: pickupRequest.paymentDueApprovedByAdminId,
+              paymentMarkedByAdminId: partnerId,
+            }
+          : {
+              paymentStatus: 'PAID',
+              paymentMethod: pickupRequest.paymentMethod,
+              paidAmount: pickupRequest.collectedAmount ?? finalPrice,
+              paidAt: pickupRequest.paymentCollectedAt,
+              paymentMarkedByAdminId: partnerId,
+            },
       }),
       this.prisma.quote.update({
         where: { id: pickupRequest.quoteId },

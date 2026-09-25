@@ -163,19 +163,19 @@ enum PaymentMethod {
 // ---------------------------------------------------------------------------
 
 model Customer {
-  id                 String   @id @default(uuid())
+  id                 String    @id @default(uuid())
   name               String
-  phone              String   @unique // E.164 normalized
-  email              String?  @unique // required + unique only for self-registered (login-capable) customers
+  phone              String    @unique // E.164 normalized
+  email              String?   @unique // required + unique only for self-registered (login-capable) customers
   address            String?
   // Set only for GST-registered (B2B) customers. Null means unregistered/B2C, which changes the
   // place-of-supply rule and whether the recipient GSTIN line prints on the invoice.
   gstin              String?
-  passwordHash       String?  @map("password_hash") // null until the customer registers/sets a password
-  hashedRefreshToken String?  @map("hashed_refresh_token")
-  isActive           Boolean  @default(true) @map("is_active")
-  consentGivenAt     DateTime @map("consent_given_at") // DPDP Act: when the customer consented to data collection
-  consentSource      String   @map("consent_source") // e.g. 'signup_form', 'staff_entry'
+  passwordHash       String?   @map("password_hash") // null until the customer registers/sets a password
+  hashedRefreshToken String?   @map("hashed_refresh_token")
+  isActive           Boolean   @default(true) @map("is_active")
+  consentGivenAt     DateTime  @map("consent_given_at") // DPDP Act: when the customer consented to data collection
+  consentSource      String    @map("consent_source") // e.g. 'signup_form', 'staff_entry'
   /// S3 key of the customer's Aadhaar card photo, taken by the pickup partner at the door (customs
   /// asks for it on every export). Collected once and reused on later pickups unless replaced.
   /// A business account: they sign in and book from the B2B portal instead of the consumer
@@ -184,19 +184,19 @@ model Customer {
   isB2b              Boolean   @default(false) @map("is_b2b")
   aadhaarKey         String?   @map("aadhaar_key")
   aadhaarUploadedAt  DateTime? @map("aadhaar_uploaded_at")
-  createdAt          DateTime @default(now()) @map("created_at")
-  updatedAt          DateTime @updatedAt @map("updated_at")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
 
-  orders         Order[]
-  quotes         Quote[]
-  notifications  Notification[]
-  pickupRequests PickupRequest[]
-  invoices       Invoice[]
-  receipts       Receipt[]
+  orders            Order[]
+  quotes            Quote[]
+  notifications     Notification[]
+  pickupRequests    PickupRequest[]
+  invoices          Invoice[]
+  receipts          Receipt[]
   pushSubscriptions PushSubscription[]
-  reviews        Review[]
-  savedItems     SavedItem[]
-  b2bLinks       B2bLink[]
+  reviews           Review[]
+  savedItems        SavedItem[]
+  b2bLinks          B2bLink[]
 
   @@map("customers")
 }
@@ -212,14 +212,46 @@ model Order {
   // needs a real transaction ledger.
   paymentStatus          PaymentStatus  @default(PENDING) @map("payment_status")
   paymentMethod          PaymentMethod? @map("payment_method")
-  paidAmount             Float?       @map("paid_amount")
+  paidAmount             Float?         @map("paid_amount")
   paidAt                 DateTime?      @map("paid_at")
   paymentMarkedByAdminId String?        @map("payment_marked_by_admin_id")
+  /// Who actually handed the money over, and anything the admin wants on the record about it —
+  /// "paid by the consignee's brother", "UPI ref 4412, short by 200, rest on Monday".
+  paymentPayerName       String?        @map("payment_payer_name")
+  paymentNote            String?        @map("payment_note")
+  /// A refund is money going back out, so the amount is recorded rather than inferred from
+  /// paidAmount — partial refunds are the normal case.
+  refundedAmount         Float?         @map("refunded_amount")
+  refundedAt             DateTime?      @map("refunded_at")
+  refundNote             String?        @map("refund_note")
+
+  /// Cancellation, which a customer may do themselves until an AWB is mapped. The fee charged is
+  /// frozen here: it is derived from settings that change, and the customer was quoted this one.
+  cancelledAt                DateTime? @map("cancelled_at")
+  cancellationReason         String?   @map("cancellation_reason")
+  cancellationFee            Float?    @map("cancellation_fee")
+  /// Warehouse-to-pickup distance the per-km part of the fee was charged on, and whether it was
+  /// the driving route or the straight-line fallback. Null when the pickup address had no
+  /// coordinates to measure from.
+  cancellationDistanceKm     Float?    @map("cancellation_distance_km")
+  cancellationDistanceSource String?   @map("cancellation_distance_source")
+
+  /// The coupon applied when the payment was recorded, and the rupees it took off. The amount is
+  /// frozen here because a coupon can be edited or retired after the order it discounted.
+  couponId       String? @map("coupon_id")
+  discountAmount Float?  @map("discount_amount")
+
+  /// Set when the parcel was taken on a "pay later" approval instead of money at the door: what
+  /// the customer still owes, and the admin who approved letting it go unpaid.
+  dueAmount            Float?  @map("due_amount")
+  dueApprovedByAdminId String? @map("due_approved_by_admin_id")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   customer        Customer       @relation(fields: [customerId], references: [id])
+  coupon          Coupon?        @relation(fields: [couponId], references: [id])
+  dueApprovedBy   AdminUser?     @relation("OrderDueApprovedBy", fields: [dueApprovedByAdminId], references: [id])
   shipments       Shipment[] // 1:many — a single order can produce split shipments
   quote           Quote? // inverse of Quote.orderId, which owns the FK
   pickup          Pickup?
@@ -252,7 +284,7 @@ model Quote {
   shipmentType ShipmentTypeCode @map("shipment_type")
   // Chargeable weight: when boxes are given this is derived from them (see chargeableWeightKg in
   // shared-types), so it is always the figure the price was computed against.
-  weightKg     Float          @map("weight_kg")
+  weightKg     Float            @map("weight_kg")
   description  String?
   /// The boxes: [{ weightKg, lengthCm?, widthCm?, heightCm? }]. One box is a normal order, several
   /// a bulk one. Null on quotes created before dimensions were collected.
@@ -301,7 +333,7 @@ model Quote {
   reviewReason  QuoteReviewReason? @map("review_reason")
   internalNotes String?            @map("internal_notes") // staff-only, never serialized to customer DTOs
 
-  quotedAmount    Float?  @map("quoted_amount")
+  quotedAmount    Float?    @map("quoted_amount")
   quotedCurrency  String?   @default("INR") @map("quoted_currency")
   quotedByAdminId String?   @map("quoted_by_admin_id")
   quotedAt        DateTime? @map("quoted_at")
@@ -353,7 +385,7 @@ model Pickup {
   confirmedByAdminId String?   @map("confirmed_by_admin_id") // who marked PICKED_UP / DROPPED_OFF
   confirmedAt        DateTime? @map("confirmed_at")
 
-  weightVerifiedKg Float? @map("weight_verified_kg")
+  weightVerifiedKg Float?  @map("weight_verified_kg")
   notes            String?
 
   createdAt DateTime @default(now()) @map("created_at")
@@ -392,8 +424,8 @@ model PickupRequest {
   rateProviderId    String?          @map("rate_provider_id")
   rateProviderName  String?          @map("rate_provider_name")
   shipmentType      ShipmentTypeCode @map("shipment_type")
-  estimatedWeightKg Float          @map("estimated_weight_kg")
-  estimatedPrice    Float          @map("estimated_price")
+  estimatedWeightKg Float            @map("estimated_weight_kg")
+  estimatedPrice    Float            @map("estimated_price")
   currency          String           @default("INR")
 
   // Pickup logistics — customer-entered, the "Pickup Request page" fields. No destination address
@@ -428,35 +460,42 @@ model PickupRequest {
   arrivedAt DateTime? @map("arrived_at")
 
   // Verification — Pickup Partner entered, at the customer's location.
-  verifiedWeightKg     Float?          @map("verified_weight_kg")
-  verifiedShipmentType ShipmentTypeCode? @map("verified_shipment_type")
-  verifiedPrice        Float?          @map("verified_price")
+  verifiedWeightKg        Float?            @map("verified_weight_kg")
+  verifiedShipmentType    ShipmentTypeCode? @map("verified_shipment_type")
+  verifiedPrice           Float?            @map("verified_price")
   /// The boxes as measured at the door; verifiedWeightKg is their chargeable weight.
-  verifiedPackages     Json?             @map("verified_packages")
+  verifiedPackages        Json?             @map("verified_packages")
   /// S3 key of the photo the partner took of the parcel at pickup.
-  parcelPhotoKey       String?           @map("parcel_photo_key")
+  parcelPhotoKey          String?           @map("parcel_photo_key")
   // The pricing engine computes the whole 7-step breakdown to arrive at verifiedPrice, and until
   // invoicing existed only the total was kept. A tax invoice has to state the taxable value and
   // the tax actually charged, and re-deriving those at invoice time would re-price against
   // whatever the rate cards say *then* — so the split is frozen here, at the one moment the
   // price becomes authoritative. Null on rows verified before this shipped, and on the
   // manual-quote path, which never produces a breakdown at all.
-  verifiedTaxableSubtotal Float? @map("verified_taxable_subtotal")
-  verifiedGstPercent      Float? @map("verified_gst_percent")
-  verifiedGstAmount       Float? @map("verified_gst_amount")
-  verifiedNationwideCut   Float? @map("verified_nationwide_cut")
-  verificationNotes    String?           @map("verification_notes")
-  verifiedAt           DateTime?         @map("verified_at")
+  verifiedTaxableSubtotal Float?            @map("verified_taxable_subtotal")
+  verifiedGstPercent      Float?            @map("verified_gst_percent")
+  verifiedGstAmount       Float?            @map("verified_gst_amount")
+  verifiedNationwideCut   Float?            @map("verified_nationwide_cut")
+  verificationNotes       String?           @map("verification_notes")
+  verifiedAt              DateTime?         @map("verified_at")
   // When the partner confirmed (or took down) the recipient's delivery address at the door.
-  recipientVerifiedAt  DateTime?         @map("recipient_verified_at")
+  recipientVerifiedAt     DateTime?         @map("recipient_verified_at")
 
   // Payment collection — reuses the existing PaymentMethod enum (Order also uses it), copied onto
   // the generated Order by acceptParcel so PATCH /admin/orders/:id/payment's fields aren't stale.
   paymentMethod      PaymentMethod? @map("payment_method")
-  collectedAmount    Float?       @map("collected_amount")
+  collectedAmount    Float?         @map("collected_amount")
   paymentReference   String?        @map("payment_reference") // e.g. UPI transaction ref
   paymentNotes       String?        @map("payment_notes")
   paymentCollectedAt DateTime?      @map("payment_collected_at")
+
+  /// "Take the payment later" — the parcel is accepted without money changing hands at the door.
+  /// Set instead of paymentCollectedAt (never both), and only ever with an admin named against
+  /// it: letting a parcel go unpaid is an admin decision, not a partner one.
+  paymentDeferredAt           DateTime? @map("payment_deferred_at")
+  paymentDueApprovedByAdminId String?   @map("payment_due_approved_by_admin_id")
+  paymentDueNote              String?   @map("payment_due_note")
 
   // Parcel-acceptance checklist.
   parcelPackedProperly   Boolean? @map("parcel_packed_properly")
@@ -474,10 +513,11 @@ model PickupRequest {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  quote           Quote      @relation(fields: [quoteId], references: [id])
-  customer        Customer   @relation(fields: [customerId], references: [id])
-  assignedPartner AdminUser? @relation("PickupRequestAssignedPartner", fields: [assignedPartnerId], references: [id])
-  order           Order?     @relation(fields: [orderId], references: [id])
+  quote                Quote      @relation(fields: [quoteId], references: [id])
+  customer             Customer   @relation(fields: [customerId], references: [id])
+  assignedPartner      AdminUser? @relation("PickupRequestAssignedPartner", fields: [assignedPartnerId], references: [id])
+  paymentDueApprovedBy AdminUser? @relation("PickupRequestDueApprovedBy", fields: [paymentDueApprovedByAdminId], references: [id])
+  order                Order?     @relation(fields: [orderId], references: [id])
 
   @@index([customerId])
   @@index([status])
@@ -501,19 +541,43 @@ model RateProvider {
   // instead of on every WeightSlab (see WeightSlab's doc comment). The pricing engine reads these
   // live at quote time; RateQuoteOption freezes a copy so past quotes never change retroactively
   // when an admin updates them.
-  fuelChargePercent Float  @default(0) @map("fuel_charge_percent")
-  pssPerKg          Float  @default(0) @map("pss_per_kg")
+  fuelChargePercent Float    @default(0) @map("fuel_charge_percent")
+  pssPerKg          Float    @default(0) @map("pss_per_kg")
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
 
-  zones             Zone[]
-  zoneCountries     ZoneCountry[]
+  zones                Zone[]
+  zoneCountries        ZoneCountry[]
   fuelSurchargeUpdates FuelSurchargeUpdate[]
-  remoteAreas       RemoteArea[]
-  rateQuoteOptions  RateQuoteOption[]
-  rateCardDocuments RateCardDocument[]
+  remoteAreas          RemoteArea[]
+  marginBands          ProviderMarginBand[]
+  rateQuoteOptions     RateQuoteOption[]
+  rateCardDocuments    RateCardDocument[]
 
   @@map("rate_providers")
+}
+
+/// The NationWide margin by weight, per carrier — "flat 1000 up to 10 kg, then 100/kg on top".
+///
+/// Margin used to live only on the weight slab, which meant re-entering the same commercial
+/// decision on every country and every band. A band matches when the chargeable weight falls in
+/// [fromKg, toKg), and charges `flatAmount + perKgAmount * (weight - fromKg)`. A null toKg is the
+/// open-ended top band. A weight slab that sets its own nationwideCut still wins over all of this.
+model ProviderMarginBand {
+  id             String   @id @default(uuid())
+  rateProviderId String   @map("rate_provider_id")
+  fromKg         Float    @map("from_kg")
+  /// Exclusive upper bound; null means "and everything above".
+  toKg           Float?   @map("to_kg")
+  flatAmount     Float    @default(0) @map("flat_amount")
+  perKgAmount    Float    @default(0) @map("per_kg_amount")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  rateProvider RateProvider @relation(fields: [rateProviderId], references: [id], onDelete: Cascade)
+
+  @@index([rateProviderId])
+  @@map("provider_margin_bands")
 }
 
 model Country {
@@ -605,14 +669,14 @@ model RateCard {
 model WeightSlab {
   id               String   @id @default(uuid())
   rateCardId       String   @map("rate_card_id")
-  weightFromKg     Float  @map("weight_from_kg")
-  weightToKg       Float  @map("weight_to_kg")
-  baseRate         Float  @map("base_rate")
+  weightFromKg     Float    @map("weight_from_kg")
+  weightToKg       Float    @map("weight_to_kg")
+  baseRate         Float    @map("base_rate")
   /// FLAT (default) keeps every existing row behaving exactly as before; PER_KG multiplies
   /// baseRate by the chargeable weight. See the RateType doc comment.
   rateType         RateType @default(FLAT) @map("rate_type")
-  gstPercent       Float  @default(0) @map("gst_percent")
-  nationwideCut    Float  @default(0) @map("nationwide_cut")
+  gstPercent       Float    @default(0) @map("gst_percent")
+  nationwideCut    Float    @default(0) @map("nationwide_cut")
   isActive         Boolean  @default(true) @map("is_active")
   createdByAdminId String?  @map("created_by_admin_id")
   updatedByAdminId String?  @map("updated_by_admin_id")
@@ -638,15 +702,15 @@ model RateQuoteOption {
   rateCardId        String   @map("rate_card_id")
   weightSlabId      String   @map("weight_slab_id")
   currency          String
-  baseRate          Float  @map("base_rate")
-  pssAmount         Float  @map("pss_amount")
-  fuelChargePercent Float  @map("fuel_charge_percent")
-  fuelChargeAmount  Float  @map("fuel_charge_amount")
-  taxableSubtotal   Float  @map("taxable_subtotal")
-  gstPercent        Float  @map("gst_percent")
-  gstAmount         Float  @map("gst_amount")
-  nationwideCut     Float  @map("nationwide_cut")
-  finalPrice        Float  @map("final_price")
+  baseRate          Float    @map("base_rate")
+  pssAmount         Float    @map("pss_amount")
+  fuelChargePercent Float    @map("fuel_charge_percent")
+  fuelChargeAmount  Float    @map("fuel_charge_amount")
+  taxableSubtotal   Float    @map("taxable_subtotal")
+  gstPercent        Float    @map("gst_percent")
+  gstAmount         Float    @map("gst_amount")
+  nationwideCut     Float    @map("nationwide_cut")
+  finalPrice        Float    @map("final_price")
   createdAt         DateTime @default(now()) @map("created_at")
 
   quote           Quote        @relation("QuoteRateOptions", fields: [quoteId], references: [id], onDelete: NoAction, onUpdate: NoAction)
@@ -797,25 +861,52 @@ model AdminUser {
   updatedAt          DateTime  @updatedAt @map("updated_at")
 
   auditLogs                  AuditLog[]
-  quotedQuotes               Quote[]            @relation("QuoteQuotedBy")
-  assignedPickups            Pickup[]           @relation("PickupAssignedStaff")
-  confirmedPickups           Pickup[]           @relation("PickupConfirmedByAdmin")
-  paymentMarkedOrders        Order[]            @relation("OrderPaymentMarkedBy")
-  createdRateCards           RateCard[]         @relation("RateCardCreatedBy")
-  createdRates               WeightSlab[]       @relation("WeightSlabCreatedBy")
-  updatedRates               WeightSlab[]       @relation("WeightSlabUpdatedBy")
-  generatedRateCardDocuments RateCardDocument[] @relation("RateCardDocumentGeneratedBy")
-  updatedCompanySettings     CompanySettings[]  @relation("CompanySettingsUpdatedBy")
-  assignedPickupRequests     PickupRequest[]    @relation("PickupRequestAssignedPartner")
-  issuedInvoices             Invoice[]          @relation("InvoiceIssuedBy")
-  recordedReceipts           Receipt[]          @relation("ReceiptRecordedBy")
+  quotedQuotes               Quote[]               @relation("QuoteQuotedBy")
+  assignedPickups            Pickup[]              @relation("PickupAssignedStaff")
+  confirmedPickups           Pickup[]              @relation("PickupConfirmedByAdmin")
+  paymentMarkedOrders        Order[]               @relation("OrderPaymentMarkedBy")
+  createdRateCards           RateCard[]            @relation("RateCardCreatedBy")
+  createdRates               WeightSlab[]          @relation("WeightSlabCreatedBy")
+  updatedRates               WeightSlab[]          @relation("WeightSlabUpdatedBy")
+  generatedRateCardDocuments RateCardDocument[]    @relation("RateCardDocumentGeneratedBy")
+  updatedCompanySettings     CompanySettings[]     @relation("CompanySettingsUpdatedBy")
+  assignedPickupRequests     PickupRequest[]       @relation("PickupRequestAssignedPartner")
+  issuedInvoices             Invoice[]             @relation("InvoiceIssuedBy")
+  recordedReceipts           Receipt[]             @relation("ReceiptRecordedBy")
   pushSubscriptions          PushSubscription[]
-  createdB2bLinks             B2bLink[]            @relation("B2bLinkCreatedBy")
-  fuelSurchargeUpdates        FuelSurchargeUpdate[] @relation("FuelSurchargeAppliedBy")
-  approvedReviews             Review[]             @relation("ReviewApprovedBy")
-  recordedExpenses            Expense[]            @relation("ExpenseRecordedBy")
+  createdB2bLinks            B2bLink[]             @relation("B2bLinkCreatedBy")
+  fuelSurchargeUpdates       FuelSurchargeUpdate[] @relation("FuelSurchargeAppliedBy")
+  approvedReviews            Review[]              @relation("ReviewApprovedBy")
+  recordedExpenses           Expense[]             @relation("ExpenseRecordedBy")
+  createdCoupons             Coupon[]              @relation("CouponCreatedBy")
+  approvedOrderDues          Order[]               @relation("OrderDueApprovedBy")
+  approvedPickupDues         PickupRequest[]       @relation("PickupRequestDueApprovedBy")
 
   @@map("admin_users")
+}
+
+/// A discount code an admin hands out: flat rupees off, applied when a payment is recorded.
+/// Percentages are deliberately not modelled — every discount this business gives is "₹500 off",
+/// and a percentage column that is always null is worse than no column.
+model Coupon {
+  id               String    @id @default(uuid())
+  /// Always stored upper case; lookups upper-case what the customer typed.
+  code             String    @unique
+  discountAmount   Float     @map("discount_amount")
+  isActive         Boolean   @default(true) @map("is_active")
+  /// Null means it never expires.
+  expiresAt        DateTime? @map("expires_at")
+  /// Total redemptions allowed across all customers. Null means unlimited.
+  maxRedemptions   Int?      @map("max_redemptions")
+  timesUsed        Int       @default(0) @map("times_used")
+  createdByAdminId String?   @map("created_by_admin_id")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  createdBy AdminUser? @relation("CouponCreatedBy", fields: [createdByAdminId], references: [id])
+  orders    Order[]
+
+  @@map("coupons")
 }
 
 // ---------------------------------------------------------------------------
@@ -895,43 +986,50 @@ model AuditLog {
 /// generator reads "the current brand" without knowing templates exist. Issued documents are
 /// frozen at issue time, so switching only affects documents generated afterwards.
 model CompanySettings {
-  id                    String   @id @default(uuid())
+  id                    String  @id @default(uuid())
   /// The admin's label for this template, e.g. "Default" or "Export customers".
-  name                  String   @default("Default")
+  name                  String  @default("Default")
   /// Defaults true only so the pre-existing single row becomes the active template on migrate;
   /// the service creates new templates inactive and switches atomically.
-  isActive              Boolean  @default(true) @map("is_active")
-  companyName           String   @default("NationWide")
+  isActive              Boolean @default(true) @map("is_active")
+  companyName           String  @default("NationWide")
   tagline               String?
   // S3 object key, e.g. "uploads/company-logos/<settings-id>/<uuid>.png". The PDF renderers
   // fetch it from the bucket; the admin UI previews it through a short-lived presigned URL
   // (see CompanySettingsService.logoUrl). The bucket is private — this is a key, not a URL.
-  logoPath              String?  @map("logo_path")
-  primaryColor          String   @default("#7F1020") @map("primary_color")
+  logoPath              String? @map("logo_path")
+  primaryColor          String  @default("#7F1020") @map("primary_color")
   website               String?
-  supportEmail          String?  @map("support_email")
-  supportPhone          String?  @map("support_phone")
+  supportEmail          String? @map("support_email")
+  supportPhone          String? @map("support_phone")
   address               String?
-  termsAndConditions    String?  @map("terms_and_conditions")
-  footerNotes           String?  @map("footer_notes")
-  insuranceDisclaimer   String?  @map("insurance_disclaimer")
-  legalDisclaimer       String?  @map("legal_disclaimer")
-  restrictedItemsNotice String?  @map("restricted_items_notice")
+  termsAndConditions    String? @map("terms_and_conditions")
+  footerNotes           String? @map("footer_notes")
+  insuranceDisclaimer   String? @map("insurance_disclaimer")
+  legalDisclaimer       String? @map("legal_disclaimer")
+  restrictedItemsNotice String? @map("restricted_items_notice")
 
   // GST identity of the supplier. All nullable because an existing database has none of it, and
   // InvoicesService refuses to issue an invoice until gstin/legalName/address/stateCode are set
   // rather than emitting a document with blanks where the statutory fields belong.
-  gstin       String? // 15 chars, e.g. 36AABCU9603R1ZM
-  legalName   String? @map("legal_name") // registered name, which may differ from companyName
-  stateName   String? @map("state_name") // supplier's registered state — one half of the CGST/SGST vs IGST test
-  stateCode   String? @map("state_code") // GST state code, e.g. "36" for Telangana
+  gstin     String? // 15 chars, e.g. 36AABCU9603R1ZM
+  legalName String? @map("legal_name") // registered name, which may differ from companyName
+  stateName String? @map("state_name") // supplier's registered state — one half of the CGST/SGST vs IGST test
+  stateCode String? @map("state_code") // GST state code, e.g. "36" for Telangana
   // SAC for courier services. Configurable rather than hardcoded: 996812 is courier, 996819 is
   // "other delivery services", and which one applies is the business's call, not this code's.
-  sacCode     String? @map("sac_code")
+  sacCode   String? @map("sac_code")
 
-  updatedByAdminId      String?  @map("updated_by_admin_id")
-  createdAt             DateTime @default(now()) @map("created_at")
-  updatedAt             DateTime @updatedAt @map("updated_at")
+  // What a customer is charged for cancelling before an AWB is mapped, and the warehouse the
+  // per-km part is measured from. Editable by admins under Pricing -> Rate management.
+  cancellationBaseFee  Float  @default(500) @map("cancellation_base_fee")
+  cancellationPerKmFee Float  @default(0) @map("cancellation_per_km_fee")
+  warehouseLatitude    Float? @map("warehouse_latitude")
+  warehouseLongitude   Float? @map("warehouse_longitude")
+
+  updatedByAdminId String?  @map("updated_by_admin_id")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
 
   updatedBy AdminUser? @relation("CompanySettingsUpdatedBy", fields: [updatedByAdminId], references: [id])
 
@@ -996,9 +1094,9 @@ model Counter {
 /// silently rewrite history, so the supplier/recipient/tax columns below are deliberate copies.
 /// The relations that remain are for navigation and filtering only.
 model Invoice {
-  id            String @id @default(uuid())
+  id             String @id @default(uuid())
   /// Human-facing series, unique across all time, e.g. "NW/2026-27/00042".
-  invoiceNumber String @unique @map("invoice_number")
+  invoiceNumber  String @unique @map("invoice_number")
   /// The numeric suffix on its own — the sequence is per financial year, so this is only unique
   /// together with financialYear (see the compound index below).
   sequenceNumber Int    @map("sequence_number")
@@ -1046,20 +1144,20 @@ model Invoice {
   sacCode            String @map("sac_code")
 
   // --- Amounts. Exactly one of (cgst+sgst) or igst is ever non-zero. ---
-  currency     String @default("INR")
-  taxableValue Float  @map("taxable_value")
-  cgstRate     Float  @default(0) @map("cgst_rate")
-  cgstAmount   Float  @default(0) @map("cgst_amount")
-  sgstRate     Float  @default(0) @map("sgst_rate")
-  sgstAmount   Float  @default(0) @map("sgst_amount")
-  igstRate     Float  @default(0) @map("igst_rate")
-  igstAmount   Float  @default(0) @map("igst_amount")
-  totalTax     Float  @map("total_tax")
+  currency          String @default("INR")
+  taxableValue      Float  @map("taxable_value")
+  cgstRate          Float  @default(0) @map("cgst_rate")
+  cgstAmount        Float  @default(0) @map("cgst_amount")
+  sgstRate          Float  @default(0) @map("sgst_rate")
+  sgstAmount        Float  @default(0) @map("sgst_amount")
+  igstRate          Float  @default(0) @map("igst_rate")
+  igstAmount        Float  @default(0) @map("igst_amount")
+  totalTax          Float  @map("total_tax")
   /// NationWide Cut and anything else added AFTER tax — the pricing engine never taxes it
   /// (pricing-engine.service.ts step 7), so it must sit outside taxableValue or the invoice
   /// would overstate the tax base.
-  nonTaxableCharges Float @default(0) @map("non_taxable_charges")
-  totalAmount       Float @map("total_amount")
+  nonTaxableCharges Float  @default(0) @map("non_taxable_charges")
+  totalAmount       Float  @map("total_amount")
 
   /// Which record the breakdown came from — RATE_OPTION, PICKUP_VERIFICATION, or
   /// MANUAL_QUOTE_INCLUSIVE (back-derived from a staff-typed gross amount). Kept because the
@@ -1234,8 +1332,8 @@ model Review {
   /// SHA-256 of the single-use link token, never the token — same reasoning as
   /// PasswordResetToken: a leak of this table must not hand anyone the ability to post as a
   /// customer.
-  tokenHash String    @unique @map("token_hash")
-  expiresAt DateTime  @map("expires_at")
+  tokenHash String   @unique @map("token_hash")
+  expiresAt DateTime @map("expires_at")
 
   /// Null until the customer submits. 1-5.
   rating      Int?
@@ -1294,9 +1392,9 @@ model RemoteArea {
 
   /// The carrier's own wording — "Tier B", "Extended Area Surcharge", "No". Kept verbatim
   /// because the tiers map to different amounts per carrier and per service.
-  surchargeLabel String? @map("surcharge_label")
+  surchargeLabel  String? @map("surcharge_label")
   /// Set only where the source states a figure outright.
-  surchargeAmount Float? @map("surcharge_amount")
+  surchargeAmount Float?  @map("surcharge_amount")
   /// Which side the surcharge applies to, where the sheet distinguishes them.
   originSurcharge String? @map("origin_surcharge")
 
@@ -1347,11 +1445,11 @@ model SavedItem {
 /// reusing their saved addresses and items. It can neither read their invoices nor change their
 /// account.
 model B2bLink {
-  id         String @id @default(uuid())
-  customerId String @map("customer_id")
+  id          String  @id @default(uuid())
+  customerId  String  @map("customer_id")
   /// What this link is for, e.g. "Bengaluru warehouse" — several may exist per customer so one
   /// team's link can be revoked without cutting off the rest.
-  label      String
+  label       String
   /// Who at the business was handed this link. Recorded on the link, not the customer, because a
   /// business may hold several and revoking one is a decision about a person, not the account.
   contactName String? @map("contact_name")
@@ -1401,27 +1499,27 @@ model ExpenseCategory {
 /// ledger row: no approval workflow and no attachments — an admin types what was spent and on
 /// what, and the screen totals it by category.
 model Expense {
-  id          String          @id @default(uuid())
+  id            String        @id @default(uuid())
   /// When the money was spent, which is rarely when the row was typed — reporting windows use
   /// this, never createdAt.
-  expenseDate DateTime @map("expense_date")
-  categoryId  String   @map("category_id")
-  amount      Float
-  currency    String          @default("INR")
+  expenseDate   DateTime      @map("expense_date")
+  categoryId    String        @map("category_id")
+  amount        Float
+  currency      String        @default("INR")
   paymentMethod PaymentMethod @map("payment_method")
   /// Vendor, landlord, employee — whoever received it.
-  paidTo      String          @map("paid_to")
-  description String?
+  paidTo        String        @map("paid_to")
+  description   String?
   /// The vendor's bill/reference number, when there is one. Free text: every vendor numbers
   /// differently and none of it is ours to validate.
-  referenceNo String?         @map("reference_no")
+  referenceNo   String?       @map("reference_no")
 
   recordedByAdminId String @map("recorded_by_admin_id")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  recordedBy AdminUser        @relation("ExpenseRecordedBy", fields: [recordedByAdminId], references: [id])
+  recordedBy AdminUser       @relation("ExpenseRecordedBy", fields: [recordedByAdminId], references: [id])
   category   ExpenseCategory @relation(fields: [categoryId], references: [id])
 
   @@index([expenseDate])
@@ -1435,11 +1533,11 @@ model Expense {
 /// to be answerable. Five is what the screen shows; older rows are pruned on write, because an
 /// unbounded log of a number that changes every Monday is a table nobody reads.
 model FuelSurchargeUpdate {
-  id              String @id @default(uuid())
-  rateProviderId  String @map("rate_provider_id")
+  id              String  @id @default(uuid())
+  rateProviderId  String  @map("rate_provider_id")
   percent         Float
   /// What it was before, so a row reads as a change rather than a reading.
-  previousPercent Float  @map("previous_percent")
+  previousPercent Float   @map("previous_percent")
   /// CARRIER_SITE when taken from the carrier's published page, MANUAL when an admin typed it.
   source          String
   /// What the source called it, e.g. "CW 40".
