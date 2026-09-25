@@ -36,6 +36,17 @@ export class QueryOrdersDto extends PaginationQueryDto {
   @IsIn(['mapped', 'unmapped'])
   awb?: 'mapped' | 'unmapped';
 
+  // The two questions asked about a cancelled order, and the only two that decide whether it is
+  // finished with: has the money gone back, and has the parcel. They are independent — a refund
+  // does not imply the goods were returned, or the reverse.
+  @IsOptional()
+  @IsIn(['refunded', 'not-refunded'])
+  refund?: 'refunded' | 'not-refunded';
+
+  @IsOptional()
+  @IsIn(['returned', 'not-returned'])
+  returned?: 'returned' | 'not-returned';
+
   // Inclusive UTC day bounds on createdAt, as YYYY-MM-DD. The admin dashboard reports on a
   // window (default 90 days) and previously pulled EVERY order to filter in the browser — which
   // was both slow and quietly wrong, because the unpaginated response is capped at

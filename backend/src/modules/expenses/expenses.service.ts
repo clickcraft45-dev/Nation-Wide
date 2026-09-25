@@ -1,15 +1,66 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
+import { StorageService } from '../../database/storage.service';
 import { categoryLabel } from './expense.mapper';
 import { CreateExpenseDto } from './dto/create-expense.dto';
 import { QueryExpensesDto } from './dto/query-expenses.dto';
 
-const RECORDED_BY = { select: { id: true, email: true } } as const;
+// The name as well as the address: "Sujith" is who a super admin is looking for when they ask
+// who filed a payment, and an email is only a proxy for it.
+const RECORDED_BY = {
+  select: { id: true, email: true, name: true },
+} as const;
+const EXPENSE_INCLUDE = {
+  recordedBy: RECORDED_BY,
+  category: { include: { parent: { select: { name: true } } } },
+} as const;
 
 @Injectable()
 export class ExpensesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly storage: StorageService,
+  ) {}
+
+  /**
+   * Attach (or replace) the vendor's own bill. The file goes to S3 and only its key is stored,
+   * like every other document here.
+   *
+   * Replacing one leaves the old object in the bucket rather than deleting it: an expense is a
+   * financial record, and a mis-click that swaps a receipt should not also destroy the previous
+   * one. Storage is cheaper than an argument with an auditor.
+   */
+  async attachReceipt(
+    id: string,
+    file: { buffer: Buffer; mimetype: string; originalname: string },
+  ) {
+    const expense = await this.prisma.expense.findUnique({ where: { id } });
+    if (!expense) throw new NotFoundException('Expense not found');
+
+    const extension = file.originalname.split('.').pop()?.toLowerCase();
+    const key = `expenses/${id}/receipt-${Date.now()}${extension ? `.${extension}` : ''}`;
+    await this.storage.put(key, file.buffer, file.mimetype);
+
+    return this.prisma.expense.update({
+      where: { id },
+      data: { receiptKey: key, receiptName: file.originalname.slice(0, 200) },
+      include: EXPENSE_INCLUDE,
+    });
+  }
+
+  /** A short-lived link to the stored bill, for an admin who has already been authorised. */
+  async receiptUrl(id: string): Promise<string> {
+    const expense = await this.prisma.expense.findUnique({ where: { id } });
+    if (!expense?.receiptKey) {
+      throw new NotFoundException('This expense has no receipt attached');
+    }
+    return this.storage.presignGet(
+      expense.receiptKey,
+      300,
+      expense.receiptName ?? undefined,
+    );
+  }
 
   /**
    * One round trip for the whole screen: the page of rows, the row count, and the totals.

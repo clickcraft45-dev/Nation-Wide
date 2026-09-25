@@ -37,6 +37,8 @@ export function toOrderDto(order: OrderWithShipments): OrderDto {
     discountAmount: order.discountAmount ?? null,
     dueAmount: order.dueAmount ?? null,
     dueApprovedByAdminName: order.dueApprovedBy?.name ?? null,
+    returnedAt: order.returnedAt ? order.returnedAt.toISOString() : null,
+    returnNote: order.returnNote,
     cancelledAt: order.cancelledAt ? order.cancelledAt.toISOString() : null,
     cancellationReason: order.cancellationReason,
     cancellationFee: order.cancellationFee ?? null,

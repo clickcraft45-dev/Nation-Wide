@@ -87,3 +87,51 @@ export interface GenerateInvoicesRequest {
   from: string; // ISO 8601
   to: string; // ISO 8601
 }
+
+/**
+ * One shipment on a custom invoice's annexure — the shape of the freight schedule the office
+ * already bills from: one row per AWB, with the charges that make up its total spelled out
+ * separately because the customer reconciles them separately.
+ *
+ * Everything except the amount is optional: a row for a correction or a re-delivery fee has no
+ * AWB and no weight, and forcing a placeholder into those columns would put fiction on a tax
+ * document.
+ */
+export interface CustomInvoiceLineDto {
+  awbNumber?: string | null;
+  /** Date of supply for this shipment, ISO 8601. */
+  supplyDate?: string | null;
+  destination?: string | null;
+  /** Carrier network the shipment moved on, e.g. "FDX". */
+  network?: string | null;
+  /** Document or sample/parcel service code, e.g. "SPX" / "FE". */
+  service?: string | null;
+  weightKg?: number | null;
+  /** Base freight. */
+  amount: number;
+  /** GMR / commercial charge. */
+  otherCharges?: number | null;
+  /** Peak season surcharge. */
+  pss?: number | null;
+  /** Fuel surcharge. */
+  fsc?: number | null;
+}
+
+/**
+ * What a row adds up to. Lives in shared-types and is used by BOTH the admin form's running
+ * total and the server that issues the invoice, so the figure on screen and the figure on the
+ * document cannot drift — the server still recomputes it rather than trusting the client.
+ */
+export function customInvoiceLineTotal(line: CustomInvoiceLineDto): number {
+  const sum =
+    (line.amount ?? 0) +
+    (line.otherCharges ?? 0) +
+    (line.pss ?? 0) +
+    (line.fsc ?? 0);
+  return Math.round(sum * 100) / 100;
+}
+
+export function customInvoiceTotal(lines: CustomInvoiceLineDto[]): number {
+  const sum = lines.reduce((acc, line) => acc + customInvoiceLineTotal(line), 0);
+  return Math.round(sum * 100) / 100;
+}

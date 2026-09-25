@@ -2,7 +2,7 @@ import type { Expense } from '@prisma/client';
 import type { ExpenseDto, PaymentMethodCode } from '@nationwide/shared-types';
 
 type ExpenseWithRelations = Expense & {
-  recordedBy?: { id: string; email: string } | null;
+  recordedBy?: { id: string; email: string; name?: string | null } | null;
   category?: { name: string; parent?: { name: string } | null } | null;
 };
 
@@ -28,7 +28,16 @@ export function toExpenseDto(expense: ExpenseWithRelations): ExpenseDto {
     paidTo: expense.paidTo,
     description: expense.description,
     referenceNo: expense.referenceNo,
-    recordedBy: expense.recordedBy ?? null,
+    // The key itself is never exposed — only whether there is a bill to fetch, and its name.
+    hasReceipt: expense.receiptKey !== null,
+    receiptName: expense.receiptName,
+    recordedBy: expense.recordedBy
+      ? {
+          id: expense.recordedBy.id,
+          email: expense.recordedBy.email,
+          name: expense.recordedBy.name ?? null,
+        }
+      : null,
     createdAt: expense.createdAt.toISOString(),
   };
 }

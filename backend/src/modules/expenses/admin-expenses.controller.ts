@@ -8,6 +8,7 @@ import {
   Patch,
   Post,
   Query,
+  UploadedFile,
   UseGuards,
 } from '@nestjs/common';
 import type { ExpenseDto, ExpenseListDto } from '@nationwide/shared-types';
@@ -20,6 +21,7 @@ import { ExpensesService } from './expenses.service';
 import { toExpenseDto } from './expense.mapper';
 import { CreateExpenseDto } from './dto/create-expense.dto';
 import { QueryExpensesDto } from './dto/query-expenses.dto';
+import { ReceiptUpload, requireReceipt } from './receipt-upload';
 
 // ADMIN only, matching GST Invoices: what the company spends is not operational data, and the
 // Accounts that only work orders have no reason to see payroll or rent.
@@ -51,6 +53,26 @@ export class AdminExpensesController {
     @Body() dto: CreateExpenseDto,
   ): Promise<ExpenseDto> {
     return toExpenseDto(await this.expenses.update(id, dto));
+  }
+
+  // The vendor's own bill. Separate from create/update because it is a multipart upload, and
+  // because a receipt usually turns up after the expense has already been recorded.
+  @Post(':id/receipt')
+  @ReceiptUpload()
+  async uploadReceipt(
+    @Param('id') id: string,
+    @UploadedFile() file?: Express.Multer.File,
+  ): Promise<ExpenseDto> {
+    return toExpenseDto(
+      await this.expenses.attachReceipt(id, requireReceipt(file)),
+    );
+  }
+
+  // A short-lived signed URL rather than proxying the bytes: the bucket blocks public access, so
+  // this is the only way the browser can open the file, and the link expires in five minutes.
+  @Get(':id/receipt')
+  async receiptUrl(@Param('id') id: string): Promise<{ url: string }> {
+    return { url: await this.expenses.receiptUrl(id) };
   }
 
   @Delete(':id')

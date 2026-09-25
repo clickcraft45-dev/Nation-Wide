@@ -614,6 +614,94 @@ describe('PickupRequestsService', () => {
       ).rejects.toThrow(NotFoundException);
       expect(storage.put).not.toHaveBeenCalled();
     });
+
+    // A partner's photo is evidence taken at the door, so the door rules stay.
+    it('still refuses a partner who has not marked arrival', async () => {
+      prisma.pickupRequest.findUnique.mockResolvedValue({
+        ...basePickupRequest,
+        arrivedAt: null,
+      });
+
+      await expect(
+        service.saveAadhaar('pr-1', photo, 'partner-1'),
+      ).rejects.toThrow(BadRequestException);
+      expect(storage.put).not.toHaveBeenCalled();
+    });
+
+    it('still refuses a partner on a pickup that is already finished', async () => {
+      prisma.pickupRequest.findUnique.mockResolvedValue({
+        ...basePickupRequest,
+        status: 'COMPLETED',
+      });
+
+      await expect(
+        service.saveAadhaar('pr-1', photo, 'partner-1'),
+      ).rejects.toThrow(BadRequestException);
+      expect(storage.put).not.toHaveBeenCalled();
+    });
+
+    // The gap this closed: an order's pickup request is COMPLETED, so every guard above refused
+    // and a missing Aadhaar could never be added afterwards.
+    it('lets an admin attach one after the pickup is completed', async () => {
+      prisma.pickupRequest.findUnique.mockResolvedValue({
+        ...basePickupRequest,
+        status: 'COMPLETED',
+        arrivedAt: null,
+      });
+
+      await service.saveAadhaar('pr-1', photo, 'admin-1', true, true);
+
+      expect(storage.put).toHaveBeenCalled();
+    });
+
+    it('records on the audit trail that an admin attached it, not the partner', async () => {
+      prisma.pickupRequest.findUnique.mockResolvedValue({
+        ...basePickupRequest,
+        status: 'COMPLETED',
+      });
+
+      await service.saveAadhaar('pr-1', photo, 'admin-1', true, true);
+
+      expect(prisma.auditLog.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            after: expect.objectContaining({ source: 'admin-back-office' }),
+          }),
+        }),
+      );
+    });
+  });
+
+  describe('saveParcelPhoto', () => {
+    const photo = { buffer: Buffer.from('x'), mimetype: 'image/jpeg' } as never;
+
+    it('lets an admin add the missing photo to a completed pickup', async () => {
+      prisma.pickupRequest.findUnique.mockResolvedValue({
+        ...basePickupRequest,
+        status: 'COMPLETED',
+        parcelPhotoKey: null,
+      });
+
+      await service.saveParcelPhoto('pr-1', photo, 'admin-1', true, true);
+
+      expect(storage.put).toHaveBeenCalledWith(
+        expect.stringMatching(/^pickups\/pr-1\/parcel-.+\.jpg$/),
+        expect.any(Buffer),
+        'image/jpeg',
+      );
+    });
+
+    it('refuses a partner on a completed pickup', async () => {
+      prisma.pickupRequest.findUnique.mockResolvedValue({
+        ...basePickupRequest,
+        status: 'COMPLETED',
+      });
+
+      await expect(
+        service.saveParcelPhoto('pr-1', photo, 'partner-1'),
+      ).rejects.toThrow(BadRequestException);
+      expect(storage.put).not.toHaveBeenCalled();
+    });
   });
 
   describe('claim', () => {

@@ -127,6 +127,72 @@ describe('InvoicesService', () => {
     );
   });
 
+  describe('readPdf', () => {
+    const issued = {
+      id: 'inv-1',
+      invoiceNumber: 'NW/2026-27/00042',
+      invoiceDate: new Date('2026-09-25T00:00:00.000Z'),
+      orderId: null,
+      customLines: null,
+      pdfPath: 'invoices/2026/09/NW-2026-27-00042.pdf',
+    };
+
+    it('serves the stored document without re-rendering it', async () => {
+      prisma.invoice.findUnique.mockResolvedValue(issued);
+
+      const { filename } = await service.readPdf('inv-1');
+
+      expect(storage.get).toHaveBeenCalledWith(issued.pdfPath);
+      // The stored PDF is the tax record. Reprinting it from today's settings would rewrite it.
+      expect(invoicePdf.render).not.toHaveBeenCalled();
+      expect(filename).toBe('NW-2026-27-00042.pdf');
+    });
+
+    // The hole this closed: the invoice row is created first and the PDF uploaded after, so an
+    // S3 outage at that moment burned a number from the statutory series and left a bill that
+    // could never be downloaded by anyone.
+    it('renders and stores one when the upload failed at issue time', async () => {
+      prisma.invoice.findUnique.mockResolvedValue({ ...issued, pdfPath: null });
+
+      const { buffer } = await service.readPdf('inv-1');
+
+      expect(invoicePdf.render).toHaveBeenCalled();
+      expect(storage.put).toHaveBeenCalled();
+      expect(buffer).toEqual(Buffer.from('pdf'));
+    });
+
+    it('remembers where it put it, so the next read is a plain fetch', async () => {
+      prisma.invoice.findUnique.mockResolvedValue({ ...issued, pdfPath: null });
+
+      await service.readPdf('inv-1');
+
+      expect(prisma.invoice.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'inv-1' },
+          data: { pdfPath: 'invoices/2026/09/NW-2026-27-00042.pdf' },
+        }),
+      );
+    });
+
+    it('rebuilds a custom invoice from its own frozen schedule', async () => {
+      prisma.invoice.findUnique.mockResolvedValue({
+        ...issued,
+        pdfPath: null,
+        customLines: [{ awbNumber: '6003402616', amount: 1103.76, fsc: 396.65 }],
+      });
+
+      await service.readPdf('inv-1');
+
+      expect(invoicePdf.render).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          customLines: [{ awbNumber: '6003402616', amount: 1103.76, fsc: 396.65 }],
+        }),
+        expect.anything(),
+      );
+    });
+  });
+
   describe('issuing', () => {
     it('refuses to issue when the company GST identity is incomplete', async () => {
       companySettings.get.mockResolvedValue({

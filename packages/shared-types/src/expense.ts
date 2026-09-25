@@ -33,7 +33,11 @@ export interface ExpenseDto {
   paidTo: string;
   description: string | null;
   referenceNo: string | null;
-  recordedBy: { id: string; email: string } | null;
+  /** Whether the vendor bill is attached; fetch it from GET /admin/expenses/:id/receipt. */
+  hasReceipt: boolean;
+  receiptName: string | null;
+  /** Which admin filed this. Shown to a SUPER_ADMIN, who is the one accountable for the ledger. */
+  recordedBy: { id: string; email: string; name: string | null } | null;
   createdAt: string; // ISO 8601
 }
 

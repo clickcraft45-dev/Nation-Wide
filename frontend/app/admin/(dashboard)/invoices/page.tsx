@@ -8,7 +8,15 @@ import type {
   InvoiceDto,
   InvoiceListDto,
 } from "@nationwide/shared-types";
-import { apiClient, ApiError, errorMessage } from "@/lib/api-client";
+import { apiClient, ApiError, errorMessage, fieldErrors } from "@/lib/api-client";
+import { CustomerPicker } from "@/components/customers/customer-picker";
+import {
+  CustomInvoiceLines,
+  customInvoiceLinesTotal,
+  toCustomInvoiceLine,
+  rupees,
+  type CustomInvoiceLineForm,
+} from "@/components/invoices/custom-invoice-lines";
 import { Spinner } from "@/components/ui/spinner";
 import { NativeSelect } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
@@ -59,6 +67,12 @@ export default function AdminInvoicesPage() {
   const [customAmount, setCustomAmount] = useState("");
   const [customDescription, setCustomDescription] = useState("");
   const [customPlaceOfSupply, setCustomPlaceOfSupply] = useState("");
+  // The freight schedule, when this invoice is billed from a shipment list rather than a single
+  // figure. Empty means the simple one-amount form, exactly as before.
+  const [customLines, setCustomLines] = useState<CustomInvoiceLineForm[]>([]);
+  // The server's rejection, split per field, so it lands under the input that caused it instead
+  // of arriving as one red paragraph listing every broken rule at once.
+  const [customErrors, setCustomErrors] = useState<Record<string, string>>({});
 
   const { showToast } = useToast();
 
@@ -178,35 +192,54 @@ export default function AdminInvoicesPage() {
   }
 
   async function createCustom() {
-    const grossAmount = Number(customAmount);
-    if (!customCustomerId || !grossAmount || grossAmount <= 0 || customDescription.trim().length < 3) {
-      showToast({
-        variant: "error",
-        title: "Pick a customer, an amount and a description first.",
-      });
+    const hasLines = customLines.length > 0;
+    const grossAmount = hasLines ? customInvoiceLinesTotal(customLines) : Number(customAmount);
+
+    const problems: Record<string, string> = {};
+    if (!customCustomerId) problems.customerId = "Pick a customer.";
+    if (!grossAmount || grossAmount <= 0) {
+      problems[hasLines ? "lines" : "grossAmount"] = hasLines
+        ? "Every row is empty — enter what each shipment is being charged."
+        : "Enter the amount being billed.";
+    }
+    // A schedule describes itself, so the description is only compulsory on the single-line form.
+    if (!hasLines && customDescription.trim().length < 3) {
+      problems.description = "Say what is being billed.";
+    }
+    if (Object.keys(problems).length > 0) {
+      setCustomErrors(problems);
       return;
     }
+
+    setCustomErrors({});
     setIsWorking(true);
     try {
       const invoice = await apiClient.post<InvoiceDto>("/admin/invoices/custom", {
         customerId: customCustomerId,
-        grossAmount,
-        description: customDescription.trim(),
+        // Omitted when there are rows: the server adds those up itself and would ignore it.
+        grossAmount: hasLines ? undefined : grossAmount,
+        description: customDescription.trim() || undefined,
+        lines: hasLines ? customLines.map(toCustomInvoiceLine) : undefined,
         placeOfSupplyState: customPlaceOfSupply.trim() || undefined,
       });
       showToast({ variant: "success", title: `Issued ${invoice.invoiceNumber}` });
       setCustomAmount("");
       setCustomDescription("");
       setCustomPlaceOfSupply("");
+      setCustomLines([]);
+      setCustomErrors({});
       load();
     } catch (err) {
-      showToast({
-        variant: "error",
-        title:
-          err instanceof ApiError && typeof err.body === "object" && err.body !== null
-            ? String((err.body as { message?: string }).message ?? "Couldn't issue that invoice.")
-            : "Couldn't issue that invoice.",
-      });
+      // Anything the server blamed on a named field goes under that field. Only what is left —
+      // a refusal about the invoice as a whole — is worth a toast.
+      const perField = fieldErrors(err);
+      setCustomErrors(perField);
+      if (Object.keys(perField).length === 0) {
+        showToast({
+          variant: "error",
+          title: errorMessage(err, "Couldn't issue that invoice."),
+        });
+      }
     } finally {
       setIsWorking(false);
     }
@@ -363,21 +396,29 @@ export default function AdminInvoicesPage() {
           </p>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <label className="space-y-1">
+            <div className="space-y-1">
               <span className="text-xs font-medium text-muted-foreground">Customer</span>
-              <NativeSelect
+              {/* Searchable: the list runs to hundreds of accounts, and a native select cannot be
+                  typed into — so the only way to tell two people apart was to read every option. */}
+              <CustomerPicker
+                id="custom-invoice-customer"
+                customers={customers}
                 value={customCustomerId}
-                onChange={(e) => setCustomCustomerId(e.target.value)}
-                aria-label="Customer to invoice"
-              >
-                <option value="">Select a customer…</option>
-                {customers.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name} · {c.phone}
-                  </option>
-                ))}
-              </NativeSelect>
-            </label>
+                onChange={(id) => {
+                  setCustomCustomerId(id);
+                  // Clear this field's own error the moment it is answered, rather than leaving
+                  // it red until the next submit.
+                  setCustomErrors((prev) => {
+                    const next = { ...prev };
+                    delete next.customerId;
+                    return next;
+                  });
+                }}
+              />
+              {customErrors.customerId && (
+                <span className="block text-xs text-destructive">{customErrors.customerId}</span>
+              )}
+            </div>
 
             <label className="space-y-1">
               <span className="text-xs font-medium text-muted-foreground">
@@ -385,16 +426,34 @@ export default function AdminInvoicesPage() {
               </span>
               {/* Tax-inclusive on purpose — it is the figure the customer was quoted, and the
                   taxable value is back-derived from it so the total lands exactly there. */}
-              <input
-                type="number"
-                inputMode="decimal"
-                step="0.01"
-                min="0.01"
-                value={customAmount}
-                onChange={(e) => setCustomAmount(e.target.value)}
-                placeholder="0.00"
-                className="glass-field h-10 w-full rounded-lg px-3 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              />
+              {customLines.length > 0 ? (
+                // The schedule owns the total once there are rows. Shown, not editable: two
+                // places to type the same number is how an invoice ends up disagreeing with
+                // its own line items.
+                <p className="glass-field flex h-10 items-center rounded-lg px-3 text-sm font-semibold text-foreground">
+                  {rupees(customInvoiceLinesTotal(customLines))}
+                  <span className="ml-2 text-xs font-normal text-muted-foreground">
+                    from the schedule below
+                  </span>
+                </p>
+              ) : (
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  step="0.01"
+                  min="0.01"
+                  value={customAmount}
+                  onChange={(e) => setCustomAmount(e.target.value)}
+                  placeholder="0.00"
+                  aria-invalid={Boolean(customErrors.grossAmount)}
+                  className={`glass-field h-10 w-full rounded-lg px-3 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                    customErrors.grossAmount ? "!border-destructive" : ""
+                  }`}
+                />
+              )}
+              {customErrors.grossAmount && (
+                <span className="block text-xs text-destructive">{customErrors.grossAmount}</span>
+              )}
             </label>
           </div>
 
@@ -409,10 +468,28 @@ export default function AdminInvoicesPage() {
               maxLength={300}
               className="glass-field h-10 w-full rounded-lg px-3 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             />
-            <span className="text-xs text-muted-foreground">
-              Printed as the invoice&apos;s line item.
-            </span>
+            {customErrors.description ? (
+              <span className="block text-xs text-destructive">{customErrors.description}</span>
+            ) : (
+              <span className="text-xs text-muted-foreground">
+                {customLines.length > 0
+                  ? "Optional — the schedule below is itemised on the invoice."
+                  : "Printed as the invoice's line item."}
+              </span>
+            )}
           </label>
+
+          {/* The shipment list the office bills from: a row per AWB, with freight, GMR, PSS and
+              fuel kept in their own columns. Leave it empty for a single-line invoice. */}
+          <div className="space-y-2">
+            <span className="text-xs font-medium text-muted-foreground">
+              Shipment schedule (optional)
+            </span>
+            <CustomInvoiceLines rows={customLines} onChange={setCustomLines} />
+            {customErrors.lines && (
+              <span className="block text-xs text-destructive">{customErrors.lines}</span>
+            )}
+          </div>
 
           <label className="block space-y-1">
             <span className="text-xs font-medium text-muted-foreground">

@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Wallet, Pencil, Trash2, FolderTree } from "lucide-react";
-import type { ExpenseCategoryDto, ExpenseListDto } from "@nationwide/shared-types";
+import { Wallet, Pencil, Trash2, FolderTree, Paperclip } from "lucide-react";
+import type { ExpenseCategoryDto, ExpenseDto, ExpenseListDto } from "@nationwide/shared-types";
 import { apiClient, errorMessage } from "@/lib/api-client";
 import { SearchInput } from "@/components/ui/search-input";
 import { NativeSelect } from "@/components/ui/select";
@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { StatCard } from "@/components/ui/stat-card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/toast";
+import { useAuth } from "@/state/auth-context";
 import {
   ExpenseFormDialog,
   type ExpenseFormValues,
@@ -50,6 +51,11 @@ export default function AdminExpensesPage() {
   const [from, setFrom] = useState(startOfThisMonth);
   const [to, setTo] = useState("");
   const { showToast } = useToast();
+  const { user } = useAuth();
+  // Who filed a payment is an accountability question, and a SUPER_ADMIN is the one accountable
+  // for the ledger — an ADMIN looking at the same screen is looking at their own team's work and
+  // does not need every row labelled with a colleague's name.
+  const isSuperAdmin = user?.role === "SUPER_ADMIN";
 
   const load = useCallback(() => {
     setIsLoading(true);
@@ -92,9 +98,29 @@ export default function AdminExpensesPage() {
   }, [loadCategories]);
 
   async function save(values: ExpenseFormValues, id?: string) {
+    // The file is uploaded separately, so it must not be posted as part of the JSON body — the
+    // server rejects unknown fields outright (forbidNonWhitelisted).
+    const { receiptFile, ...fields } = values;
     try {
-      if (id) await apiClient.patch(`/admin/expenses/${id}`, values);
-      else await apiClient.post("/admin/expenses", values);
+      const saved = id
+        ? await apiClient.patch<ExpenseDto>(`/admin/expenses/${id}`, fields)
+        : await apiClient.post<ExpenseDto>("/admin/expenses", fields);
+
+      if (receiptFile) {
+        // Deliberately after the expense is saved and reported separately: an S3 hiccup should
+        // cost the attachment, not the ledger entry that was just recorded.
+        const form = new FormData();
+        form.append("file", receiptFile);
+        try {
+          await apiClient.postForm(`/admin/expenses/${saved.id}/receipt`, form);
+        } catch (err) {
+          showToast({
+            variant: "error",
+            title: errorMessage(err, "The expense was saved, but the bill did not upload."),
+          });
+        }
+      }
+
       showToast({
         variant: "success",
         title: id ? "Expense updated" : "Expense recorded",
@@ -105,6 +131,20 @@ export default function AdminExpensesPage() {
         variant: "error",
         title: errorMessage(err, "Couldn't save the expense."),
       });
+    }
+  }
+
+  /**
+   * The bucket blocks public access, so the file is reached through a short-lived signed URL
+   * minted per click rather than a link stored in the page — a URL sitting in the DOM would
+   * outlive the admin's own session.
+   */
+  async function openReceipt(id: string) {
+    try {
+      const { url } = await apiClient.get<{ url: string }>(`/admin/expenses/${id}/receipt`);
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch (err) {
+      showToast({ variant: "error", title: errorMessage(err, "Couldn't open that bill.") });
     }
   }
 
@@ -209,7 +249,7 @@ export default function AdminExpensesPage() {
         </div>
       </div>
 
-      {isLoading && <TableSkeleton columns={7} />}
+      {isLoading && <TableSkeleton columns={isSuperAdmin ? 8 : 7} />}
 
       {!isLoading && error && <ErrorState message={error} onRetry={load} />}
 
@@ -231,6 +271,7 @@ export default function AdminExpensesPage() {
               <TableHead>Description</TableHead>
               <TableHead>Method</TableHead>
               <TableHead>Amount</TableHead>
+              {isSuperAdmin && <TableHead>Recorded by</TableHead>}
               <TableHead>Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -246,8 +287,35 @@ export default function AdminExpensesPage() {
                 </TableCell>
                 <TableCell className="text-muted-foreground">{expense.paymentMethod}</TableCell>
                 <TableCell className="font-medium">{rupees(expense.amount)}</TableCell>
+                {isSuperAdmin && (
+                  <TableCell className="whitespace-nowrap text-muted-foreground">
+                    {expense.recordedBy ? (
+                      <>
+                        {expense.recordedBy.name ?? expense.recordedBy.email}
+                        {/* The address underneath when a name exists: two admins can share a
+                            first name, and the address is what identifies the account. */}
+                        {expense.recordedBy.name && (
+                          <span className="block text-[11px]">{expense.recordedBy.email}</span>
+                        )}
+                      </>
+                    ) : (
+                      "—"
+                    )}
+                  </TableCell>
+                )}
                 <TableCell>
                   <div className="flex gap-1">
+                    {expense.hasReceipt && (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        aria-label="Open the attached bill"
+                        title={expense.receiptName ?? "Attached bill"}
+                        onClick={() => openReceipt(expense.id)}
+                      >
+                        <Paperclip className="h-3.5 w-3.5" aria-hidden />
+                      </Button>
+                    )}
                     <ExpenseFormDialog
                       categories={categories}
                       expense={expense}

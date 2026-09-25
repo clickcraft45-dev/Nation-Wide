@@ -1,7 +1,7 @@
 import { createElement as h } from 'react';
 import { join } from 'node:path';
 import type { RateCardData } from '../rate-card-data.service';
-import { brandAsset } from '../brand-assets';
+import { brandAsset, watermarkImage, WATERMARK_STYLE } from '../brand-assets';
 
 // Plain React.createElement calls, not JSX — this is a NestJS backend with no other UI code, so
 // this file deliberately avoids pulling a JSX toolchain (tsconfig "jsx" option, .tsx extension)
@@ -221,15 +221,8 @@ function buildStyles(
     pageFooterText: { fontSize: 7, color: '#71717a' },
     // A4 is 595x842pt; a 300pt mark sits centred behind the content at a weight that photocopies
     // without swallowing the table underneath.
-    watermark: {
-      position: 'absolute',
-      top: 271,
-      left: 148,
-      width: 300,
-      height: 300,
-      opacity: 0.05,
-      objectFit: 'contain',
-    },
+    // Shared with the tax invoice — see WATERMARK_STYLE.
+    watermark: WATERMARK_STYLE,
   });
 }
 
@@ -325,7 +318,9 @@ export async function renderClassicTemplate(
   // ponytail: the header is always the bundled white wordmark on black — an uploaded company logo
   // (logoBuffer) has no guaranteed contrast on black, so it is not placed here.
   const wordmark = brandAsset('wordmark-white.png');
-  const watermark = brandAsset('mark-black.png');
+  // The uploaded company logo when there is one — behind the page it has no contrast problem to
+  // solve, unlike the header band above, so this is where a customer's own branding can show.
+  const watermark = watermarkImage(logoBuffer);
 
   const badges: {
     kind: 'safe' | 'reliable' | 'fast' | 'global';

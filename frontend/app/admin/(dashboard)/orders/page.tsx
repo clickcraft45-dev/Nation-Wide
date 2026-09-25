@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { ArrowUpDown, Package, Plus } from "lucide-react";
 import type { OrderDto, ShippingProviderDto } from "@nationwide/shared-types";
-import { apiClient } from "@/lib/api-client";
+import { apiClient, errorMessage } from "@/lib/api-client";
 import { useDebouncedValue } from "@/lib/utils/use-debounced-value";
 import { Button } from "@/components/ui/button";
 import { SearchInput } from "@/components/ui/search-input";
@@ -22,6 +22,7 @@ import {
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/page-state";
 import { OrderStatusBadge, TrackingStatusBadge } from "@/components/ui/status-badge";
+import { useToast } from "@/components/ui/toast";
 
 type SortKey = "id" | "customer" | "status" | "createdAt";
 type SortDir = "asc" | "desc";
@@ -32,6 +33,22 @@ const AWB_TABS = [
   { value: "", label: "All" },
   { value: "mapped", label: "AWB mapped" },
   { value: "unmapped", label: "AWB not mapped" },
+  // Cancelled orders are a workload of their own — chasing refunds and parcels, not AWBs — so
+  // they get their own view instead of sitting in a queue of work that will never be done on
+  // them. The server drops them from "AWB not mapped" for the same reason.
+  { value: "cancelled", label: "Cancelled" },
+];
+
+const REFUND_TABS = [
+  { value: "", label: "Any refund" },
+  { value: "refunded", label: "Refunded" },
+  { value: "not-refunded", label: "Not refunded" },
+];
+
+const RETURN_TABS = [
+  { value: "", label: "Any parcel" },
+  { value: "returned", label: "Returned" },
+  { value: "not-returned", label: "Not returned" },
 ];
 
 const STATUS_TABS = [
@@ -39,7 +56,8 @@ const STATUS_TABS = [
   { value: "PENDING", label: "Pending" },
   { value: "CONFIRMED", label: "Confirmed" },
   { value: "COMPLETED", label: "Completed" },
-  { value: "CANCELLED", label: "Cancelled" },
+  // No CANCELLED here: it is the "Cancelled" view above, which carries the refund and parcel
+  // filters that only make sense for one.
 ];
 
 function SortableHead({
@@ -84,6 +102,10 @@ export default function AdminOrdersPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [awbFilter, setAwbFilter] = useState("");
+  const { showToast } = useToast();
+  const [refundFilter, setRefundFilter] = useState("");
+  const [returnedFilter, setReturnedFilter] = useState("");
+  const isCancelledView = awbFilter === "cancelled";
   const [sortKey, setSortKey] = useState<SortKey>("createdAt");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [page, setPage] = useState(1);
@@ -100,7 +122,15 @@ export default function AdminOrdersPage() {
     });
     if (debouncedSearch.trim()) params.set("search", debouncedSearch.trim());
     if (statusFilter) params.set("status", statusFilter);
-    if (awbFilter) params.set("awb", awbFilter);
+    // "cancelled" is a status, not an AWB state — it shares the control because it is the same
+    // question ("which pile am I working through?"), not the same parameter.
+    if (isCancelledView) {
+      params.set("status", "CANCELLED");
+      if (refundFilter) params.set("refund", refundFilter);
+      if (returnedFilter) params.set("returned", returnedFilter);
+    } else if (awbFilter) {
+      params.set("awb", awbFilter);
+    }
     if (kpiStatus === "in-transit" || kpiStatus === "delivered") {
       params.set("trackingGroup", kpiStatus);
     }
@@ -121,13 +151,43 @@ export default function AdminOrdersPage() {
       .finally(() => setIsLoading(false));
   };
 
+  /**
+   * Record whether the cancelled order's parcel has come back. Toggling, not one-way: this gets
+   * clicked on the wrong row, and an undo has to exist.
+   */
+  async function setReturned(order: OrderDto, returned: boolean) {
+    try {
+      await apiClient.patch(`/admin/orders/${order.id}/returned`, { returned });
+      showToast({
+        variant: "success",
+        title: returned ? "Marked as returned" : "Return undone",
+      });
+      load();
+    } catch (err) {
+      showToast({
+        variant: "error",
+        title: errorMessage(err, "Couldn't update the parcel's return."),
+      });
+    }
+  }
+
   useEffect(() => {
     // Fetching on filter/sort/page change is a one-shot lookup, not a subscription to external
     // state.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, debouncedSearch, statusFilter, awbFilter, sortKey, sortDir, kpiStatus]);
+  }, [
+    page,
+    debouncedSearch,
+    statusFilter,
+    awbFilter,
+    refundFilter,
+    returnedFilter,
+    sortKey,
+    sortDir,
+    kpiStatus,
+  ]);
 
   const providerById = useMemo(
     () => new Map(providers.map((p) => [p.id, p])),
@@ -176,6 +236,11 @@ export default function AdminOrdersPage() {
             handleFilterChange(setAwbFilter, value);
             // Status filter only exists under "AWB mapped"; don't let it silently linger.
             if (value !== "mapped") setStatusFilter("");
+            // Same for the cancelled-only filters.
+            if (value !== "cancelled") {
+              setRefundFilter("");
+              setReturnedFilter("");
+            }
           }}
         />
         <div className="sm:ml-auto sm:w-72">
@@ -197,6 +262,25 @@ export default function AdminOrdersPage() {
             options={STATUS_TABS}
             value={statusFilter}
             onChange={(value) => handleFilterChange(setStatusFilter, value)}
+          />
+        </div>
+      )}
+
+      {/* Two independent questions about a cancelled order: has the money gone back, and has the
+          parcel. Refunded-but-not-returned is the pile someone actually has to chase. */}
+      {isCancelledView && (
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <SegmentedControl
+            ariaLabel="Filter by refund"
+            options={REFUND_TABS}
+            value={refundFilter}
+            onChange={(value) => handleFilterChange(setRefundFilter, value)}
+          />
+          <SegmentedControl
+            ariaLabel="Filter by whether the parcel came back"
+            options={RETURN_TABS}
+            value={returnedFilter}
+            onChange={(value) => handleFilterChange(setReturnedFilter, value)}
           />
         </div>
       )}
@@ -248,6 +332,7 @@ export default function AdminOrdersPage() {
                   activeDir={sortDir}
                   onSort={toggleSort}
                 />
+                {isCancelledView && <TableHead>Refund / parcel</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -288,6 +373,28 @@ export default function AdminOrdersPage() {
                     <TableCell className="whitespace-nowrap text-muted-foreground">
                       {new Date(order.createdAt).toLocaleDateString()}
                     </TableCell>
+                    {isCancelledView && (
+                      <TableCell className="whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground">
+                            {order.refundedAt ? "Refunded" : "Not refunded"}
+                          </span>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            // The row is a link to the order; toggling the parcel state from here
+                            // must not navigate away from the list being worked through.
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              void setReturned(order, !order.returnedAt);
+                            }}
+                          >
+                            {order.returnedAt ? "Parcel returned" : "Mark returned"}
+                          </Button>
+                        </div>
+                      </TableCell>
+                    )}
                   </TableRow>
                 );
               })}

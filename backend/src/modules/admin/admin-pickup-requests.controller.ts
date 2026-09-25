@@ -99,8 +99,13 @@ export class AdminPickupRequestsController {
   }
 
   // Photos taken at the door: the customer's Aadhaar (kept on the customer, reused next time) and
-  // the parcel itself. Uploads are warehouse drop-offs only (the service enforces it);
-  // the documents link works on any pickup, so staff can review what a partner collected.
+  // the parcel itself.
+  //
+  // Staff upload here as BACK OFFICE: no "are you at the door" guards, and no requirement that
+  // the pickup still be open. A partner's photo is evidence taken at pickup and keeps its strict
+  // rules; an admin attaching the Aadhaar a customer emailed in a week later is bookkeeping, and
+  // refusing it (which is what happened, because a pickup behind an order is COMPLETED) left the
+  // gap permanently unfillable. The audit log records which of the two it was.
   @Post(':id/aadhaar')
   @PhotoUpload()
   async uploadAadhaar(
@@ -113,6 +118,7 @@ export class AdminPickupRequestsController {
         id,
         requireFile(file),
         user.sub,
+        true,
         true,
       ),
     );
@@ -130,6 +136,7 @@ export class AdminPickupRequestsController {
         id,
         requireFile(file),
         user.sub,
+        true,
         true,
       ),
     );

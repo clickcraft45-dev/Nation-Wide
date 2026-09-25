@@ -1,8 +1,10 @@
 "use client";
 
+import { useRef, useState } from "react";
 import Link from "next/link";
+import { Upload } from "lucide-react";
 import { chargeableWeightKg, type PickupDocumentsDto, type PickupRequestDto } from "@nationwide/shared-types";
-import { apiClient } from "@/lib/api-client";
+import { apiClient, errorMessage } from "@/lib/api-client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
@@ -11,9 +13,43 @@ import { useToast } from "@/components/ui/toast";
  * The boxes, declared contents and pickup photos — what staff need in front of them when booking
  * the shipment with DHL/FedEx/UPS/DPD. Shown on both the pickup request and the order it became.
  */
-export function ParcelContentsCard({ pickup, showPickupLink = false }: { pickup: PickupRequestDto; showPickupLink?: boolean }) {
+export function ParcelContentsCard({
+  pickup,
+  showPickupLink = false,
+  onDocumentUploaded,
+}: {
+  pickup: PickupRequestDto;
+  showPickupLink?: boolean;
+  /** Called after a document is attached, so the page can refetch and flip the chip. */
+  onDocumentUploaded?: () => void;
+}) {
   const { showToast } = useToast();
   const boxes = pickup.verifiedPackages ?? pickup.packages;
+  const aadhaarInput = useRef<HTMLInputElement>(null);
+  const parcelInput = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState<"aadhaar" | "parcel-photo" | null>(null);
+
+  /**
+   * Attach a document a partner never captured. Staff can do this after the fact — by the time
+   * an order exists the pickup is closed to its partner, which is exactly when the gap is noticed.
+   */
+  async function upload(kind: "aadhaar" | "parcel-photo", file: File) {
+    setUploading(kind);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      await apiClient.postForm(`/admin/pickup-requests/${pickup.id}/${kind}`, form);
+      showToast({
+        variant: "success",
+        title: kind === "aadhaar" ? "Aadhaar attached" : "Parcel photo attached",
+      });
+      onDocumentUploaded?.();
+    } catch (err) {
+      showToast({ variant: "error", title: errorMessage(err, "That upload didn't go through.") });
+    } finally {
+      setUploading(null);
+    }
+  }
 
   // Opened synchronously so the popup blocker treats it as the click; the link lives 5 minutes.
   async function openDocument(kind: keyof PickupDocumentsDto) {
@@ -86,17 +122,64 @@ export function ParcelContentsCard({ pickup, showPickupLink = false }: { pickup:
         </div>
 
         <div className="flex flex-wrap gap-2">
-          <Button variant="secondary" size="sm" disabled={!pickup.aadhaarOnFile} onClick={() => openDocument("aadhaarUrl")}>
-            {pickup.aadhaarOnFile ? "View Aadhaar" : "No Aadhaar on file"}
-          </Button>
-          <Button
-            variant="secondary"
-            size="sm"
-            disabled={!pickup.parcelPhotoOnFile}
-            onClick={() => openDocument("parcelPhotoUrl")}
-          >
-            {pickup.parcelPhotoOnFile ? "View parcel photo" : "No parcel photo yet"}
-          </Button>
+          {/* One hidden input per document: a shared one would need its handler swapped on every
+              click, and a mis-timed swap files the photo under the wrong document. */}
+          <input
+            ref={aadhaarInput}
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              e.target.value = "";
+              if (file) void upload("aadhaar", file);
+            }}
+          />
+          <input
+            ref={parcelInput}
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              e.target.value = "";
+              if (file) void upload("parcel-photo", file);
+            }}
+          />
+
+          {pickup.aadhaarOnFile ? (
+            <Button variant="secondary" size="sm" onClick={() => openDocument("aadhaarUrl")}>
+              View Aadhaar
+            </Button>
+          ) : (
+            // A missing document used to be a dead, disabled button. It is the one place staff
+            // notice the gap, so it is also where they can close it.
+            <Button
+              variant="secondary"
+              size="sm"
+              isLoading={uploading === "aadhaar"}
+              onClick={() => aadhaarInput.current?.click()}
+            >
+              <Upload className="mr-1.5 h-3.5 w-3.5" aria-hidden />
+              Add Aadhaar
+            </Button>
+          )}
+
+          {pickup.parcelPhotoOnFile ? (
+            <Button variant="secondary" size="sm" onClick={() => openDocument("parcelPhotoUrl")}>
+              View parcel photo
+            </Button>
+          ) : (
+            <Button
+              variant="secondary"
+              size="sm"
+              isLoading={uploading === "parcel-photo"}
+              onClick={() => parcelInput.current?.click()}
+            >
+              <Upload className="mr-1.5 h-3.5 w-3.5" aria-hidden />
+              Add parcel photo
+            </Button>
+          )}
           {showPickupLink && (
             <Link href={`/admin/pickup-requests/${pickup.id}`}>
               <Button variant="ghost" size="sm">

@@ -17,6 +17,7 @@ import { OrdersService } from '../orders/orders.service';
 import { toOrderDto } from '../orders/order.mapper';
 import { UpdateOrderPaymentDto } from './dto/update-order-payment.dto';
 import { CancelOrderDto } from '../orders/dto/cancel-order.dto';
+import { SetOrderReturnedDto } from './dto/set-order-returned.dto';
 
 @Controller('admin/orders')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -38,6 +39,23 @@ export class AdminOrdersController {
     @CurrentUser() user: JwtPayload,
   ): Promise<OrderDto> {
     const order = await this.ordersService.cancel(id, dto.reason, user.sub);
+    return toOrderDto(order);
+  }
+
+  // Whether the goods came back, which is a different question from whether the money did — see
+  // OrdersService.setReturned.
+  @Patch(':id/returned')
+  async setReturned(
+    @Param('id') id: string,
+    @Body() dto: SetOrderReturnedDto,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<OrderDto> {
+    const order = await this.ordersService.setReturned(
+      id,
+      dto.returned,
+      dto.note,
+      user.sub,
+    );
     return toOrderDto(order);
   }
 

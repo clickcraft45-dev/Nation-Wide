@@ -1,7 +1,15 @@
 import { createElement as h } from 'react';
 import { join } from 'node:path';
 import type { Invoice } from '@prisma/client';
-import { brandAsset } from '../../rate-cards/brand-assets';
+import {
+  customInvoiceLineTotal,
+  type CustomInvoiceLineDto,
+} from '@nationwide/shared-types';
+import {
+  brandAsset,
+  watermarkImage,
+  WATERMARK_STYLE,
+} from '../../rate-cards/brand-assets';
 
 // Plain React.createElement, not JSX, and a dynamic ESM import of @react-pdf/renderer — both for
 // exactly the reasons spelled out at the top of rate-cards/templates/classic-template.ts. This
@@ -23,6 +31,13 @@ export interface InvoiceExtras {
   /** The window a consolidated invoice covers, printed under the invoice number. */
   periodFrom?: Date | null;
   periodTo?: Date | null;
+  /**
+   * The freight schedule behind a custom invoice: a row per AWB with the charges that make it
+   * up. Printed as its own wide table in place of the single derived line, because this is the
+   * form the customer already reconciles against — freight, GMR, PSS and fuel kept apart rather
+   * than collapsed into one number they would have to take on trust.
+   */
+  customLines?: CustomInvoiceLineDto[];
 }
 
 /**
@@ -112,6 +127,7 @@ export async function renderTaxInvoice(
   const supportPhone = branding.supportPhone ?? invoice.supplierPhone;
   // An uploaded company logo wins; otherwise the bundled NationWide mark.
   const logoImage = logoBuffer ?? brandAsset('mark-black.png');
+  const watermark = watermarkImage(logoBuffer);
 
   const s = StyleSheet.create({
     page: {
@@ -120,6 +136,8 @@ export async function renderTaxInvoice(
       fontFamily: 'NotoSans',
       color: INK,
     },
+    // Shared with the rate card — see WATERMARK_STYLE.
+    watermark: WATERMARK_STYLE,
     topRule: {
       height: 5,
       backgroundColor: brand,
@@ -216,6 +234,23 @@ export async function renderTaxInvoice(
       borderColor: INK,
     },
     td: { padding: 6, borderWidth: 1, borderColor: LINE },
+    // The schedule carries twelve columns on a portrait page, so it gets its own tighter cell
+    // styles rather than squeezing the main table's padding and hurting every other invoice.
+    sth: {
+      backgroundColor: INK,
+      color: '#ffffff',
+      fontWeight: 'bold',
+      fontSize: 6.5,
+      padding: 3,
+      borderWidth: 1,
+      borderColor: INK,
+    },
+    std: {
+      fontSize: 6.5,
+      padding: 3,
+      borderWidth: 1,
+      borderColor: LINE,
+    },
     right: { textAlign: 'right' },
     totalsWrap: {
       flexDirection: 'row',
@@ -290,6 +325,23 @@ export async function renderTaxInvoice(
   ].filter((line): line is string => line !== null);
 
   const consolidatedLines = extras.lines ?? [];
+  const scheduleLines = extras.customLines ?? [];
+  // Twelve columns on a portrait page: the widths are declared once here so the header row and
+  // the body rows cannot drift apart.
+  const schedW = {
+    sl: { width: '4%' },
+    awb: { width: '13%' },
+    date: { width: '11%' },
+    dest: { width: '12%' },
+    net: { width: '7%' },
+    svc: { width: '6%' },
+    kg: { width: '8%' },
+    amt: { width: '10%' },
+    gmr: { width: '10%' },
+    pss: { width: '6%' },
+    fsc: { width: '9%' },
+    tot: { flex: 1 },
+  } as const;
   // Printed under the invoice number so the document says up front what period it settles —
   // without it a consolidated bill is a list of amounts with no stated scope.
   const periodLabel =
@@ -301,6 +353,12 @@ export async function renderTaxInvoice(
     Document,
     { title: invoice.invoiceNumber },
     h(Page, { size: 'A4', style: s.page }, [
+      // FIRST child, so everything else paints over it: react-pdf draws in document order, and a
+      // watermark added last would sit on top of the figures. The fixed flag repeats it on page two
+      // a long consolidated invoice rather than leaving those pages bare.
+      watermark
+        ? h(Image, { key: 'watermark', src: watermark, style: s.watermark, fixed: true })
+        : null,
       h(View, { key: 'rule', style: s.topRule }),
       h(View, { key: 'masthead', style: s.masthead }, [
         h(View, { key: 'identity', style: s.identity }, [
@@ -451,7 +509,31 @@ export async function renderTaxInvoice(
         // A consolidated invoice prints one row per order it bills; every other kind prints the
         // single derived line it always did. Same table either way — a customer reading two of
         // our invoices side by side should not be reading two different documents.
-        ...(consolidatedLines.length > 0
+        ...(scheduleLines.length > 0
+          ? [
+              h(View, { key: 'sched-line', style: s.row }, [
+                h(Text, { key: 'a', style: [s.td, { width: '8%' }] }, '1'),
+                h(View, { key: 'b', style: [s.td, { flex: 1 }] }, [
+                  h(Text, { key: 'd' }, descriptionLines[0]),
+                  h(
+                    Text,
+                    { key: 's', style: s.small },
+                    'Itemised in the shipment schedule below.',
+                  ),
+                ]),
+                h(
+                  Text,
+                  { key: 'c', style: [s.td, { width: '14%' }] },
+                  invoice.sacCode,
+                ),
+                h(
+                  Text,
+                  { key: 'e', style: [s.td, s.right, { width: '22%' }] },
+                  money(invoice.taxableValue),
+                ),
+              ]),
+            ]
+          : consolidatedLines.length > 0
           ? consolidatedLines.map((line, i) =>
               h(View, { key: `body-${i}`, style: s.row }, [
                 h(
@@ -502,6 +584,97 @@ export async function renderTaxInvoice(
               ]),
             ]),
       ]),
+
+      // --- Shipment schedule (custom invoices billed from a freight list) ---
+      scheduleLines.length > 0
+        ? h(View, { key: 'sched', style: { marginTop: 12 } }, [
+            h(Text, { key: 'h', style: s.h }, 'Shipment schedule'),
+            h(View, { key: 'head', style: s.row }, [
+              h(Text, { key: 'n', style: [s.sth, schedW.sl] }, '#'),
+              h(Text, { key: 'a', style: [s.sth, schedW.awb] }, 'AWB No.'),
+              h(Text, { key: 'd', style: [s.sth, schedW.date] }, 'Date'),
+              h(Text, { key: 'x', style: [s.sth, schedW.dest] }, 'Destination'),
+              h(Text, { key: 'w', style: [s.sth, schedW.net] }, 'Network'),
+              h(Text, { key: 'v', style: [s.sth, schedW.svc] }, 'D/S'),
+              h(Text, { key: 'k', style: [s.sth, s.right, schedW.kg] }, 'Wt (kg)'),
+              h(Text, { key: 'm', style: [s.sth, s.right, schedW.amt] }, 'Amount'),
+              h(Text, { key: 'g', style: [s.sth, s.right, schedW.gmr] }, 'GMR/Comm'),
+              h(Text, { key: 'p', style: [s.sth, s.right, schedW.pss] }, 'PSS'),
+              h(Text, { key: 'f', style: [s.sth, s.right, schedW.fsc] }, 'FSC'),
+              h(Text, { key: 't', style: [s.sth, s.right, schedW.tot] }, 'Total'),
+            ]),
+            ...scheduleLines.map((line, i) =>
+              h(View, { key: 'sched-row-' + i, style: s.row }, [
+                h(Text, { key: 'n', style: [s.std, schedW.sl] }, String(i + 1)),
+                h(
+                  Text,
+                  { key: 'a', style: [s.std, schedW.awb] },
+                  line.awbNumber ?? '—',
+                ),
+                h(
+                  Text,
+                  { key: 'd', style: [s.std, schedW.date] },
+                  line.supplyDate ? formatDate(new Date(line.supplyDate)) : '—',
+                ),
+                h(
+                  Text,
+                  { key: 'x', style: [s.std, schedW.dest] },
+                  line.destination ?? '—',
+                ),
+                h(
+                  Text,
+                  { key: 'w', style: [s.std, schedW.net] },
+                  line.network ?? '—',
+                ),
+                h(
+                  Text,
+                  { key: 'v', style: [s.std, schedW.svc] },
+                  line.service ?? '—',
+                ),
+                h(
+                  Text,
+                  { key: 'k', style: [s.std, s.right, schedW.kg] },
+                  line.weightKg === null || line.weightKg === undefined
+                    ? '—'
+                    : line.weightKg.toFixed(2),
+                ),
+                h(
+                  Text,
+                  { key: 'm', style: [s.std, s.right, schedW.amt] },
+                  money(line.amount),
+                ),
+                h(
+                  Text,
+                  { key: 'g', style: [s.std, s.right, schedW.gmr] },
+                  money(line.otherCharges ?? 0),
+                ),
+                h(
+                  Text,
+                  { key: 'p', style: [s.std, s.right, schedW.pss] },
+                  money(line.pss ?? 0),
+                ),
+                h(
+                  Text,
+                  { key: 'f', style: [s.std, s.right, schedW.fsc] },
+                  money(line.fsc ?? 0),
+                ),
+                h(
+                  Text,
+                  { key: 't', style: [s.std, s.right, schedW.tot, s.strong] },
+                  money(customInvoiceLineTotal(line)),
+                ),
+              ]),
+            ),
+            // The schedule is tax-inclusive, like every figure staff type into the form. Said
+            // out loud so nobody reconciles these rows against the taxable value above, finds a
+            // gap, and assumes the invoice is wrong.
+            h(
+              Text,
+              { key: 'note', style: s.small },
+              'Schedule amounts include GST. The taxable value and tax shown above are derived from this total.',
+            ),
+          ])
+        : null,
 
       // --- Totals ---
       h(View, { key: 'tot', style: s.totalsWrap }, [

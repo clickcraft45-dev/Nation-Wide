@@ -296,6 +296,32 @@ describe('OrdersService', () => {
       });
     });
 
+    // The bug: a cancelled order can never be given an AWB, so it sat in the "awaiting AWB"
+    // queue forever, unactionable, burying the rows that did need work.
+    it('drops cancelled orders from the awaiting-AWB queue', async () => {
+      prisma.order.findMany.mockResolvedValue([]);
+
+      await service.findAll({ awb: 'unmapped' });
+
+      expect(whereOf().status).toEqual({ not: 'CANCELLED' });
+    });
+
+    it('still shows them when the caller explicitly asks for cancelled', async () => {
+      prisma.order.findMany.mockResolvedValue([]);
+
+      await service.findAll({ awb: 'unmapped', status: 'CANCELLED' as never });
+
+      expect(whereOf().status).toBe('CANCELLED');
+    });
+
+    it('leaves the mapped queue alone — a cancelled order can still carry an AWB', async () => {
+      prisma.order.findMany.mockResolvedValue([]);
+
+      await service.findAll({ awb: 'mapped' });
+
+      expect(whereOf().status).toBeUndefined();
+    });
+
     it('keeps a provider filter alongside the unmapped filter', async () => {
       prisma.order.findMany.mockResolvedValue([]);
 
@@ -304,6 +330,43 @@ describe('OrdersService', () => {
       expect(whereOf().shipments).toEqual({
         some: { providerId: 'prov-1' },
         none: { externalTrackingNumbers: { some: {} } },
+      });
+    });
+
+    it.each([
+      ['refunded', { refundedAt: { not: null } }],
+      ['not-refunded', { refundedAt: null }],
+    ])('filters the cancelled view by refund state: %s', async (refund, expected) => {
+      prisma.order.findMany.mockResolvedValue([]);
+
+      await service.findAll({ refund: refund as never });
+
+      expect(whereOf()).toMatchObject(expected);
+    });
+
+    it.each([
+      ['returned', { returnedAt: { not: null } }],
+      ['not-returned', { returnedAt: null }],
+    ])('filters by whether the parcel came back: %s', async (returned, expected) => {
+      prisma.order.findMany.mockResolvedValue([]);
+
+      await service.findAll({ returned: returned as never });
+
+      expect(whereOf()).toMatchObject(expected);
+    });
+
+    // Money and goods move independently: refunded-but-not-returned is the state staff chase.
+    it('combines the two, because they answer different questions', async () => {
+      prisma.order.findMany.mockResolvedValue([]);
+
+      await service.findAll({
+        refund: 'refunded' as never,
+        returned: 'not-returned' as never,
+      });
+
+      expect(whereOf()).toMatchObject({
+        refundedAt: { not: null },
+        returnedAt: null,
       });
     });
 

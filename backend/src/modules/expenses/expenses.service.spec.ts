@@ -39,7 +39,13 @@ describe('ExpensesService', () => {
         ]),
       },
     };
-    service = new ExpensesService(prisma as never);
+    // The bill attachment path only needs S3 to answer; the ledger logic under test never
+    // touches it.
+    const storage = {
+      put: jest.fn().mockResolvedValue({ key: 'expenses/x/receipt.pdf', size: 1 }),
+      presignGet: jest.fn().mockResolvedValue('https://signed.example/receipt.pdf'),
+    };
+    service = new ExpensesService(prisma as never, storage as never);
   });
 
   it('totals the whole filter, not just the page, and ranks categories by spend', async () => {

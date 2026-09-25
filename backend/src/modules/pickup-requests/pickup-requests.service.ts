@@ -1408,8 +1408,14 @@ export class PickupRequestsService {
     file: Express.Multer.File,
     actorId: string,
     asAdmin = false,
+    backOffice = false,
   ): Promise<PickupRequestWithDetails> {
-    const pickupRequest = await this.findOneWorkable(id, actorId, asAdmin);
+    const pickupRequest = await this.resolveForUpload(
+      id,
+      actorId,
+      asAdmin,
+      backOffice,
+    );
     const previousKey = pickupRequest.customer.aadhaarKey;
     const key = `kyc/aadhaar/${pickupRequest.customerId}/${randomUUID()}.${IMAGE_EXTENSIONS[file.mimetype]}`;
     await this.storage.put(key, file.buffer, file.mimetype);
@@ -1426,8 +1432,13 @@ export class PickupRequestsService {
           : 'CUSTOMER_AADHAAR_ADDED',
         entity: 'Customer',
         entityId: pickupRequest.customerId,
-        // Which pickup it was taken on — never the document or its key.
-        after: { pickupRequestId: id },
+        // Which pickup it was taken on — never the document or its key. `source` separates a
+        // photo taken at the door from one an admin attached afterwards, which is exactly the
+        // question asked of a KYC record later.
+        after: {
+          pickupRequestId: id,
+          source: backOffice ? 'admin-back-office' : 'pickup',
+        },
       },
     });
     return this.findOne(id);
@@ -1438,8 +1449,14 @@ export class PickupRequestsService {
     file: Express.Multer.File,
     actorId: string,
     asAdmin = false,
+    backOffice = false,
   ): Promise<PickupRequestWithDetails> {
-    const pickupRequest = await this.findOneWorkable(id, actorId, asAdmin);
+    const pickupRequest = await this.resolveForUpload(
+      id,
+      actorId,
+      asAdmin,
+      backOffice,
+    );
     const key = `pickups/${id}/parcel-${randomUUID()}.${IMAGE_EXTENSIONS[file.mimetype]}`;
     await this.storage.put(key, file.buffer, file.mimetype);
     await this.prisma.pickupRequest.update({
@@ -1492,6 +1509,29 @@ export class PickupRequestsService {
   }
 
   // Photos are only taken on a live pickup the actor is working, once they are at the door.
+  /**
+   * Which rules an upload has to pass, and why there are two sets.
+   *
+   * A PARTNER uploading has to be at the door: assigned to this pickup, arrived, and the pickup
+   * still open. Those guards are the whole integrity of a photo taken "at pickup" and do not move.
+   *
+   * An ADMIN filling in a gap afterwards is a different act. By the time an order exists its
+   * pickup request is COMPLETED, so every one of those guards refused — which left missing KYC
+   * permanently missing, with no way to attach the Aadhaar a customer emailed in later. Staff
+   * working the back office are trusted with the record; the audit log is what keeps the two
+   * kinds of upload tellable apart.
+   */
+  private resolveForUpload(
+    id: string,
+    actorId: string,
+    asAdmin: boolean,
+    backOffice: boolean,
+  ): Promise<PickupRequestWithDetails> {
+    return backOffice
+      ? this.findOne(id)
+      : this.findOneWorkable(id, actorId, asAdmin);
+  }
+
   private async findOneWorkable(
     id: string,
     actorId: string,

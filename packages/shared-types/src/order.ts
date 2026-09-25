@@ -58,6 +58,12 @@ export interface OrderDto {
   dueAmount: number | null;
   dueApprovedByAdminName: string | null;
 
+  /**
+   * When the parcel itself came back, for an order that was called off. Independent of the
+   * refund: money and goods move separately, and holding the goods after refunding is normal.
+   */
+  returnedAt: string | null; // ISO 8601
+  returnNote: string | null;
   cancelledAt: string | null; // ISO 8601
   cancellationReason: string | null;
   /** The fee actually charged, frozen at cancellation time. */

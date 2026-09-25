@@ -148,7 +148,13 @@ export default function AdminOrderDetailPage() {
 
               {pickup && <OrderPickupCard pickup={pickup} />}
 
-              {pickup && <ParcelContentsCard pickup={pickup} showPickupLink />}
+              {pickup && (
+                <ParcelContentsCard
+                  pickup={pickup}
+                  showPickupLink
+                  onDocumentUploaded={() => setReloadKey((key) => key + 1)}
+                />
+              )}
 
               <OrderPaymentCard order={order} onChanged={() => setReloadKey((k) => k + 1)} />
 

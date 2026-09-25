@@ -188,6 +188,27 @@ export class OrdersService {
         ...(where.shipments ?? {}),
         none: { externalTrackingNumbers: { some: {} } },
       };
+      // A cancelled order is never going to be given an AWB, so it does not belong in the queue
+      // of orders waiting for one — it sat there forever, unactionable, burying the rows that
+      // did need work. Only when the caller has not asked for a status itself: someone who
+      // explicitly filters to CANCELLED is entitled to see exactly that.
+      if (!query.status) {
+        where.status = { not: 'CANCELLED' };
+      }
+    }
+
+    // Both are about a cancelled order, but neither is restricted to one: an order refunded
+    // before cancellation, or a parcel returned on a delivery exception, is still a real query.
+    if (query.refund === 'refunded') {
+      where.refundedAt = { not: null };
+    } else if (query.refund === 'not-refunded') {
+      where.refundedAt = null;
+    }
+
+    if (query.returned === 'returned') {
+      where.returnedAt = { not: null };
+    } else if (query.returned === 'not-returned') {
+      where.returnedAt = null;
     }
 
     if (query.search) {
@@ -280,6 +301,44 @@ export class OrdersService {
 
   // Kept separate from update() (order lifecycle status) so payment and status can't
   // accidentally cross-write on the same PATCH body.
+  /**
+   * Record that the parcel behind a cancelled order has (or has not) come back.
+   *
+   * A plain state flip rather than an event log: staff want to know whether the goods are still
+   * theirs to hold, and a mis-click has to be undoable. The audit entry is what preserves who
+   * said what and when.
+   */
+  async setReturned(
+    id: string,
+    returned: boolean,
+    note: string | undefined,
+    actorId: string,
+  ): Promise<OrderWithShipments> {
+    const before = await this.findOne(id); // 404s if missing
+
+    await this.prisma.order.update({
+      where: { id },
+      data: {
+        returnedAt: returned ? new Date() : null,
+        // The note belongs to the return it describes, so undoing one clears it too.
+        returnNote: returned ? (note ?? null) : null,
+      },
+    });
+
+    await this.prisma.auditLog.create({
+      data: {
+        actorId,
+        action: returned ? 'ORDER_PARCEL_RETURNED' : 'ORDER_RETURN_UNDONE',
+        entity: 'Order',
+        entityId: id,
+        before: { returnedAt: before.returnedAt?.toISOString() ?? null },
+        after: { returned, note: returned ? (note ?? null) : null },
+      },
+    });
+
+    return this.findOne(id);
+  }
+
   async updatePayment(
     id: string,
     dto: UpdateOrderPaymentDto,

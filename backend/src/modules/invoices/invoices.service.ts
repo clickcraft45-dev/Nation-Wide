@@ -6,7 +6,13 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import type { Invoice, Prisma } from '@prisma/client';
+import type { Invoice } from '@prisma/client';
+// A value import, not a type-only one: Prisma.DbNull is the SQL NULL a nullable Json column needs.
+import { Prisma } from '@prisma/client';
+import {
+  customInvoiceTotal,
+  type CustomInvoiceLineDto,
+} from '@nationwide/shared-types';
 import { PrismaService } from '../../database/prisma.service';
 import { StorageService } from '../../database/storage.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -401,8 +407,9 @@ export class InvoicesService {
   async issueCustom(
     input: {
       customerId: string;
-      grossAmount: number;
-      description: string;
+      grossAmount?: number;
+      description?: string;
+      lines?: CustomInvoiceLineDto[];
       placeOfSupplyState?: string;
     },
     actorId: string,
@@ -416,9 +423,31 @@ export class InvoicesService {
       throw new NotFoundException(`Customer ${input.customerId} not found`);
     }
 
+    const lines = input.lines ?? [];
+    // The total is RECOMPUTED from the rows rather than taken from the request. The form shows a
+    // running total from the same shared helper, so the two agree — but what goes on the tax
+    // document is what its own rows add up to, never a number the client asserted.
+    const grossAmount =
+      lines.length > 0 ? customInvoiceTotal(lines) : (input.grossAmount ?? 0);
+    if (grossAmount <= 0) {
+      throw new BadRequestException(
+        lines.length > 0
+          ? 'The shipment rows add up to zero — there is nothing to invoice'
+          : 'An amount is required',
+      );
+    }
+    const description =
+      input.description?.trim() ||
+      (lines.length > 0
+        ? `Freight charges — ${lines.length} shipment${lines.length === 1 ? '' : 's'} as per the schedule below`
+        : null);
+    if (!description) {
+      throw new BadRequestException('A description is required');
+    }
+
     const gstPercent =
       this.config.get<number>('INVOICE_GST_PERCENT') ?? DEFAULT_GST_PERCENT;
-    const taxableValue = round2(input.grossAmount / (1 + gstPercent / 100));
+    const taxableValue = round2(grossAmount / (1 + gstPercent / 100));
 
     // Customer carries only a free-text address, no structured state, so there is nothing
     // reliable to infer from. Falls back to the supplier's own state, which makes the supply
@@ -433,7 +462,7 @@ export class InvoicesService {
       taxableValue,
       // Subtracted rather than computed, so taxable + tax lands exactly on the gross the
       // customer was told.
-      round2(input.grossAmount - taxableValue),
+      round2(grossAmount - taxableValue),
       isIntraStateSupply(settings.stateCode, placeOfSupplyCode),
     );
 
@@ -451,7 +480,11 @@ export class InvoicesService {
         financialYear,
         orderId: null,
         customerId: customer.id,
-        customLineDescription: input.description,
+        customLineDescription: description,
+        customLines:
+          lines.length > 0
+            ? (lines as unknown as Prisma.InputJsonValue)
+            : Prisma.DbNull,
         invoiceDate,
 
         supplierName: settings.legalName!,
@@ -474,7 +507,7 @@ export class InvoicesService {
         taxableValue,
         ...split,
         nonTaxableCharges: 0,
-        totalAmount: round2(input.grossAmount),
+        totalAmount: round2(grossAmount),
         breakdownSource: 'CUSTOM',
         issuedByAdminId: actorId,
       },
@@ -482,7 +515,13 @@ export class InvoicesService {
 
     const pdfPath = await this.storePdf(
       invoice,
-      { shipments: [], destination: null, weightKg: null },
+      {
+        shipments: [],
+        destination: null,
+        weightKg: null,
+        // The schedule prints as its own table; the single derived line is replaced by it.
+        customLines: lines.length > 0 ? lines : undefined,
+      },
       settings,
     );
 
@@ -739,13 +778,60 @@ export class InvoicesService {
 
   async readPdf(id: string): Promise<{ buffer: Buffer; filename: string }> {
     const invoice = await this.findOne(id);
+    // A numbered invoice with no PDF used to be a dead end: the row is created first and the
+    // document rendered and uploaded after, so a storage outage at that moment burned a number
+    // from the statutory series and left a bill nobody could ever download. Rendering it now
+    // closes that hole — and only when the file is MISSING. An invoice that already has one is
+    // never re-rendered: the stored PDF is the tax record, and reprinting it from today's
+    // company settings would quietly rewrite history.
     if (!invoice.pdfPath) {
-      throw new NotFoundException(
-        `Invoice ${invoice.invoiceNumber} has no rendered PDF`,
-      );
+      const repaired = await this.repairMissingPdf(invoice);
+      return { buffer: repaired, filename: this.filenameFor(invoice) };
     }
     const buffer = await this.storage.get(invoice.pdfPath);
     return { buffer, filename: this.filenameFor(invoice) };
+  }
+
+  /**
+   * Render and store the document for an invoice that has none, and remember where it went.
+   *
+   * Uses the invoice's OWN frozen columns for everything statutory — the parties, the place of
+   * supply, the tax split — so what comes out is the bill that was issued, not a fresh one priced
+   * at today's rates. Only the presentation (logo, terms) comes from current settings, which is
+   * the same thing that would have happened had the upload succeeded first time.
+   */
+  private async repairMissingPdf(invoice: Invoice): Promise<Buffer> {
+    const settings = await this.companySettings.get();
+    const order = invoice.orderId
+      ? await this.prisma.order.findUnique({
+          where: { id: invoice.orderId },
+          ...ORDER_FOR_INVOICE,
+        })
+      : null;
+
+    const pdfPath = order
+      ? await this.renderAndStorePdf(invoice, order, settings)
+      : await this.storePdf(
+          invoice,
+          {
+            shipments: [],
+            destination: null,
+            weightKg: null,
+            customLines:
+              (invoice.customLines as CustomInvoiceLineDto[] | null) ??
+              undefined,
+          },
+          settings,
+        );
+
+    await this.prisma.invoice.update({
+      where: { id: invoice.id },
+      data: { pdfPath },
+    });
+    this.logger.warn(
+      `Invoice ${invoice.invoiceNumber} had no stored PDF; rendered one on demand`,
+    );
+    return this.storage.get(pdfPath);
   }
 
   /** Slashes are illegal in filenames and the invoice number is full of them. */

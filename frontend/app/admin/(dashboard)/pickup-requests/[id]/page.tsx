@@ -151,7 +151,7 @@ export default function AdminPickupRequestDetailPage() {
         </CardContent>
       </Card>
 
-      <ParcelContentsCard pickup={pickup} />
+      <ParcelContentsCard pickup={pickup} onDocumentUploaded={load} />
 
       <Card>
         <CardHeader>

@@ -227,14 +227,20 @@ model Order {
 
   /// Cancellation, which a customer may do themselves until an AWB is mapped. The fee charged is
   /// frozen here: it is derived from settings that change, and the customer was quoted this one.
-  cancelledAt                DateTime? @map("cancelled_at")
-  cancellationReason         String?   @map("cancellation_reason")
-  cancellationFee            Float?    @map("cancellation_fee")
+  cancelledAt        DateTime? @map("cancelled_at")
+  cancellationReason String?   @map("cancellation_reason")
+  cancellationFee    Float?    @map("cancellation_fee")
+  /// Whether the parcel itself came back after the order was called off. Separate from the
+  /// refund: money and goods move independently, and "cancelled, refunded, still holding the
+  /// parcel" is a real and common state that one flag could not express.
+  returnedAt         DateTime? @map("returned_at")
+  returnNote         String?   @map("return_note")
+
   /// Warehouse-to-pickup distance the per-km part of the fee was charged on, and whether it was
   /// the driving route or the straight-line fallback. Null when the pickup address had no
   /// coordinates to measure from.
-  cancellationDistanceKm     Float?    @map("cancellation_distance_km")
-  cancellationDistanceSource String?   @map("cancellation_distance_source")
+  cancellationDistanceKm     Float?  @map("cancellation_distance_km")
+  cancellationDistanceSource String? @map("cancellation_distance_source")
 
   /// The coupon applied when the payment was recorded, and the rupees it took off. The amount is
   /// frozen here because a coupon can be edited or retired after the order it discounted.
@@ -1118,6 +1124,11 @@ model Invoice {
   /// What is being billed, for an invoice with no order to describe it. Null on order-backed
   /// invoices, whose line is derived from the shipment.
   customLineDescription String? @map("custom_line_description")
+  /// The freight schedule a custom invoice bills, one entry per AWB:
+  /// [{ awbNumber, supplyDate, destination, network, service, weightKg, amount, otherCharges,
+  ///    pss, fsc }] — see CustomInvoiceLineDto. Null on every invoice billed as a single line.
+  /// Frozen with the document: these are the figures the tax was computed on.
+  customLines           Json?   @map("custom_lines")
 
   status      InvoiceStatus @default(ISSUED)
   invoiceDate DateTime      @map("invoice_date")
@@ -1513,6 +1524,10 @@ model Expense {
   /// The vendor's bill/reference number, when there is one. Free text: every vendor numbers
   /// differently and none of it is ours to validate.
   referenceNo   String?       @map("reference_no")
+  /// S3 key of the vendor's own bill, photographed or saved as a PDF. Optional: plenty of real
+  /// spending has no document behind it, and a required field would be filled with noise.
+  receiptKey    String?       @map("receipt_key")
+  receiptName   String?       @map("receipt_name")
 
   recordedByAdminId String @map("recorded_by_admin_id")
 
