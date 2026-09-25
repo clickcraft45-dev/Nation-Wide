@@ -22,7 +22,11 @@ const baseShipment = {
   order: {
     customerId: 'customer-1',
     customer: { name: 'Asha Menon' },
-    quote: { items: [{ description: 'Saree', quantity: 2, unitValue: 1200 }] },
+    quote: {
+      items: [{ description: 'Saree', quantity: 2, unitValue: 1200 }],
+      destName: 'Travis Head',
+      destPhone: '+911234567890',
+    },
   },
 };
 
@@ -192,6 +196,8 @@ describe('TrackingService', () => {
     expect(result).toEqual({
       internalTrackingNumber: 'NW-1',
       customerName: 'Asha Menon',
+      consigneeName: 'Travis Head',
+      consigneePhone: '+911234567890',
       items: [{ description: 'Saree', quantity: 2, unitValue: 1200 }],
       // No AWB mapped yet, so there is no carrier page to send anyone to.
       carrier: null,
@@ -222,6 +228,8 @@ describe('TrackingService', () => {
     const result = await service.getStatus('NW-1');
 
     expect(result.customerName).toBe('Asha Menon');
+    expect(result.consigneeName).toBe('Travis Head');
+    expect(result.consigneePhone).toBe('+911234567890');
     expect(result.items).toEqual([
       { description: 'Saree', quantity: 2, unitValue: 1200 },
     ]);

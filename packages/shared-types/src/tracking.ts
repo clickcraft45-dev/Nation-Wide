@@ -32,6 +32,13 @@ export interface TrackingResultDto {
   internalTrackingNumber: string;
   /** Who booked the shipment, as it is on the order. */
   customerName: string;
+  /**
+   * The receiving party — name and phone as entered on the booking, whoever entered it (the
+   * customer, staff, or the pickup partner at the door). Null only for a booking made before a
+   * destination was recorded at all.
+   */
+  consigneeName: string | null;
+  consigneePhone: string | null;
   /** What is inside, when the order recorded it. Empty when the contents were never captured. */
   items: ShipmentItemDto[];
   carrier: TrackingCarrierDto | null;

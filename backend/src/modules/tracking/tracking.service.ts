@@ -32,7 +32,7 @@ const TERMINAL_STATUSES: TrackingStatusCode[] = ['DELIVERED'];
  *  on the live path, the cached path and the stale-data fallback. */
 type ShipmentDetails = Pick<
   TrackingResultDto,
-  'customerName' | 'items' | 'carrier'
+  'customerName' | 'consigneeName' | 'consigneePhone' | 'items' | 'carrier'
 >;
 
 @Injectable()
@@ -75,6 +75,8 @@ export class TrackingService {
     );
     const details: ShipmentDetails = {
       customerName: shipment.order.customer.name,
+      consigneeName: shipment.order.quote?.destName ?? null,
+      consigneePhone: shipment.order.quote?.destPhone ?? null,
       items: (shipment.order.quote?.items as ShipmentItemDto[] | null) ?? [],
       carrier: externalTrackingNumber
         ? {
@@ -176,8 +178,10 @@ export class TrackingService {
           customerId: true,
           customer: { select: { name: true } },
           // Contents live on the quote the order was accepted from — the commercial-invoice
-          // lines the customer (or the pickup partner at the door) filled in.
-          quote: { select: { items: true } },
+          // lines the customer (or the pickup partner at the door) filled in. destName/destPhone
+          // are the consignee, on the same row regardless of which flow booked the shipment (see
+          // pickup-requests.service.ts's recipientToQuoteData).
+          quote: { select: { items: true, destName: true, destPhone: true } },
         },
       },
     } as const;

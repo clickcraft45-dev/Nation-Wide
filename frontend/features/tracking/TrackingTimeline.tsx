@@ -27,6 +27,21 @@ export function TrackingTimeline({ result }: { result: TrackingResultDto }) {
     { label: "Status", value: result.currentStatusLabel },
     { label: "Sender", value: result.customerName },
     {
+      label: "Consignee",
+      // Null only for a booking made before a destination was ever recorded — everything else
+      // (self-service, staff manual quote, partner taking it down at the door) fills this in.
+      value: result.consigneeName ? (
+        <>
+          {result.consigneeName}
+          {result.consigneePhone && (
+            <span className="text-muted-foreground"> · {result.consigneePhone}</span>
+          )}
+        </>
+      ) : (
+        "—"
+      ),
+    },
+    {
       label: "Carrier",
       // Straight through to the carrier's own tracking page when they have one — their page has
       // scans we have not synced yet. Plain text for a reseller with no public page.
