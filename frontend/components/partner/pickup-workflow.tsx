@@ -641,6 +641,26 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
                             </span>
                           </div>
                         )}
+                        {/* The customer WILL ask why it changed, and "the system says so" is not
+                            an answer anyone can give at a doorstep. */}
+                        {preview.changes.length > 0 && (
+                          <div className="mt-2 space-y-1 border-t border-border pt-2">
+                            <p className="text-xs font-medium text-foreground">
+                              Why the price changed
+                            </p>
+                            {preview.changes.map((change) => (
+                              <div
+                                key={change.label}
+                                className="flex items-center justify-between text-xs text-muted-foreground"
+                              >
+                                <span>{change.label}</span>
+                                <span>
+                                  {change.from} → <span className="text-foreground">{change.to}</span>
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     )}
                     {!isRecalculating && !preview && (

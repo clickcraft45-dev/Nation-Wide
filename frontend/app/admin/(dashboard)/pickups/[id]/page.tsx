@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, User, Truck } from "lucide-react";
+import { User, Truck } from "lucide-react";
+import { BackLink } from "@/components/ui/back-link";
 import type { PickupDto, PickupStatusCode } from "@nationwide/shared-types";
 import { apiClient, ApiError } from "@/lib/api-client";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -56,13 +56,7 @@ export default function AdminPickupDetailPage() {
 
   return (
     <div className="max-w-2xl space-y-6">
-      <Link
-        href="/admin/pickups"
-        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="h-4 w-4" aria-hidden />
-        Back to pickups
-      </Link>
+      <BackLink href="/admin/pickups">Back to pickups</BackLink>
 
       {isLoading && (
         <div className="space-y-4">

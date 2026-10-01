@@ -11,6 +11,7 @@ import type { Invoice } from '@prisma/client';
 import { Prisma } from '@prisma/client';
 import {
   customInvoiceTotal,
+  type ConsolidatedOrderCandidateDto,
   type CustomInvoiceLineDto,
 } from '@nationwide/shared-types';
 import { PrismaService } from '../../database/prisma.service';
@@ -102,78 +103,23 @@ export class InvoicesService {
     from: Date,
     to: Date,
     actorId: string,
+    orderIds?: string[],
   ): Promise<{ invoice: Invoice; skipped: { orderId: string }[] }> {
-    if (from > to) {
-      throw new BadRequestException('"from" must not be after "to"');
-    }
+    const { customer, billable: candidates, skipped } =
+      await this.collectConsolidatable(customerId, from, to);
     const settings = await this.requireCompleteSettings();
 
-    const customer = await this.prisma.customer.findUnique({
-      where: { id: customerId },
-    });
-    if (!customer) {
-      throw new NotFoundException(`Customer ${customerId} not found`);
-    }
-
-    const orders = await this.prisma.order.findMany({
-      where: {
-        customerId,
-        createdAt: { gte: from, lte: to },
-        status: { not: 'CANCELLED' },
-        paymentStatus: 'PAID',
-      },
-      orderBy: { createdAt: 'asc' },
-      ...ORDER_FOR_INVOICE,
-    });
-
-    const skipped: { orderId: string }[] = [];
-    const billable: {
-      order: OrderForInvoice;
-      breakdown: NonNullable<ReturnType<typeof resolveChargedBreakdown>>;
-    }[] = [];
-
-    for (const order of orders) {
-      const alreadyBilled = await this.prisma.invoice.findUnique({
-        where: { orderId: order.id },
-        select: { id: true },
-      });
-      const alreadyOnAnInvoice = alreadyBilled
-        ? true
-        : (await this.prisma.invoiceLine.findUnique({
-            where: { orderId: order.id },
-            select: { id: true },
-          })) !== null;
-      if (alreadyOnAnInvoice) {
-        skipped.push({ orderId: order.id });
-        continue;
-      }
-
-      const breakdown = resolveChargedBreakdown({
-        verified: order.pickupRequest
-          ? {
-              taxableSubtotal: order.pickupRequest.verifiedTaxableSubtotal,
-              gstAmount: order.pickupRequest.verifiedGstAmount,
-              nationwideCut: order.pickupRequest.verifiedNationwideCut,
-              price: order.pickupRequest.verifiedPrice,
-            }
-          : null,
-        rateOption: order.quote?.selectedOption ?? null,
-        manualGrossAmount:
-          order.quote?.quotedAmount ?? order.paidAmount ?? null,
-        fallbackGstPercent: DEFAULT_GST_PERCENT,
-      });
-      // An order with no priced amount cannot contribute a line. Skipped rather than fatal: one
-      // unpriced order must not block a bill covering the other thirty-nine.
-      if (!breakdown) {
-        skipped.push({ orderId: order.id });
-        continue;
-      }
-      billable.push({ order, breakdown });
-    }
+    // An explicit selection bills only the rows the admin ticked in the preview. Without one the
+    // whole window is billed, which is what this did before the preview existed.
+    const billable = orderIds
+      ? candidates.filter(({ order }) => orderIds.includes(order.id))
+      : candidates;
 
     if (billable.length === 0) {
       throw new BadRequestException(
-        'No unbilled paid orders in that period for this customer',
+        orderIds
+          ? 'None of the selected orders can be billed'
+          : 'No unbilled paid orders in that period for this customer',
       );
     }
 
@@ -314,6 +260,164 @@ export class InvoicesService {
       }),
       skipped,
     };
+  }
+
+  /**
+   * Everything a consolidated bill for this window COULD cover, so the admin can see the orders
+   * and tick the ones to bill before a numbered document exists. Issuing blind — the only option
+   * before this — meant finding out what was on the invoice by reading the PDF afterwards, and a
+   * tax invoice cannot simply be redone.
+   *
+   * Rows that cannot be billed are returned too, with the reason, rather than omitted: "that
+   * parcel is missing" is a question the office will otherwise ask every time.
+   */
+  async previewConsolidated(
+    customerId: string,
+    from: Date,
+    to: Date,
+  ): Promise<ConsolidatedOrderCandidateDto[]> {
+    const { billable, skipped } = await this.collectConsolidatable(
+      customerId,
+      from,
+      to,
+    );
+    const settings = await this.requireCompleteSettings();
+
+    const rows = [
+      ...billable.map(({ order, breakdown }) => ({
+        order,
+        amount: round2(breakdown.taxableValue + breakdown.nonTaxableCharges),
+        blockedReason: null as string | null,
+      })),
+      ...skipped.map(({ order, reason }) => ({
+        order,
+        amount: null,
+        blockedReason: reason,
+      })),
+    ].sort((a, b) => a.order.createdAt.getTime() - b.order.createdAt.getTime());
+
+    return rows.map(({ order, amount, blockedReason }) => ({
+      orderId: order.id,
+      trackingNumber: order.shipments[0]?.internalTrackingNumber ?? null,
+      destination: order.quote
+        ? `${order.quote.destCity}, ${order.quote.destCountry}`
+        : null,
+      contents: this.contentsFor(order),
+      placeOfSupply: this.placeOfSupplyFor(order, settings),
+      createdAt: order.createdAt.toISOString(),
+      amount,
+      blockedReason,
+    }));
+  }
+
+  /**
+   * The paid, uncancelled orders in a window, split into what can go on a consolidated invoice
+   * and what cannot. Shared by the preview and the issue itself so the list the admin ticks is
+   * built by the same code that bills it — two separate queries would eventually disagree.
+   */
+  private async collectConsolidatable(
+    customerId: string,
+    from: Date,
+    to: Date,
+  ): Promise<{
+    customer: { id: string; name: string; phone: string; gstin: string | null; address: string | null };
+    billable: {
+      order: OrderForInvoice;
+      breakdown: NonNullable<ReturnType<typeof resolveChargedBreakdown>>;
+    }[];
+    skipped: { orderId: string; order: OrderForInvoice; reason: string }[];
+  }> {
+    if (from > to) {
+      throw new BadRequestException('"from" must not be after "to"');
+    }
+
+    const customer = await this.prisma.customer.findUnique({
+      where: { id: customerId },
+    });
+    if (!customer) {
+      throw new NotFoundException(`Customer ${customerId} not found`);
+    }
+
+    const orders = await this.prisma.order.findMany({
+      where: {
+        customerId,
+        createdAt: { gte: from, lte: to },
+        status: { not: 'CANCELLED' },
+        paymentStatus: 'PAID',
+      },
+      orderBy: { createdAt: 'asc' },
+      ...ORDER_FOR_INVOICE,
+    });
+
+    const skipped: { orderId: string; order: OrderForInvoice; reason: string }[] =
+      [];
+    const billable: {
+      order: OrderForInvoice;
+      breakdown: NonNullable<ReturnType<typeof resolveChargedBreakdown>>;
+    }[] = [];
+
+    for (const order of orders) {
+      const alreadyBilled = await this.prisma.invoice.findUnique({
+        where: { orderId: order.id },
+        select: { id: true },
+      });
+      const alreadyOnAnInvoice = alreadyBilled
+        ? true
+        : (await this.prisma.invoiceLine.findUnique({
+            where: { orderId: order.id },
+            select: { id: true },
+          })) !== null;
+      if (alreadyOnAnInvoice) {
+        skipped.push({
+          orderId: order.id,
+          order,
+          reason: 'Already on an invoice',
+        });
+        continue;
+      }
+
+      const breakdown = resolveChargedBreakdown({
+        verified: order.pickupRequest
+          ? {
+              taxableSubtotal: order.pickupRequest.verifiedTaxableSubtotal,
+              gstAmount: order.pickupRequest.verifiedGstAmount,
+              nationwideCut: order.pickupRequest.verifiedNationwideCut,
+              price: order.pickupRequest.verifiedPrice,
+            }
+          : null,
+        rateOption: order.quote?.selectedOption ?? null,
+        manualGrossAmount:
+          order.quote?.quotedAmount ?? order.paidAmount ?? null,
+        fallbackGstPercent: DEFAULT_GST_PERCENT,
+      });
+      // An order with no priced amount cannot contribute a line. Skipped rather than fatal: one
+      // unpriced order must not block a bill covering the other thirty-nine.
+      if (!breakdown) {
+        skipped.push({ orderId: order.id, order, reason: 'No priced amount' });
+        continue;
+      }
+      billable.push({ order, breakdown });
+    }
+
+    return { customer, billable, skipped };
+  }
+
+  /** What is inside, as one short line — so the office sees what it is billing for. */
+  private contentsFor(order: OrderForInvoice): string | null {
+    const items = order.quote?.items;
+    if (!Array.isArray(items)) return null;
+    const parts = items.flatMap((item) => {
+      if (!item || typeof item !== 'object') return [];
+      const { description, quantity } = item as {
+        description?: unknown;
+        quantity?: unknown;
+      };
+      if (typeof description !== 'string' || !description.trim()) return [];
+      const qty =
+        typeof quantity === 'number' && quantity > 1 ? `${quantity} × ` : '';
+      return [`${qty}${description.trim()}`];
+    });
+    return parts.length > 0 ? parts.join(', ') : null;
   }
 
   /**

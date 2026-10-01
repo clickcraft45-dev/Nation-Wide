@@ -2,7 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Crosshair, MapPin } from "lucide-react";
-import { loadGoogleMaps, parseAddressComponents, type PickedAddress } from "@/lib/google-maps";
+import {
+  googleMapsEnabled,
+  loadGoogleMaps,
+  parseAddressComponents,
+  type PickedAddress,
+} from "@/lib/google-maps";
+import { AddressAutocomplete } from "@/components/ui/address-autocomplete";
 import { cn } from "@/lib/utils/cn";
 
 const INDIA = { lat: 20.5937, lng: 78.9629 };
@@ -32,6 +38,7 @@ export function MapPinField({
   const onChangeRef = useRef(onChange);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [address, setAddress] = useState("");
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     onChangeRef.current = onChange;
@@ -137,6 +144,27 @@ export function MapPinField({
 
   return (
     <div className="space-y-2">
+      {/* Searching beats dragging the whole way across the country from the default view. The
+          map follows whatever is picked; the pin can still be nudged afterwards. */}
+      {googleMapsEnabled() && (
+        <AddressAutocomplete
+          value={search}
+          onChange={setSearch}
+          onSelect={(picked) => {
+            setSearch(picked.formatted || picked.addressLine1);
+            if (picked.latitude != null && picked.longitude != null) {
+              mapRef.current?.setCenter({ lat: picked.latitude, lng: picked.longitude });
+              mapRef.current?.setZoom(17);
+            }
+            // Reported directly as well as via the map's own idle handler, so a search still
+            // pins the spot when the map itself failed to load.
+            onChange(picked);
+          }}
+          regionCodes={["in"]}
+          placeholder="Search a place, area or landmark…"
+          aria-label="Search for a location"
+        />
+      )}
       <div className={cn("relative h-72 overflow-hidden rounded-2xl border border-border bg-muted", className)}>
         <div ref={mapEl} className="h-full w-full" />
         {/* The pin stays put; the map moves under it. Its tip marks the exact spot. */}

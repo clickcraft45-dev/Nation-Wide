@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
 import {
+  Equals,
   IsBoolean,
   IsIn,
   IsISO8601,
@@ -104,4 +105,9 @@ export class CreatePickupRequestDto {
   // Required: carriers will not move a parcel without declared contents.
   @ItemsList()
   items!: ShipmentItemDto[];
+
+  // Enforced at the boundary, not just in the app's UI — a request submitted any other way (a
+  // replayed request, a script) must carry the same acceptance the checkbox represents.
+  @Equals(true, { message: 'You must accept the Terms and Conditions of Carriage.' })
+  acceptedTerms!: true;
 }

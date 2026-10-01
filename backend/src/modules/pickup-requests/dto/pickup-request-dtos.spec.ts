@@ -25,7 +25,18 @@ describe('CreatePickupRequestDto', () => {
     pickupContactName: 'Devi Ankana',
     pickupContactPhone: '1234567890',
     items: [{ description: 'Books', quantity: 1, unitValue: 250 }],
+    acceptedTerms: true,
   };
+
+  it('requires the Terms and Conditions of Carriage to be accepted', async () => {
+    expect(
+      await failedFields(CreatePickupRequestDto, {
+        ...base,
+        dropAtWarehouse: true,
+        acceptedTerms: false,
+      }),
+    ).toEqual(['acceptedTerms']);
+  });
 
   it('accepts a warehouse drop-off with no pickup address', async () => {
     expect(

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { MapPinOff } from "lucide-react";
 import type { PickupRequestDto } from "@nationwide/shared-types";
 import { apiClient, errorMessage } from "@/lib/api-client";
@@ -112,7 +113,16 @@ export default function PartnerMapPage() {
 
       {unlocated > 0 && (
         <p className="text-xs text-muted-foreground">
-          {unlocated} active pickup(s) have no map pin — find them under Scheduled Pickups.
+          {unlocated} active pickup(s) have no map pin, so they can&apos;t show here — find them
+          under{" "}
+          <Link href="/partner/requests" className="font-medium text-primary hover:underline">
+            Requests
+          </Link>{" "}
+          or{" "}
+          <Link href="/partner/pickups" className="font-medium text-primary hover:underline">
+            Pickups
+          </Link>
+          .
         </p>
       )}
     </div>

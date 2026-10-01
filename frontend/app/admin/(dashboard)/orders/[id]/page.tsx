@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, MapPin, User } from "lucide-react";
+import { MapPin, User } from "lucide-react";
 import type {
   OrderDto,
   CustomerDto,
@@ -12,6 +12,7 @@ import type {
 } from "@nationwide/shared-types";
 import { apiClient, ApiError } from "@/lib/api-client";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { BackLink } from "@/components/ui/back-link";
 import { ErrorState } from "@/components/ui/page-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { OrderStatusBadge } from "@/components/ui/status-badge";
@@ -79,13 +80,7 @@ export default function AdminOrderDetailPage() {
 
   return (
     <div className="max-w-6xl space-y-6">
-      <Link
-        href="/admin/orders"
-        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="h-4 w-4" aria-hidden />
-        Back to orders
-      </Link>
+      <BackLink href="/admin/orders">Back to orders</BackLink>
 
       {isLoading && (
         <div className="space-y-4">

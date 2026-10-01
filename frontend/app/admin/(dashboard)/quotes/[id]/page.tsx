@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, MapPin, Package, User, Truck, Receipt } from "lucide-react";
+import { MapPin, Package, User, Truck, Receipt } from "lucide-react";
+import { BackLink } from "@/components/ui/back-link";
 import type { QuoteAdminDetailDto } from "@nationwide/shared-types";
 import { apiClient, ApiError } from "@/lib/api-client";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -80,13 +81,7 @@ export default function AdminQuoteDetailPage() {
 
   return (
     <div className="max-w-3xl space-y-6">
-      <Link
-        href="/admin/quotes"
-        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="h-4 w-4" aria-hidden />
-        Back to quote requests
-      </Link>
+      <BackLink href="/admin/quotes">Back to quote requests</BackLink>
 
       {isLoading && (
         <div className="space-y-4">

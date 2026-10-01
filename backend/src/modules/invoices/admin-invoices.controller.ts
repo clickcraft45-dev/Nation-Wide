@@ -15,6 +15,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/types/jwt-payload.type';
 import type {
+  ConsolidatedOrderCandidateDto,
   InvoiceBatchResultDto,
   InvoiceDto,
   InvoiceListDto,
@@ -22,6 +23,7 @@ import type {
 import { InvoicesService } from './invoices.service';
 import { toInvoiceDto } from './invoice.mapper';
 import { ConsolidateInvoiceDto } from './dto/consolidate-invoice.dto';
+import { PreviewConsolidatedDto } from './dto/preview-consolidated.dto';
 import { SendInvoicesDto } from './dto/send-invoices.dto';
 import { CancelInvoiceDto } from './dto/cancel-invoice.dto';
 import { QueryInvoicesDto } from './dto/query-invoices.dto';
@@ -59,8 +61,26 @@ export class AdminInvoicesController {
       dto.from,
       dto.to,
       user.sub,
+      dto.orderIds,
     );
     return { invoice: toInvoiceDto(invoice), skipped };
+  }
+
+  /**
+   * What a consolidated invoice over this window WOULD bill — read-only, issues nothing.
+   *
+   * A tax invoice is a numbered, permanent record that cannot simply be redone, so the office
+   * sees the orders and ticks the ones it means to bill before any number is consumed.
+   */
+  @Get('consolidate/preview')
+  previewConsolidated(
+    @Query() query: PreviewConsolidatedDto,
+  ): Promise<ConsolidatedOrderCandidateDto[]> {
+    return this.invoices.previewConsolidated(
+      query.customerId,
+      query.from,
+      query.to,
+    );
   }
 
   // Kept next to consolidate: both issue numbers in the same statutory series and the two are

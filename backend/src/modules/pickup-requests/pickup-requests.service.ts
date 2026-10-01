@@ -13,10 +13,14 @@ import {
   type B2bRequestSummaryDto,
   type PickupDocumentsDto,
   type PickupRequestStatusCode,
+  type PriceChangeDto,
   type RecalculatePreviewDto,
+  type ShipmentTypeCode,
 } from '@nationwide/shared-types';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../database/prisma.service';
 import { StorageService } from '../../database/storage.service';
+import { publicFrontendUrl } from '../../common/config/public-urls';
 import { cleanItems, cleanPackages } from '../../common/dto/parcel.dto';
 import { AddressBookService } from '../customers/address-book.service';
 import { QuotesService } from '../quotes/quotes.service';
@@ -63,6 +67,12 @@ const withDetails = {
         destCountry: true,
         packages: true,
         items: true,
+        shipmentType: true,
+        weightKg: true,
+        // The breakdown as it stood when the customer was quoted. Re-pricing at the door uses
+        // today's rate card, so this is the only record of what they were originally told —
+        // and the only way to say WHY the figure moved.
+        selectedOption: true,
       },
     },
   },
@@ -70,6 +80,93 @@ const withDetails = {
 export type PickupRequestWithDetails = Prisma.PickupRequestGetPayload<
   typeof withDetails
 >;
+
+const rupees = (value: number) => `₹${value.toLocaleString('en-IN')}`;
+const percent = (value: number) => `${value}%`;
+
+/**
+ * Why the price at the door differs from the quote.
+ *
+ * The reprice deliberately runs against TODAY's rate card (see repriceAgainstOriginalProvider),
+ * so an edit to a tariff, fuel % or PSS after the quote moves the figure even for a parcel that
+ * is exactly as described. Comparing the quote's own stored breakdown against the fresh one is
+ * the only way to say which of those it was — without it the partner is left telling the
+ * customer "the system says so".
+ *
+ * Returns nothing when the quote has no stored breakdown (a manual/admin-priced quote), which is
+ * honest: there is no earlier breakdown to compare against, so no reason can be given.
+ */
+function explainPriceChange(
+  pickupRequest: PickupRequestWithDetails,
+  fresh: ComputedRateOption,
+  weightKg: number,
+  shipmentType: ShipmentTypeCode,
+): PriceChangeDto[] {
+  const quoted = pickupRequest.quote.selectedOption;
+  const changes: PriceChangeDto[] = [];
+
+  // The parcel itself first: these are the partner's own measurements, and the likeliest cause.
+  if (
+    pickupRequest.quote.weightKg != null &&
+    pickupRequest.quote.weightKg !== weightKg
+  ) {
+    changes.push({
+      label: 'Chargeable weight',
+      from: `${pickupRequest.quote.weightKg} kg`,
+      to: `${weightKg} kg`,
+    });
+  }
+  if (
+    pickupRequest.quote.shipmentType &&
+    pickupRequest.quote.shipmentType !== shipmentType
+  ) {
+    changes.push({
+      label: 'Shipment type',
+      from: pickupRequest.quote.shipmentType,
+      to: shipmentType,
+    });
+  }
+
+  if (!quoted) return changes;
+
+  if (quoted.baseRate !== fresh.baseRate) {
+    changes.push({
+      label: 'Carrier base rate',
+      from: rupees(quoted.baseRate),
+      to: rupees(fresh.baseRate),
+    });
+  }
+  if (quoted.fuelChargePercent !== fresh.fuelChargePercent) {
+    changes.push({
+      label: 'Fuel surcharge',
+      from: percent(quoted.fuelChargePercent),
+      to: percent(fresh.fuelChargePercent),
+    });
+  }
+  if (quoted.pssAmount !== fresh.pssAmount) {
+    changes.push({
+      label: 'Peak season surcharge',
+      from: rupees(quoted.pssAmount),
+      to: rupees(fresh.pssAmount),
+    });
+  }
+  if (quoted.gstPercent !== fresh.gstPercent) {
+    changes.push({
+      label: 'GST',
+      from: percent(quoted.gstPercent),
+      to: percent(fresh.gstPercent),
+    });
+  }
+  if (quoted.nationwideCut !== fresh.nationwideCut) {
+    changes.push({
+      label: 'Handling charge',
+      from: rupees(quoted.nationwideCut),
+      to: rupees(fresh.nationwideCut),
+    });
+  }
+
+  return changes;
+}
 
 const NON_TERMINAL_STATUSES: PickupRequestStatusCode[] = [
   'PENDING_ASSIGNMENT',
@@ -182,6 +279,7 @@ export class PickupRequestsService {
     private readonly quotesService: QuotesService,
     // Aadhaar and parcel photos taken at the door.
     private readonly storage: StorageService,
+    private readonly config: ConfigService,
   ) {}
 
   async create(
@@ -271,7 +369,7 @@ export class PickupRequestsService {
       customerId,
       'WHATSAPP',
       NOTIFICATION_TEMPLATES.PICKUP_REQUEST_RECEIVED,
-      {},
+      { termsUrl: `${publicFrontendUrl(this.config)}/terms` },
     );
 
     // Broadcast, not auto-assign (Rapido/Blinkit style): the request stays PENDING_ASSIGNMENT
@@ -542,7 +640,7 @@ export class PickupRequestsService {
         customerId,
         'WHATSAPP',
         NOTIFICATION_TEMPLATES.PICKUP_REQUEST_RECEIVED,
-        {},
+        { termsUrl: `${publicFrontendUrl(this.config)}/terms` },
       );
       for (const pickupRequest of booked) {
         if (opts.partnerId) {
@@ -898,6 +996,9 @@ export class PickupRequestsService {
       difference:
         recalculatedPrice === null ? null : recalculatedPrice - estimatedPrice,
       currency: pickupRequest.currency,
+      changes: recalculated
+        ? explainPriceChange(pickupRequest, recalculated, dto.weightKg, dto.shipmentType)
+        : [],
     };
   }
 
@@ -941,6 +1042,16 @@ export class PickupRequestsService {
         after: { arrivedAt: new Date().toISOString() },
       },
     });
+
+    // The customer agrees to the carriage terms by handing the parcel over, so the link goes out
+    // the moment the partner is actually at the door — not earlier, when there is nothing yet to
+    // agree to.
+    await this.notificationsService.enqueue(
+      pickupRequest.customerId,
+      'WHATSAPP',
+      NOTIFICATION_TEMPLATES.PICKUP_PARTNER_ARRIVED,
+      { termsUrl: `${publicFrontendUrl(this.config)}/terms` },
+    );
 
     return this.findOne(id);
   }

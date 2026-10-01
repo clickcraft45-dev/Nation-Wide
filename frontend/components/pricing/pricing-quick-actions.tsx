@@ -1,4 +1,3 @@
-import Link from "next/link";
 import {
   Receipt,
   FileText,
@@ -8,6 +7,7 @@ import {
   FileClock,
   type LucideIcon,
 } from "lucide-react";
+import { ActionTile } from "@/components/ui/action-tile";
 
 interface QuickAction {
   label: string;
@@ -27,19 +27,9 @@ const ACTIONS: QuickAction[] = [
 export function PricingQuickActions() {
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-      {ACTIONS.map((action) => {
-        const Icon = action.icon;
-        return (
-          <Link
-            key={action.href}
-            href={action.href}
-            className="glass glass-interactive glass-sheen flex flex-col items-center gap-2 rounded-2xl px-4 py-5 text-center transition-colors hover:border-primary hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <Icon className="h-5 w-5 text-primary" aria-hidden />
-            <span className="text-xs font-medium text-foreground">{action.label}</span>
-          </Link>
-        );
-      })}
+      {ACTIONS.map((action) => (
+        <ActionTile key={action.href} href={action.href} icon={action.icon} label={action.label} />
+      ))}
     </div>
   );
 }

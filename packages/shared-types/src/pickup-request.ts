@@ -66,6 +66,8 @@ export interface CreatePickupRequestDto {
   pickupInstructions?: string;
   /** Required: carriers will not move a parcel without declared contents. */
   items: ShipmentItemDto[];
+  /** Must be true — the server rejects a request that doesn't accept the carriage terms. */
+  acceptedTerms: true;
 }
 
 /** Staff booking a pickup on a customer's behalf, assigned straight to a partner. */
@@ -231,11 +233,28 @@ export interface RecalculateWeightDto {
   shipmentType: ShipmentTypeCode;
 }
 
+/**
+ * One thing that moved between the quote and the price at the door.
+ *
+ * The parcel is deliberately re-priced against TODAY's rate card, so a tariff, fuel or PSS edit
+ * after the quote changes the figure even when the parcel is exactly as described. Saying which
+ * component moved, and from what to what, is the difference between a partner who can answer
+ * "why is it more?" at the door and one who cannot.
+ */
+export interface PriceChangeDto {
+  label: string;
+  /** Formatted for reading, e.g. "18%" or "₹6,000". */
+  from: string;
+  to: string;
+}
+
 export interface RecalculatePreviewDto {
   estimatedPrice: number;
   recalculatedPrice: number | null; // null when no rate matches the corrected weight/shipmentType
   difference: number | null;
   currency: string;
+  /** Why the price moved. Empty when nothing did, or when the original breakdown isn't on file. */
+  changes: PriceChangeDto[];
 }
 
 // Persists the verification — the server re-runs the pricing engine itself from these inputs

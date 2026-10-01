@@ -2,12 +2,14 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { History, X } from "lucide-react";
-import type { TrackingResultDto } from "@nationwide/shared-types";
+import { History, MapPin, X } from "lucide-react";
+import type { OrderDto, TrackingResultDto } from "@nationwide/shared-types";
 import { apiClient, ApiError } from "@/lib/api-client";
+import { useAuth } from "@/state/auth-context";
 import { TrackingSearchForm } from "@/features/tracking/TrackingSearchForm";
 import { TrackingTimeline } from "@/features/tracking/TrackingTimeline";
 import { ErrorState } from "@/components/ui/page-state";
+import { TrackingStatusBadge } from "@/components/ui/status-badge";
 import {
   clearTrackingHistory,
   readTrackingHistory,
@@ -17,6 +19,7 @@ import {
 function CustomerTrackingPageInner() {
   const searchParams = useSearchParams();
   const initialTracking = searchParams.get("tracking") ?? undefined;
+  const { user } = useAuth();
 
   const [result, setResult] = useState<TrackingResultDto | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -24,11 +27,24 @@ function CustomerTrackingPageInner() {
   // Starts empty and is filled after mount: localStorage does not exist during the server render,
   // so seeding it in useState would render one thing on the server and another on the client.
   const [history, setHistory] = useState<string[]>([]);
+  const [activeOrders, setActiveOrders] = useState<OrderDto[]>([]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setHistory(readTrackingHistory());
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    apiClient
+      .get<OrderDto[]>("/orders/me")
+      .then((orders) =>
+        setActiveOrders(
+          orders.filter((order) => order.shipments[0]?.currentStatus !== "DELIVERED"),
+        ),
+      )
+      .catch(() => setActiveOrders([]));
+  }, [user]);
 
   async function handleSearch(trackingNumber: string) {
     setIsLoading(true);
@@ -74,6 +90,30 @@ function CustomerTrackingPageInner() {
         isLoading={isLoading}
         initialValue={initialTracking}
       />
+
+      {activeOrders.length > 0 && (
+        <div className="space-y-2">
+          <span className="text-xs font-medium text-muted-foreground">Your active shipments</span>
+          {activeOrders.map((order) => {
+            const shipment = order.shipments[0];
+            return (
+              <button
+                key={order.id}
+                type="button"
+                onClick={() => shipment && void handleSearch(shipment.internalTrackingNumber)}
+                disabled={!shipment}
+                className="glass glass-interactive flex w-full max-w-xl items-center justify-between rounded-2xl p-3 text-left active:bg-muted/60 disabled:opacity-60"
+              >
+                <span className="flex items-center gap-2 font-mono text-sm text-foreground">
+                  <MapPin className="h-4 w-4 text-muted-foreground" aria-hidden />
+                  {shipment?.internalTrackingNumber ?? order.id.slice(0, 8)}
+                </span>
+                <TrackingStatusBadge status={shipment?.currentStatus} />
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {history.length > 0 && (
         <div className="flex w-full max-w-xl flex-wrap items-center gap-2">

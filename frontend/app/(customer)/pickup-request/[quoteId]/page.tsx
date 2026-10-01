@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import { ArrowLeft, CheckCircle2 } from "lucide-react";
 import type { AddressBookDto, QuoteDto, SavedItemDto } from "@nationwide/shared-types";
 import { apiClient, errorMessage, fieldErrors } from "@/lib/api-client";
@@ -97,6 +98,9 @@ export default function PickupRequestPage() {
   const [items, setItems] = useState<ItemForm[]>(() => itemsFrom(null));
   const [savedItems, setSavedItems] = useState<SavedItemDto[]>([]);
   const [itemsError, setItemsError] = useState<string | null>(null);
+
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [termsError, setTermsError] = useState<string | null>(null);
 
   const [errors, setErrors] = useState<FormErrors>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -236,13 +240,18 @@ export default function PickupRequestPage() {
     }
     const nextRecipientErrors = addRecipient ? validateRecipient(recipient) : {};
     const nextItemsError = validateItems(items);
+    const nextTermsError = acceptedTerms
+      ? null
+      : "You must accept the Terms and Conditions of Carriage to book a pickup.";
     setErrors(next);
     setRecipientErrors(nextRecipientErrors);
     setItemsError(nextItemsError);
+    setTermsError(nextTermsError);
     return (
       Object.keys(next).length === 0 &&
       Object.keys(nextRecipientErrors).length === 0 &&
-      !nextItemsError
+      !nextItemsError &&
+      !nextTermsError
     );
   }
 
@@ -276,6 +285,7 @@ export default function PickupRequestPage() {
       await apiClient.post("/pickup-requests", {
         quoteId: quote.id,
         dropAtWarehouse,
+        acceptedTerms,
         pickupContactName: pickupContactName.trim(),
         pickupContactPhone: pickupContactPhone.trim(),
         // A warehouse drop-off has no pickup address — sending blanks is what the server used to
@@ -609,6 +619,28 @@ export default function PickupRequestPage() {
             </div>
           </CardContent>
         </Card>
+
+        <div aria-invalid={Boolean(termsError)} tabIndex={-1}>
+          <label className="flex items-start gap-2 text-sm text-foreground">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={acceptedTerms}
+              onChange={(e) => {
+                setAcceptedTerms(e.target.checked);
+                setTermsError(null);
+              }}
+            />
+            <span>
+              I agree to the Terms and Conditions of Carriage —{" "}
+              <Link href="/terms" target="_blank" className="font-medium text-primary underline">
+                click here to read them
+              </Link>
+              .
+            </span>
+          </label>
+          {termsError && <FieldError>{termsError}</FieldError>}
+        </div>
 
         {submitError && <FieldError>{submitError}</FieldError>}
 

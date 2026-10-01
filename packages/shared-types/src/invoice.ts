@@ -89,6 +89,26 @@ export interface GenerateInvoicesRequest {
 }
 
 /**
+ * One order a consolidated invoice could cover, shown before anything is issued so the office
+ * can tick what belongs on the bill. Rows that cannot be billed are listed too, with the reason,
+ * rather than quietly dropped.
+ */
+export interface ConsolidatedOrderCandidateDto {
+  orderId: string;
+  /** The AWB the customer knows it by; null before a shipment exists. */
+  trackingNumber: string | null;
+  destination: string | null;
+  /** What is inside, as one line — so the office sees what it is billing for. */
+  contents: string | null;
+  placeOfSupply: string;
+  createdAt: string; // ISO 8601
+  /** What this order adds to the bill. Null when it cannot be billed — see blockedReason. */
+  amount: number | null;
+  /** Null when it can go on the invoice; otherwise why it cannot. */
+  blockedReason: string | null;
+}
+
+/**
  * One shipment on a custom invoice's annexure — the shape of the freight schedule the office
  * already bills from: one row per AWB, with the charges that make up its total spelled out
  * separately because the customer reconciles them separately.

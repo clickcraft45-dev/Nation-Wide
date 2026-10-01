@@ -85,11 +85,14 @@ const BODIES: Record<string, BodyBuilder> = {
   [NOTIFICATION_TEMPLATES.PICKUP_REQUEST_NEEDED]: () =>
     `Your quote has been accepted. To continue, please schedule a pickup for your parcel or choose to drop it at our warehouse. You can do this from the NationWide Logistics app.`,
 
-  [NOTIFICATION_TEMPLATES.PICKUP_REQUEST_RECEIVED]: () =>
-    `We have received your pickup request with NationWide Logistics. A pickup partner will be assigned shortly, and you will get a message here as soon as that happens.`,
+  [NOTIFICATION_TEMPLATES.PICKUP_REQUEST_RECEIVED]: (v) =>
+    `We have received your pickup request with NationWide Logistics. A pickup partner will be assigned shortly, and you will get a message here as soon as that happens. By booking this shipment you agree to our Terms and Conditions of Carriage: ${or(v.termsUrl, 'available in the NationWide Logistics app')}.`,
 
   [NOTIFICATION_TEMPLATES.PICKUP_PARTNER_ASSIGNED]: () =>
     `A pickup partner has been assigned to your request and will arrive during the time slot you selected. Please keep your parcel packed and ready for collection.`,
+
+  [NOTIFICATION_TEMPLATES.PICKUP_PARTNER_ARRIVED]: (v) =>
+    `Our pickup partner has arrived to collect your parcel. By handing it over for shipment you agree to our Terms and Conditions of Carriage: ${or(v.termsUrl, 'available in the NationWide Logistics app')}.`,
 
   [NOTIFICATION_TEMPLATES.PICKUP_VERIFICATION_COMPLETE]: (v) =>
     `Your parcel has been weighed and verified by our pickup partner. The final price for your shipment is ${rupees(v.verifiedPrice)}. This is the amount payable for collection.`,

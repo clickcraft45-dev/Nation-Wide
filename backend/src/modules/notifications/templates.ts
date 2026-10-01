@@ -22,6 +22,7 @@ export const NOTIFICATION_TEMPLATES = {
   PICKUP_REQUEST_NEEDED: 'pickup_request_needed',
   PICKUP_REQUEST_RECEIVED: 'pickup_request_received',
   PICKUP_PARTNER_ASSIGNED: 'pickup_partner_assigned',
+  PICKUP_PARTNER_ARRIVED: 'pickup_partner_arrived',
   PICKUP_VERIFICATION_COMPLETE: 'pickup_verification_complete',
   PAYMENT_COLLECTED: 'payment_collected',
   ORDER_CREATED_FROM_PICKUP: 'order_created_from_pickup',

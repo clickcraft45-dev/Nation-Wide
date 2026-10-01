@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { BackLink } from "@/components/ui/back-link";
 import type { PickupRequestDto, PaymentMethodCode } from "@nationwide/shared-types";
 import { apiClient, errorMessage } from "@/lib/api-client";
 import { useToast } from "@/components/ui/toast";
@@ -86,12 +86,7 @@ export default function AdminPickupRequestDetailPage() {
 
   return (
     <div className="max-w-3xl space-y-6">
-      <Link
-        href="/admin/pickup-requests"
-        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="h-4 w-4" aria-hidden /> Back to pickup requests
-      </Link>
+      <BackLink href="/admin/pickup-requests">Back to pickup requests</BackLink>
 
       <div className="flex items-center justify-between">
         <div>

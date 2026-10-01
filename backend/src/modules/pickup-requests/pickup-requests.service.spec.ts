@@ -43,7 +43,16 @@ const basePickupRequest = {
   paymentCollectedAt: null,
   paymentMethod: null,
   collectedAmount: null,
-  quote: { destCity: 'NYC', destState: 'NY', destCountry: 'United States' },
+  quote: {
+    destCity: 'NYC',
+    destState: 'NY',
+    destCountry: 'United States',
+    shipmentType: 'PACKAGE',
+    weightKg: 5,
+    // A manual/admin-priced quote keeps no breakdown, so only the parcel's own facts can be
+    // compared — see explainPriceChange.
+    selectedOption: null,
+  },
   parcelPhotoKey: 'pickups/pr-1/parcel.jpg',
   customer: {
     name: 'Jane',
@@ -83,6 +92,7 @@ describe('PickupRequestsService', () => {
   let ordersService: { createOrderWithShipment: jest.Mock };
   let pricingEngineService: { computeQuotesForRequest: jest.Mock };
   let notificationsService: { enqueue: jest.Mock };
+  let config: { get: jest.Mock };
   let invoicesService: { generateForOrder: jest.Mock };
   let receiptsService: { issueAndSendQuietly: jest.Mock };
   let pushService: { sendToAdminUser: jest.Mock };
@@ -154,6 +164,7 @@ describe('PickupRequestsService', () => {
       put: jest.fn().mockResolvedValue(undefined),
       delete: jest.fn().mockResolvedValue(undefined),
     };
+    config = { get: jest.fn().mockReturnValue(undefined) };
     service = new PickupRequestsService(
       prisma as never,
       ordersService as never,
@@ -165,6 +176,7 @@ describe('PickupRequestsService', () => {
       addressBook as never,
       quotesService as never,
       storage as never,
+      config as never,
     );
   });
 
@@ -254,7 +266,7 @@ describe('PickupRequestsService', () => {
         'customer-1',
         'WHATSAPP',
         'pickup_request_received',
-        {},
+        { termsUrl: expect.stringContaining('/terms') },
       );
     });
 
@@ -276,6 +288,7 @@ describe('PickupRequestsService', () => {
             pickupCity: 'NYC',
             pickupState: 'NY',
             pickupPostalCode: '10001',
+            acceptedTerms: true,
           },
           'customer-1',
         ),
@@ -302,6 +315,7 @@ describe('PickupRequestsService', () => {
           pickupCity: 'NYC',
           pickupState: 'NY',
           pickupPostalCode: '10001',
+          acceptedTerms: true,
         },
         'customer-1',
       );
@@ -361,6 +375,7 @@ describe('PickupRequestsService', () => {
           pickupContactName: 'Jane',
           pickupContactPhone: '+911234567890',
           items: [{ description: 'Books', quantity: 2, unitValue: 300 }],
+          acceptedTerms: true,
         },
         'customer-1',
       );
@@ -792,6 +807,8 @@ describe('PickupRequestsService', () => {
         recalculatedPrice: 970,
         difference: 120,
         currency: 'INR',
+        // The partner has to be able to tell the customer WHY it went up at the door.
+        changes: [{ label: 'Chargeable weight', from: '5 kg', to: '6 kg' }],
       });
     });
 
@@ -836,6 +853,18 @@ describe('PickupRequestsService', () => {
             entityId: 'pr-1',
           }),
         }),
+      );
+    });
+
+    it('sends the customer the carriage terms link once the partner has actually arrived', async () => {
+      prisma.pickupRequest.findUnique.mockResolvedValue(notYetArrived);
+      await service.markArrived('pr-1', 'partner-1');
+
+      expect(notificationsService.enqueue).toHaveBeenCalledWith(
+        notYetArrived.customerId,
+        'WHATSAPP',
+        'pickup_partner_arrived',
+        { termsUrl: expect.stringContaining('/terms') },
       );
     });
 

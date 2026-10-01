@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, Pencil, Package, CreditCard, Truck, StickyNote, Trash2 } from "lucide-react";
+import { Pencil, Package, CreditCard, Truck, StickyNote, Trash2 } from "lucide-react";
+import { BackLink } from "@/components/ui/back-link";
 import type { CustomerDto, OrderDto, PickupDto } from "@nationwide/shared-types";
 import { apiClient, ApiError, errorMessage } from "@/lib/api-client";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -98,13 +99,7 @@ export default function AdminCustomerProfilePage() {
 
   return (
     <div className="max-w-3xl space-y-6">
-      <Link
-        href="/admin/customers"
-        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="h-4 w-4" aria-hidden />
-        Back to customers
-      </Link>
+      <BackLink href="/admin/customers">Back to customers</BackLink>
 
       {isLoading && (
         <div className="space-y-4">
