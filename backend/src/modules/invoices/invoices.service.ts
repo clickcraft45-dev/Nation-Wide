@@ -44,6 +44,8 @@ const ORDER_FOR_INVOICE = {
     quote: { include: { selectedOption: true } },
     pickupRequest: true,
     shipments: { include: { provider: true } },
+    // The code printed on the invoice beside the deduction it caused.
+    coupon: { select: { code: true } },
   },
 } satisfies Prisma.OrderDefaultArgs;
 
@@ -718,6 +720,12 @@ export class InvoicesService {
       isIntraStateSupply(settings.stateCode, placeOfSupplyCode),
     );
 
+    // Never more than the bill itself — a generous coupon reduces the total to zero, never below.
+    const discount = Math.min(
+      order.discountAmount ?? 0,
+      breakdown.totalAmount,
+    );
+
     const invoiceDate = new Date();
     const financialYear = indianFinancialYear(invoiceDate);
     // Counter is per financial year, because the series restarts each year.
@@ -755,7 +763,12 @@ export class InvoicesService {
         taxableValue: breakdown.taxableValue,
         ...split,
         nonTaxableCharges: breakdown.nonTaxableCharges,
-        totalAmount: breakdown.totalAmount,
+        // Taken off AFTER tax: the taxable value and the tax on it stay what the supply was
+        // worth, and the coupon comes off the payable total underneath. Capped at the total so
+        // a coupon worth more than the shipment cannot produce a negative invoice.
+        discountAmount: discount,
+        discountCode: order.coupon?.code ?? null,
+        totalAmount: round2(breakdown.totalAmount - discount),
         breakdownSource: breakdown.source,
         issuedByAdminId: actorId,
       },

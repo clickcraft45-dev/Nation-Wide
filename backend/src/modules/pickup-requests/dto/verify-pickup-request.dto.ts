@@ -36,11 +36,12 @@ export class VerifyPickupRequestDto {
   verifiedShipmentType!: ShipmentTypeCode;
 
   /**
-   * The price the partner agreed at the door, for the ONE case where the server has nothing to
-   * compute from: a pickup whose quote was never rated because no rate card covered it
-   * (rateProviderId is null). Anywhere else this field is REJECTED, not ignored — accepting a
-   * client-supplied price on a rate-carded shipment would let whoever is holding the partner's
-   * phone charge whatever they like and have the system record it as the tariff.
+   * The price the partner agreed at the door, for the cases where the server has nothing to
+   * compute from: a quote that was never rated (rateProviderId is null), or a rate-carded pickup
+   * whose weighed parcel falls outside every active slab for that carrier. Wherever a rate DOES
+   * resolve this field is REJECTED, not ignored — accepting a client-supplied price on a priced
+   * shipment would let whoever is holding the partner's phone charge whatever they like and have
+   * the system record it as the tariff.
    */
   @IsOptional()
   @IsNumber({ maxDecimalPlaces: 2 })

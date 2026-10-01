@@ -4,7 +4,15 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, CheckCircle2 } from "lucide-react";
-import type { AddressBookDto, QuoteDto, SavedItemDto } from "@nationwide/shared-types";
+import {
+  firstOpenPickupSlot,
+  isPickupSlotOpen,
+  localDateIso,
+  type AddressBookDto,
+  type PickupTimeSlot,
+  type QuoteDto,
+  type SavedItemDto,
+} from "@nationwide/shared-types";
 import { apiClient, errorMessage, fieldErrors } from "@/lib/api-client";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -42,16 +50,30 @@ const TIME_SLOTS = [
 ];
 
 function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
+  return localDateIso();
 }
 
 function maxPickupDateIso(): string {
   const d = new Date();
   d.setDate(d.getDate() + 7);
-  return d.toISOString().slice(0, 10);
+  return localDateIso(d);
+}
+
+/**
+ * The first day that can still be collected: today while a slot remains open, tomorrow once the
+ * last one has closed. Offering a day with nothing left on it is just a dead end at the bottom
+ * of the form.
+ */
+function earliestPickupDateIso(): string {
+  const today = todayIso();
+  if (firstOpenPickupSlot(today)) return today;
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  return localDateIso(tomorrow);
 }
 
 interface FormErrors {
+  couponCode?: string;
   pickupContactName?: string;
   pickupContactPhone?: string;
   pickupLocation?: string;
@@ -83,7 +105,10 @@ export default function PickupRequestPage() {
   const [pickupState, setPickupState] = useState("");
   const [pickupPostalCode, setPickupPostalCode] = useState("");
   const [pickupDate, setPickupDate] = useState("");
-  const [pickupTimeSlot, setPickupTimeSlot] = useState(TIME_SLOTS[0].value);
+  // Defaults to the next slot that is actually still open, not 9am regardless of the clock.
+  const [pickupTimeSlot, setPickupTimeSlot] = useState<string>(
+    () => firstOpenPickupSlot(earliestPickupDateIso()) ?? TIME_SLOTS[0].value,
+  );
   const [pickupInstructions, setPickupInstructions] = useState("");
   // The exact spot, from the map pin or a searched address — the partner navigates to it.
   const [pickupLocation, setPickupLocation] = useState<{ lat: number; lng: number } | null>(null);
@@ -98,6 +123,8 @@ export default function PickupRequestPage() {
   const [items, setItems] = useState<ItemForm[]>(() => itemsFrom(null));
   const [savedItems, setSavedItems] = useState<SavedItemDto[]>([]);
   const [itemsError, setItemsError] = useState<string | null>(null);
+
+  const [couponCode, setCouponCode] = useState("");
 
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [termsError, setTermsError] = useState<string | null>(null);
@@ -233,10 +260,19 @@ export default function PickupRequestPage() {
       }
       if (!pickupDate) {
         next.pickupDate = "Choose a pickup date.";
-      } else if (pickupDate < todayIso() || pickupDate > maxPickupDateIso()) {
+      } else if (pickupDate < earliestPickupDateIso() || pickupDate > maxPickupDateIso()) {
         next.pickupDate = "Pickup must be scheduled within the next 7 days.";
       }
-      if (!pickupTimeSlot) next.pickupTimeSlot = "Choose a time slot.";
+      if (!pickupTimeSlot) {
+        next.pickupTimeSlot = "Choose a time slot.";
+      } else if (
+        pickupDate &&
+        !isPickupSlotOpen(pickupTimeSlot as PickupTimeSlot, pickupDate)
+      ) {
+        // Caught on submit too, not just in the dropdown: a form left open through lunch would
+        // otherwise still post the morning slot.
+        next.pickupTimeSlot = "That slot has closed — choose a later one.";
+      }
     }
     const nextRecipientErrors = addRecipient ? validateRecipient(recipient) : {};
     const nextItemsError = validateItems(items);
@@ -286,6 +322,7 @@ export default function PickupRequestPage() {
         quoteId: quote.id,
         dropAtWarehouse,
         acceptedTerms,
+        couponCode: couponCode.trim() || undefined,
         pickupContactName: pickupContactName.trim(),
         pickupContactPhone: pickupContactPhone.trim(),
         // A warehouse drop-off has no pickup address — sending blanks is what the server used to
@@ -316,6 +353,12 @@ export default function PickupRequestPage() {
       // and the banner keeps the summary — a bare "please try again" left the user re-submitting
       // the same bad value with nothing to change.
       const serverFields = fieldErrors(err);
+      // A refused code is thrown whole ("Unknown coupon code: X"), not per-field, so it would
+      // otherwise land in the banner at the bottom with nothing pointing at the input.
+      const message = errorMessage(err, "");
+      if (/coupon/i.test(message)) {
+        serverFields.couponCode = message;
+      }
       if (Object.keys(serverFields).length > 0) {
         setErrors((current) => ({ ...current, ...serverFields }));
         focusFirstError();
@@ -513,7 +556,7 @@ export default function PickupRequestPage() {
                       id="pickup-date"
                       title="Pickup date"
                       subtitle="When should we collect it?"
-                      min={todayIso()}
+                      min={earliestPickupDateIso()}
                       max={maxPickupDateIso()}
                       value={pickupDate}
                       onChange={setPickupDate}
@@ -528,11 +571,19 @@ export default function PickupRequestPage() {
                       value={pickupTimeSlot}
                       onChange={(e) => setPickupTimeSlot(e.target.value)}
                     >
-                      {TIME_SLOTS.map((slot) => (
-                        <option key={slot.value} value={slot.value}>
-                          {slot.label}
-                        </option>
-                      ))}
+                      {TIME_SLOTS.map((slot) => {
+                        // A window that has already ended can't be collected in — shown, but
+                        // not choosable, so it's clear the slot exists and today's has gone.
+                        const closed =
+                          pickupDate !== "" &&
+                          !isPickupSlotOpen(slot.value as PickupTimeSlot, pickupDate);
+                        return (
+                          <option key={slot.value} value={slot.value} disabled={closed}>
+                            {slot.label}
+                            {closed ? " — closed for today" : ""}
+                          </option>
+                        );
+                      })}
                     </NativeSelect>
                     {errors.pickupTimeSlot && <FieldError>{errors.pickupTimeSlot}</FieldError>}
                   </div>
@@ -617,6 +668,30 @@ export default function PickupRequestPage() {
                 error={itemsError}
               />
             </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Discount code</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1.5">
+            <Input
+              id="coupon-code"
+              placeholder="Enter a code, if you have one"
+              value={couponCode}
+              onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+              autoCapitalize="characters"
+              autoComplete="off"
+              error={Boolean(errors.couponCode)}
+            />
+            {errors.couponCode ? (
+              <FieldError>{errors.couponCode}</FieldError>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Optional. The discount comes off what you pay at pickup.
+              </p>
+            )}
           </CardContent>
         </Card>
 

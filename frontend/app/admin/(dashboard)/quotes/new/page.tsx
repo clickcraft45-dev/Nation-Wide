@@ -169,7 +169,7 @@ export default function AdminNewQuotePage() {
         shipmentType: payload.shipmentType,
         weightKg,
         packages: packages ?? undefined,
-        description: payload.description,
+        items: payload.items,
         origin: payload.origin,
         destination: payload.destination,
         fulfillmentMethod: payload.fulfillmentMethod,

@@ -24,7 +24,19 @@ export class CollectPaymentDto {
   @IsBoolean()
   deferred?: boolean;
 
-  @ValidateIf((dto: CollectPaymentDto) => dto.deferred === true)
+  /**
+   * "Part now, the rest later" — collect what the customer has on them and carry the remainder
+   * as a due. Deliberately an explicit flag rather than inferred from a small collectedAmount:
+   * a mistyped figure must fail the tolerance check, not quietly become money owed.
+   */
+  @IsOptional()
+  @IsBoolean()
+  deferRemainder?: boolean;
+
+  @ValidateIf(
+    (dto: CollectPaymentDto) =>
+      dto.deferred === true || dto.deferRemainder === true,
+  )
   @IsUUID()
   dueApprovedByAdminId?: string;
 

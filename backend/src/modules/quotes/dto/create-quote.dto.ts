@@ -22,7 +22,12 @@ import {
   QuoteDestinationDto,
   QuoteOriginAddressDto,
 } from './quote-address.dto';
-import { PackagesList, ParcelPackageDto } from '../../../common/dto/parcel.dto';
+import {
+  ItemsList,
+  PackagesList,
+  ParcelPackageDto,
+  ShipmentItemDto,
+} from '../../../common/dto/parcel.dto';
 
 export class CreateQuoteDto {
   @IsIn(SHIPMENT_TYPES)
@@ -45,6 +50,13 @@ export class CreateQuoteDto {
   @IsOptional()
   @IsString()
   description?: string;
+
+  // What is inside, collected at the quote step so customs contents are on file from the start
+  // rather than first asked for at the pickup request. Optional here — a quote is a price
+  // enquiry, and the pickup request still requires them before a parcel can move.
+  @IsOptional()
+  @ItemsList()
+  items?: ShipmentItemDto[];
 
   // Optional — omitted by the new customer self-service wizard, which collects pickup logistics
   // later via CreatePickupRequestDto instead. The admin manual-quote flow still always supplies

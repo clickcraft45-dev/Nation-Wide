@@ -703,6 +703,16 @@ export async function renderTaxInvoice(
                 money(invoice.nonTaxableCharges),
               )
             : null,
+          // Below the tax lines on purpose: this is a deduction from the payable total, not a
+          // reduction of the taxable value, so the tax above still reconciles to the supply.
+          invoice.discountAmount > 0
+            ? totalRow(
+                invoice.discountCode
+                  ? `Less: discount (${invoice.discountCode})`
+                  : 'Less: discount',
+                `-${money(invoice.discountAmount)}`,
+              )
+            : null,
           h(View, { key: 'g', style: s.grand }, [
             h(Text, { key: 'l' }, 'Total'),
             h(Text, { key: 'v' }, money(invoice.totalAmount)),

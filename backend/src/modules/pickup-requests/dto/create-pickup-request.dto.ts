@@ -110,4 +110,10 @@ export class CreatePickupRequestDto {
   // replayed request, a script) must carry the same acceptance the checkbox represents.
   @Equals(true, { message: 'You must accept the Terms and Conditions of Carriage.' })
   acceptedTerms!: true;
+
+  /** A discount code the customer entered when booking. Validated, not redeemed, at this point. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  couponCode?: string;
 }

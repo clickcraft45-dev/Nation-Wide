@@ -93,6 +93,7 @@ describe('PickupRequestsService', () => {
   let pricingEngineService: { computeQuotesForRequest: jest.Mock };
   let notificationsService: { enqueue: jest.Mock };
   let config: { get: jest.Mock };
+  let coupons: { validate: jest.Mock; redeem: jest.Mock };
   let invoicesService: { generateForOrder: jest.Mock };
   let receiptsService: { issueAndSendQuietly: jest.Mock };
   let pushService: { sendToAdminUser: jest.Mock };
@@ -165,6 +166,10 @@ describe('PickupRequestsService', () => {
       delete: jest.fn().mockResolvedValue(undefined),
     };
     config = { get: jest.fn().mockReturnValue(undefined) };
+    coupons = {
+      validate: jest.fn().mockResolvedValue({ id: 'coupon-1', code: 'SAVE100', discountAmount: 100 }),
+      redeem: jest.fn().mockResolvedValue({ id: 'coupon-1', code: 'SAVE100' }),
+    };
     service = new PickupRequestsService(
       prisma as never,
       ordersService as never,
@@ -177,6 +182,7 @@ describe('PickupRequestsService', () => {
       quotesService as never,
       storage as never,
       config as never,
+      coupons as never,
     );
   });
 
@@ -948,6 +954,62 @@ describe('PickupRequestsService', () => {
       );
     });
 
+    // A parcel whose weight falls outside every active slab used to be fatal here, which left the
+    // partner at the customer's door unable to price the parcel OR hand it back.
+    it('lets the partner name the price when no slab covers the weighed parcel', async () => {
+      pricingEngineService.computeQuotesForRequest.mockResolvedValue([]);
+
+      await service.verify(
+        'pr-1',
+        {
+          packages: [{ weightKg: 9 }],
+          items: [{ description: 'Books', quantity: 1, unitValue: 300 }],
+          verifiedShipmentType: 'PACKAGE',
+          verifiedPrice: 14000,
+        } as never,
+        'partner-1',
+      );
+
+      expect(prisma.pickupRequest.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ verifiedWeightKg: 9, verifiedPrice: 14000 }),
+        }),
+      );
+    });
+
+    it('refuses to verify an unpriceable parcel with no price named, rather than inventing one', async () => {
+      pricingEngineService.computeQuotesForRequest.mockResolvedValue([]);
+
+      await expect(
+        service.verify(
+          'pr-1',
+          {
+            packages: [{ weightKg: 9 }],
+            items: [{ description: 'Books', quantity: 1, unitValue: 300 }],
+            verifiedShipmentType: 'PACKAGE',
+          } as never,
+          'partner-1',
+        ),
+      ).rejects.toThrow(/enter the price to charge/);
+    });
+
+    // The anti-fraud rule this sits beside: while a tariff DOES resolve, the phone never names
+    // the price.
+    it('still rejects a client-supplied price when a rate card covers the parcel', async () => {
+      await expect(
+        service.verify(
+          'pr-1',
+          {
+            packages: [{ weightKg: 6 }],
+            items: [{ description: 'Books', quantity: 1, unitValue: 300 }],
+            verifiedShipmentType: 'PACKAGE',
+            verifiedPrice: 1,
+          } as never,
+          'partner-1',
+        ),
+      ).rejects.toThrow(/cannot be set/);
+    });
+
     it('prices the volumetric weight when the box is bigger than it is heavy', async () => {
       await service.verify(
         'pr-1',
@@ -1098,6 +1160,90 @@ describe('PickupRequestsService', () => {
           'partner-1',
         ),
       ).rejects.toThrow(BadRequestException);
+    });
+
+    describe('part-payment', () => {
+      const verified = () => {
+        prisma.pickupRequest.findUnique.mockResolvedValue({
+          ...basePickupRequest,
+          verifiedAt: new Date(),
+          verifiedPrice: decimalLike(970),
+        });
+        prisma.adminUser.findFirst.mockResolvedValue({ id: 'admin-1' });
+      };
+
+      it('records what was taken and names the admin who approved the rest', async () => {
+        verified();
+        await service.collectPayment(
+          'pr-1',
+          {
+            paymentMethod: 'CASH',
+            collectedAmount: 500,
+            deferRemainder: true,
+            dueApprovedByAdminId: 'admin-1',
+          } as never,
+          'partner-1',
+        );
+        expect(prisma.pickupRequest.updateMany).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({
+              collectedAmount: 500,
+              paymentDueApprovedByAdminId: 'admin-1',
+            }),
+          }),
+        );
+      });
+
+      // The tolerance check exists to stop a partner under-reporting a cash collection; a
+      // part-payment is the one case that legitimately collects less, so approval replaces it.
+      it('is not blocked by the collected-amount tolerance', async () => {
+        verified();
+        await expect(
+          service.collectPayment(
+            'pr-1',
+            {
+              paymentMethod: 'CASH',
+              collectedAmount: 100,
+              deferRemainder: true,
+              dueApprovedByAdminId: 'admin-1',
+            } as never,
+            'partner-1',
+          ),
+        ).resolves.toBeDefined();
+      });
+
+      it('still requires an admin to approve the unpaid remainder', async () => {
+        verified();
+        prisma.adminUser.findFirst.mockResolvedValue(null);
+        await expect(
+          service.collectPayment(
+            'pr-1',
+            {
+              paymentMethod: 'CASH',
+              collectedAmount: 500,
+              deferRemainder: true,
+              dueApprovedByAdminId: 'nobody',
+            } as never,
+            'partner-1',
+          ),
+        ).rejects.toThrow(/active admin to approve/);
+      });
+
+      it('refuses a "remainder" that is not actually owed', async () => {
+        verified();
+        await expect(
+          service.collectPayment(
+            'pr-1',
+            {
+              paymentMethod: 'CASH',
+              collectedAmount: 970,
+              deferRemainder: true,
+              dueApprovedByAdminId: 'admin-1',
+            } as never,
+            'partner-1',
+          ),
+        ).rejects.toThrow(/Nothing would be left owing/);
+      });
     });
 
     it('persists payment details once verified', async () => {

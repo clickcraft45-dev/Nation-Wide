@@ -1,7 +1,12 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import type { CountryDto, CustomerDto, ShipmentTypeCode } from "@nationwide/shared-types";
+import type {
+  CountryDto,
+  CustomerDto,
+  ShipmentItemDto,
+  ShipmentTypeCode,
+} from "@nationwide/shared-types";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input, Label, FieldError } from "@/components/ui/input";
@@ -17,6 +22,13 @@ import {
   type RecipientErrors,
   type RecipientForm,
 } from "./recipient-fields";
+import {
+  ItemsEditor,
+  itemsFrom,
+  toItemsPayload,
+  validateItems,
+  type ItemForm,
+} from "@/components/shipment/items-editor";
 
 // Configurable — fill in the real warehouse address/hours when available (same placeholder
 // pattern used for the marketing footer's contact info).
@@ -68,7 +80,8 @@ function maxPickupDateIso(): string {
 
 export interface ShipmentDetailsPayload {
   shipmentType: ShipmentTypeCode;
-  description?: string;
+  /** What is inside, for the carrier's commercial invoice. */
+  items?: ShipmentItemDto[];
   origin?: Omit<AddressForm, "addressLine2"> & {
     addressLine2?: string;
     instructions?: string;
@@ -109,7 +122,8 @@ export function ShipmentDetailsForm({
   isSubmitting: boolean;
   collectOriginAndFulfillment?: boolean;
 }) {
-  const [description, setDescription] = useState("");
+  const [items, setItems] = useState<ItemForm[]>(() => itemsFrom(null));
+  const [itemsError, setItemsError] = useState<string | null>(null);
   const [origin, setOrigin] = useState<AddressForm & { instructions: string; country: string }>({
     ...emptyAddress,
     instructions: "",
@@ -167,11 +181,18 @@ export function ShipmentDetailsForm({
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!validate()) return;
+    // Contents are optional at the quote stage — a price enquiry does not need them — but a
+    // half-filled row is a mistake, not an omission, so it is still checked.
+    const rowsStarted = items.some(
+      (row) => row.description.trim() || row.unitValue.trim() || row.category.trim(),
+    );
+    const nextItemsError = rowsStarted ? validateItems(items) : null;
+    setItemsError(nextItemsError);
+    if (!validate() || nextItemsError) return;
 
     onSubmit({
       shipmentType,
-      description: description.trim() || undefined,
+      items: toItemsPayload(items),
       origin: collectOriginAndFulfillment
         ? {
             name: origin.name.trim(),
@@ -229,14 +250,15 @@ export function ShipmentDetailsForm({
               </div>
             </div>
           </div>
+          {/* The contents proper, not a free-text line: carriers need a description, quantity
+              and value per item for the commercial invoice, and asking here means the pickup
+              request can prefill instead of asking the same question twice. */}
           <div className="space-y-1.5">
-            <Label htmlFor="description">Contents (optional)</Label>
-            <Input
-              id="description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="e.g. Clothes, documents, electronics…"
-            />
+            <Label>What&apos;s inside</Label>
+            <p className="text-xs text-muted-foreground">
+              Carriers need the contents and their value for customs. You can add more at pickup.
+            </p>
+            <ItemsEditor value={items} onChange={setItems} error={itemsError} />
           </div>
         </CardContent>
       </Card>

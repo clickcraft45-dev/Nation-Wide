@@ -514,6 +514,12 @@ model PickupRequest {
 
   rejectionReason String? @map("rejection_reason")
 
+  /// A coupon the customer applied when booking, and the rupees it takes off. Lives here because
+  /// the order does not exist until the parcel is accepted, but the discount has to show on the
+  /// quote they agreed to and in what the partner collects. Copied onto the order at acceptance.
+  couponId       String? @map("coupon_id")
+  discountAmount Float?  @map("discount_amount")
+
   orderId String? @unique @map("order_id") // set once acceptParcel generates the real Order
 
   createdAt DateTime @default(now()) @map("created_at")
@@ -524,6 +530,7 @@ model PickupRequest {
   assignedPartner      AdminUser? @relation("PickupRequestAssignedPartner", fields: [assignedPartnerId], references: [id])
   paymentDueApprovedBy AdminUser? @relation("PickupRequestDueApprovedBy", fields: [paymentDueApprovedByAdminId], references: [id])
   order                Order?     @relation(fields: [orderId], references: [id])
+  coupon               Coupon?    @relation(fields: [couponId], references: [id])
 
   @@index([customerId])
   @@index([status])
@@ -909,8 +916,9 @@ model Coupon {
   createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt        DateTime  @updatedAt @map("updated_at")
 
-  createdBy AdminUser? @relation("CouponCreatedBy", fields: [createdByAdminId], references: [id])
-  orders    Order[]
+  createdBy      AdminUser?      @relation("CouponCreatedBy", fields: [createdByAdminId], references: [id])
+  orders         Order[]
+  pickupRequests PickupRequest[]
 
   @@map("coupons")
 }
@@ -1168,6 +1176,11 @@ model Invoice {
   /// (pricing-engine.service.ts step 7), so it must sit outside taxableValue or the invoice
   /// would overstate the tax base.
   nonTaxableCharges Float  @default(0) @map("non_taxable_charges")
+  /// A coupon taken off AFTER tax, and the code it came from. The taxable value and the tax on
+  /// it stay what the supply was worth; this comes off the payable total underneath. Frozen
+  /// here because a coupon can be retired or re-priced after the document is issued.
+  discountAmount    Float  @default(0) @map("discount_amount")
+  discountCode      String? @map("discount_code")
   totalAmount       Float  @map("total_amount")
 
   /// Which record the breakdown came from — RATE_OPTION, PICKUP_VERIFICATION, or

@@ -35,10 +35,51 @@ export function MapPinField({
 }) {
   const mapEl = useRef<HTMLDivElement>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
+  const geocoderRef = useRef<google.maps.Geocoder | null>(null);
   const onChangeRef = useRef(onChange);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [address, setAddress] = useState("");
   const [search, setSearch] = useState("");
+  const [searchError, setSearchError] = useState<string | null>(null);
+
+  /**
+   * Move the map to whatever was typed.
+   *
+   * The suggestion dropdown needs the Places API; this needs only Geocoding, which the pin's own
+   * reverse lookup already uses. So typing a place and pressing Enter works even where
+   * suggestions never appear — which is otherwise a search box that visibly does nothing.
+   */
+  async function searchFor(text: string) {
+    const query = text.trim();
+    const geocoder = geocoderRef.current;
+    if (!query || !geocoder) return;
+    setSearchError(null);
+    try {
+      const { results } = await geocoder.geocode({
+        address: query,
+        componentRestrictions: { country: "in" },
+      });
+      const best = results[0];
+      if (!best) {
+        setSearchError("No place found for that search — try a nearby landmark.");
+        return;
+      }
+      const location = best.geometry.location;
+      mapRef.current?.setCenter(location);
+      mapRef.current?.setZoom(17);
+      const parsed = parseAddressComponents(
+        best.address_components.map((c) => ({
+          long: c.long_name,
+          short: c.short_name,
+          types: c.types,
+        })),
+        best.formatted_address,
+      );
+      onChange({ ...parsed, latitude: location.lat(), longitude: location.lng() });
+    } catch {
+      setSearchError("Couldn't search just now — move the map by hand instead.");
+    }
+  }
 
   useEffect(() => {
     onChangeRef.current = onChange;
@@ -91,6 +132,7 @@ export function MapPinField({
         });
         mapRef.current = map;
         const geocoder = new Geocoder();
+        geocoderRef.current = geocoder;
         let first = true;
 
         // Debounced, so a drag is one report and one lookup, not fifty.
@@ -147,23 +189,31 @@ export function MapPinField({
       {/* Searching beats dragging the whole way across the country from the default view. The
           map follows whatever is picked; the pin can still be nudged afterwards. */}
       {googleMapsEnabled() && (
-        <AddressAutocomplete
-          value={search}
-          onChange={setSearch}
-          onSelect={(picked) => {
-            setSearch(picked.formatted || picked.addressLine1);
-            if (picked.latitude != null && picked.longitude != null) {
-              mapRef.current?.setCenter({ lat: picked.latitude, lng: picked.longitude });
-              mapRef.current?.setZoom(17);
-            }
-            // Reported directly as well as via the map's own idle handler, so a search still
-            // pins the spot when the map itself failed to load.
-            onChange(picked);
-          }}
-          regionCodes={["in"]}
-          placeholder="Search a place, area or landmark…"
-          aria-label="Search for a location"
-        />
+        <div className="space-y-1">
+          <AddressAutocomplete
+            value={search}
+            onChange={(next) => {
+              setSearch(next);
+              setSearchError(null);
+            }}
+            onSelect={(picked) => {
+              setSearch(picked.formatted || picked.addressLine1);
+              setSearchError(null);
+              if (picked.latitude != null && picked.longitude != null) {
+                mapRef.current?.setCenter({ lat: picked.latitude, lng: picked.longitude });
+                mapRef.current?.setZoom(17);
+              }
+              // Reported directly as well as via the map's own idle handler, so a search still
+              // pins the spot when the map itself failed to load.
+              onChange(picked);
+            }}
+            onEnter={(text) => void searchFor(text)}
+            regionCodes={["in"]}
+            placeholder="Search a place or landmark, then press Enter"
+            aria-label="Search for a location"
+          />
+          {searchError && <p className="text-xs text-danger">{searchError}</p>}
+        </div>
       )}
       <div className={cn("relative h-72 overflow-hidden rounded-2xl border border-border bg-muted", className)}>
         <div ref={mapEl} className="h-full w-full" />

@@ -24,6 +24,12 @@ export interface AddressAutocompleteProps extends Omit<InputProps, "onChange" | 
   onSelect: (address: PickedAddress) => void;
   /** ISO 3166-1 alpha-2 codes to keep suggestions inside, e.g. ["in"]. Omit for worldwide. */
   regionCodes?: string[];
+  /**
+   * Enter was pressed on text with no suggestion highlighted — i.e. "search for what I typed".
+   * Worth handling: suggestions need the Places API, and without it this field would otherwise
+   * do nothing at all for someone typing a place name.
+   */
+  onEnter?: (value: string) => void;
 }
 
 /**
@@ -44,6 +50,7 @@ export function AddressAutocomplete({
   onChange,
   onSelect,
   regionCodes,
+  onEnter,
   className,
   ...props
 }: AddressAutocompleteProps) {
@@ -119,6 +126,17 @@ export function AddressAutocomplete({
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter") {
+      // Always swallowed: this field sits inside forms with a submit button, and Enter in a
+      // search box must never book the shipment.
+      e.preventDefault();
+      if (open && active >= 0) {
+        void choose(suggestions[active]);
+      } else {
+        onEnter?.(value);
+      }
+      return;
+    }
     if (!open || suggestions.length === 0) return;
     if (e.key === "ArrowDown") {
       e.preventDefault();
@@ -126,9 +144,6 @@ export function AddressAutocomplete({
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       setActive((i) => (i <= 0 ? suggestions.length - 1 : i - 1));
-    } else if (e.key === "Enter" && active >= 0) {
-      e.preventDefault();
-      void choose(suggestions[active]);
     } else if (e.key === "Escape") {
       setOpen(false);
     }

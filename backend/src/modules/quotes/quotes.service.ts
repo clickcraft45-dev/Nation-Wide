@@ -14,7 +14,7 @@ import {
 } from '@nationwide/shared-types';
 import { chargeableWeightKg } from '@nationwide/shared-types';
 import { PrismaService } from '../../database/prisma.service';
-import { cleanPackages } from '../../common/dto/parcel.dto';
+import { cleanItems, cleanPackages } from '../../common/dto/parcel.dto';
 import { resolvePagination } from '../../common/utils/pagination.util';
 import { OrdersService } from '../orders/orders.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -117,6 +117,9 @@ export class QuotesService {
           shipmentType: dto.shipmentType,
           weightKg,
           packages: dto.packages ? cleanPackages(dto.packages) : undefined,
+          // On file from the quote onwards; the pickup request prefills from this rather than
+          // asking the customer what is in the box a second time.
+          items: dto.items ? cleanItems(dto.items) : undefined,
           description: dto.description ?? null,
           // origin is omitted entirely by the new customer self-service wizard — pickup
           // logistics move to PickupRequest instead (see CreatePickupRequestDto). The admin

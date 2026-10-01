@@ -10,6 +10,7 @@ import { PricingModule } from '../pricing/pricing.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { CustomersModule } from '../customers/customers.module';
 import { QuotesModule } from '../quotes/quotes.module';
+import { CouponsModule } from '../coupons/coupons.module';
 import { PartnerLocationController } from './partner-location.controller';
 
 @Module({
@@ -24,6 +25,8 @@ import { PartnerLocationController } from './partner-location.controller';
     // The saved-contents library, and admin bookings pricing through the quote path.
     CustomersModule,
     QuotesModule,
+    // A customer can apply a discount code when they book.
+    CouponsModule,
   ],
   controllers: [
     PickupRequestsController,

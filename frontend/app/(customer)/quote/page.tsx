@@ -146,7 +146,7 @@ export default function GetQuotePage() {
         shipmentType: payload.shipmentType,
         weightKg,
         packages: packages ?? undefined,
-        description: payload.description,
+        items: payload.items,
         destination: payload.destination,
         submissionKey,
       });

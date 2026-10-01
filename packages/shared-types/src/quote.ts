@@ -43,6 +43,42 @@ export type QuoteReviewReasonCode = (typeof QUOTE_REVIEW_REASONS)[number];
 export const PICKUP_TIME_SLOTS = ["09:00-12:00", "12:00-15:00", "15:00-18:00"] as const;
 export type PickupTimeSlot = (typeof PICKUP_TIME_SLOTS)[number];
 
+/** A Date as its own local YYYY-MM-DD, not UTC's — the day someone is actually living in. */
+export function localDateIso(date: Date = new Date()): string {
+  const month = `${date.getMonth() + 1}`.padStart(2, "0");
+  const day = `${date.getDate()}`.padStart(2, "0");
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
+/**
+ * Whether a slot on a given day can still be booked.
+ *
+ * A slot closes when its END time passes: at 12:21 nobody can still be collected in the
+ * 09:00–12:00 window, and offering it schedules a pickup into the past for a partner to find.
+ * Shared so the picker and the server agree — the browser disables the option, and the server
+ * refuses it for a tab that was left open through lunch.
+ */
+export function isPickupSlotOpen(
+  slot: PickupTimeSlot,
+  date: string,
+  now: Date = new Date(),
+): boolean {
+  const today = localDateIso(now);
+  if (date > today) return true;
+  if (date < today) return false;
+  const [, end] = slot.split("-");
+  const [endHour, endMinute] = end.split(":").map(Number);
+  return now.getHours() * 60 + now.getMinutes() < endHour * 60 + endMinute;
+}
+
+/** The earliest slot still bookable on that day, or null once the day is done. */
+export function firstOpenPickupSlot(
+  date: string,
+  now: Date = new Date(),
+): PickupTimeSlot | null {
+  return PICKUP_TIME_SLOTS.find((slot) => isPickupSlotOpen(slot, date, now)) ?? null;
+}
+
 // Customer-facing option shape — deliberately excludes baseRate/pssAmount/fuelChargePercent/
 // gstPercent/nationwideCut and every other internal breakdown field. The full breakdown
 // (RateQuoteOptionDto, from pricing.ts) is admin-only, see QuoteAdminDetailDto.

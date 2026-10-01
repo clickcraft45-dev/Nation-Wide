@@ -73,6 +73,11 @@ export default function AdminInvoicesPage() {
 
   // Custom (order-less) invoice form.
   const [customCustomerId, setCustomCustomerId] = useState("");
+  // That customer's recent shipments, offered as suggestions so "what is being billed" can be
+  // picked rather than typed from memory with the AWB copied by hand out of another tab.
+  const [billingSuggestions, setBillingSuggestions] = useState<
+    ConsolidatedOrderCandidateDto[]
+  >([]);
   const [customAmount, setCustomAmount] = useState("");
   const [customDescription, setCustomDescription] = useState("");
   const [customPlaceOfSupply, setCustomPlaceOfSupply] = useState("");
@@ -248,6 +253,30 @@ export default function AdminInvoicesPage() {
       setIsWorking(false);
     }
   }
+
+  /** The last quarter of that customer's shipments, for the suggestions below. */
+  useEffect(() => {
+    if (!customCustomerId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setBillingSuggestions([]);
+      return;
+    }
+    let cancelled = false;
+    const since = new Date();
+    since.setDate(since.getDate() - 90);
+    apiClient
+      .get<ConsolidatedOrderCandidateDto[]>(
+        `/admin/invoices/consolidate/preview?customerId=${customCustomerId}` +
+          `&from=${encodeURIComponent(since.toISOString())}` +
+          `&to=${encodeURIComponent(new Date().toISOString())}`,
+      )
+      // Suggestions are a convenience — a customer with no recent shipments is not an error.
+      .then((rows) => !cancelled && setBillingSuggestions(rows))
+      .catch(() => !cancelled && setBillingSuggestions([]));
+    return () => {
+      cancelled = true;
+    };
+  }, [customCustomerId]);
 
   async function createCustom() {
     const hasLines = customLines.length > 0;
@@ -617,8 +646,29 @@ export default function AdminInvoicesPage() {
               onChange={(e) => setCustomDescription(e.target.value)}
               placeholder="e.g. Re-delivery attempt — AWB NW-26-000123"
               maxLength={300}
+              list="billing-suggestions"
               className="glass-field h-10 w-full rounded-lg px-3 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             />
+            {/* The customer's own recent shipments — AWB, where it went, and what was in it —
+                so the line can be picked instead of copied out of another tab from memory. */}
+            <datalist id="billing-suggestions">
+              {billingSuggestions.flatMap((row) => {
+                const awb = row.trackingNumber;
+                if (!awb) return [];
+                const where = row.destination ? ` — ${row.destination}` : "";
+                return [
+                  <option key={`${row.orderId}-awb`} value={`AWB ${awb}${where}`} />,
+                  ...(row.contents
+                    ? [
+                        <option
+                          key={`${row.orderId}-contents`}
+                          value={`AWB ${awb} — ${row.contents}`}
+                        />,
+                      ]
+                    : []),
+                ];
+              })}
+            </datalist>
             {customErrors.description ? (
               <span className="block text-xs text-destructive">{customErrors.description}</span>
             ) : (

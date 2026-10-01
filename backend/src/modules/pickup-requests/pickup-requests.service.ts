@@ -9,6 +9,8 @@ import { randomUUID } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import {
   chargeableWeightKg,
+  isPickupSlotOpen,
+  localDateIso,
   type B2bOrderResultDto,
   type B2bRequestSummaryDto,
   type PickupDocumentsDto,
@@ -34,6 +36,8 @@ import {
 } from '../pricing/pricing-engine.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NOTIFICATION_TEMPLATES } from '../notifications/templates';
+import { round2 } from '../invoices/gst';
+import { CouponsService } from '../coupons/coupons.service';
 import { CreatePickupRequestDto } from './dto/create-pickup-request.dto';
 import { QueryPickupRequestsDto } from './dto/query-pickup-requests.dto';
 import { RecalculateWeightDto } from './dto/recalculate-weight.dto';
@@ -55,6 +59,9 @@ const withDetails = {
     },
     // Named on the pickup and on the customer's order: who let this parcel go unpaid.
     paymentDueApprovedBy: { select: { name: true } },
+    // The code the customer applied when booking — shown to them, to the partner at the door,
+    // and printed on the invoice.
+    coupon: { select: { code: true } },
     quote: {
       select: {
         destName: true,
@@ -280,7 +287,19 @@ export class PickupRequestsService {
     // Aadhaar and parcel photos taken at the door.
     private readonly storage: StorageService,
     private readonly config: ConfigService,
+    // Discount codes a customer applies when booking; redeemed when the money is taken.
+    private readonly coupons: CouponsService,
   ) {}
+
+  /** What the customer actually pays: the priced amount, less any coupon applied at booking. */
+  private payableFor(pickupRequest: {
+    verifiedPrice: number | null;
+    estimatedPrice: number;
+    discountAmount: number | null;
+  }): number {
+    const price = pickupRequest.verifiedPrice ?? pickupRequest.estimatedPrice;
+    return round2(Math.max(0, price - (pickupRequest.discountAmount ?? 0)));
+  }
 
   async create(
     dto: CreatePickupRequestDto,
@@ -306,6 +325,21 @@ export class PickupRequestsService {
         'pickupDate and pickupTimeSlot are required unless dropAtWarehouse is true',
       );
     }
+    // The browser greys out a window that has already ended, but a form left open through lunch
+    // would still post the morning slot — and nobody can be collected in a window that is over.
+    // Scoped to today on purpose: whether a past DATE is bookable is a separate rule, and not
+    // one to change from here.
+    const pickupDay = dto.pickupDate?.slice(0, 10);
+    if (
+      !dto.dropAtWarehouse &&
+      dto.pickupTimeSlot &&
+      pickupDay === localDateIso() &&
+      !isPickupSlotOpen(dto.pickupTimeSlot, pickupDay)
+    ) {
+      throw new BadRequestException(
+        `The ${dto.pickupTimeSlot} slot has already closed — choose a later slot or another day`,
+      );
+    }
 
     // RATED path (selectOption) snapshots the chosen provider's option; the manual-quote path
     // (acceptQuote) has no specific RateProvider attached at all — see the PickupRequest.
@@ -318,6 +352,18 @@ export class PickupRequestsService {
     const currency = quote.selectedOption
       ? quote.selectedOption.currency
       : (quote.quotedCurrency ?? 'INR');
+
+    // Validated now so a bad code is refused while the customer is still looking at the form,
+    // but NOT redeemed — the redemption is claimed when the money is actually taken, so an
+    // abandoned booking does not burn a limited code.
+    const coupon = dto.couponCode
+      ? await this.coupons.validate(dto.couponCode)
+      : null;
+    // Frozen at booking: the code can be retired or re-priced before the parcel is collected,
+    // and this is the figure the customer was shown. Never more than the price itself.
+    const discountAmount = coupon
+      ? Math.min(coupon.discountAmount, estimatedPrice)
+      : null;
 
     // Atomic claim-then-create inside one interactive transaction — the earlier version read
     // quote.status above, then created the PickupRequest, then updated quote.status as two
@@ -358,6 +404,8 @@ export class PickupRequestsService {
           estimatedWeightKg: quote.weightKg,
           estimatedPrice,
           currency,
+          couponId: coupon?.id ?? null,
+          discountAmount,
           ...pickupLogisticsData(dto),
         },
       });
@@ -1095,25 +1143,35 @@ export class PickupRequestsService {
     // invoice layer treats that case separately rather than being handed zeroes.
     let breakdown: ComputedRateOption | null = null;
     if (pickupRequest.rateProviderId) {
-      // Rejected, not ignored: silently dropping a price the partner typed would show them a
-      // number on the phone and record a different one, which is the worst of both.
-      if (dto.verifiedPrice !== undefined) {
-        throw new BadRequestException(
-          'This pickup is priced from its rate card — verifiedPrice cannot be set',
-        );
-      }
       const recalculated = await this.repriceAgainstOriginalProvider(
         pickupRequest,
         verifiedWeightKg,
         dto.verifiedShipmentType,
       );
       if (recalculated === null) {
-        throw new BadRequestException(
-          'No rate is available for the corrected weight/shipment type — this needs manual review',
-        );
+        // The weighed parcel falls outside every active slab for this carrier — a 9 kg box where
+        // the card stops at 8, say. This used to be fatal, which stranded the partner at the
+        // customer's door holding a parcel they could neither price nor hand back. Their own
+        // figure is accepted HERE AND ONLY HERE, because there is no tariff to contradict it.
+        if (dto.verifiedPrice === undefined) {
+          throw new BadRequestException(
+            `No rate covers ${verifiedWeightKg}kg as ${dto.verifiedShipmentType} for this carrier — ` +
+              'enter the price to charge, or reject the parcel',
+          );
+        }
+        verifiedPrice = dto.verifiedPrice;
+      } else {
+        // Rejected, not ignored: silently dropping a price the partner typed would show them a
+        // number on the phone and record a different one, which is the worst of both. Only
+        // reachable when a real rate exists, so there is always a tariff to prefer.
+        if (dto.verifiedPrice !== undefined) {
+          throw new BadRequestException(
+            'This pickup is priced from its rate card — verifiedPrice cannot be set',
+          );
+        }
+        verifiedPrice = recalculated.finalPrice;
+        breakdown = recalculated;
       }
-      verifiedPrice = recalculated.finalPrice;
-      breakdown = recalculated;
     } else {
       // No RateProvider to re-price against. Two ways to get here:
       //   - the manual-quote path, where a human already set the price with their own judgment;
@@ -1207,17 +1265,33 @@ export class PickupRequestsService {
       CollectPaymentDto['paymentMethod']
     >;
 
-    const expectedPrice =
-      pickupRequest.verifiedPrice ?? pickupRequest.estimatedPrice;
-    const tolerance = Math.max(
-      expectedPrice * COLLECTED_AMOUNT_TOLERANCE_RATIO,
-      COLLECTED_AMOUNT_TOLERANCE_FLOOR,
-    );
-    if (Math.abs(collectedAmount - expectedPrice) > tolerance) {
-      throw new BadRequestException(
-        `Collected amount (${collectedAmount}) is too far from the verified price ` +
-          `(${expectedPrice}) — if this is legitimate, contact an admin to review and record it.`,
+    // What is owed at the door, after any coupon the customer applied when booking — charging
+    // the undiscounted figure would quietly ignore a discount they were promised.
+    const expectedPrice = this.payableFor(pickupRequest);
+
+    // Part-payment: the customer pays what they have and the rest becomes a due. The tolerance
+    // check below deliberately does NOT apply — the whole point is that less than the price is
+    // collected — so the admin approval takes its place as the control on money left unpaid.
+    let dueApproverId: string | null = null;
+    if (dto.deferRemainder) {
+      if (collectedAmount >= expectedPrice) {
+        throw new BadRequestException(
+          `Nothing would be left owing — collect ${expectedPrice} in full instead of deferring a remainder`,
+        );
+      }
+      dueApproverId = (await this.requireDueApprover(dto.dueApprovedByAdminId))
+        .id;
+    } else {
+      const tolerance = Math.max(
+        expectedPrice * COLLECTED_AMOUNT_TOLERANCE_RATIO,
+        COLLECTED_AMOUNT_TOLERANCE_FLOOR,
       );
+      if (Math.abs(collectedAmount - expectedPrice) > tolerance) {
+        throw new BadRequestException(
+          `Collected amount (${collectedAmount}) is too far from the verified price ` +
+            `(${expectedPrice}) — if this is legitimate, contact an admin to review and record it.`,
+        );
+      }
     }
 
     // Atomic claim (paymentCollectedAt: null guard re-checked against the database, not the
@@ -1232,6 +1306,14 @@ export class PickupRequestsService {
         paymentReference: dto.paymentReference ?? null,
         paymentNotes: dto.paymentNotes ?? null,
         paymentCollectedAt: new Date(),
+        // Set only on a part-payment: money WAS taken, so this is not paymentDeferredAt — the
+        // approver is what marks the unpaid remainder as sanctioned.
+        ...(dueApproverId
+          ? {
+              paymentDueApprovedByAdminId: dueApproverId,
+              paymentDueNote: dto.dueNote ?? null,
+            }
+          : {}),
       },
     });
     if (claim.count === 0) {
@@ -1271,14 +1353,16 @@ export class PickupRequestsService {
    * X approved that" is a different fact from "the customer paid nothing". The amount owed rides
    * onto the Order in acceptParcel, which is where the customer can see it.
    */
-  private async deferPayment(
-    pickupRequest: PickupRequestWithDetails,
-    dto: CollectPaymentDto,
-    partnerId: string,
-  ): Promise<PickupRequestWithDetails> {
+  /**
+   * Letting a parcel go without all of the money is an admin's call, not the partner's — whether
+   * that is the whole amount (deferPayment) or the remainder of a part-payment.
+   */
+  private async requireDueApprover(
+    adminId: string | undefined,
+  ): Promise<{ id: string }> {
     const approver = await this.prisma.adminUser.findFirst({
       where: {
-        id: dto.dueApprovedByAdminId,
+        id: adminId,
         isActive: true,
         role: { in: ['ADMIN', 'SUPER_ADMIN'] },
       },
@@ -1289,6 +1373,15 @@ export class PickupRequestsService {
         'A due needs an active admin to approve it — pick one and try again',
       );
     }
+    return approver;
+  }
+
+  private async deferPayment(
+    pickupRequest: PickupRequestWithDetails,
+    dto: CollectPaymentDto,
+    partnerId: string,
+  ): Promise<PickupRequestWithDetails> {
+    const approver = await this.requireDueApprover(dto.dueApprovedByAdminId);
 
     const claim = await this.prisma.pickupRequest.updateMany({
       where: {
@@ -1308,8 +1401,7 @@ export class PickupRequestsService {
       );
     }
 
-    const dueAmount =
-      pickupRequest.verifiedPrice ?? pickupRequest.estimatedPrice;
+    const dueAmount = this.payableFor(pickupRequest);
 
     await this.prisma.auditLog.create({
       data: {
@@ -1381,28 +1473,68 @@ export class PickupRequestsService {
         pickupRequest.customerId,
       );
 
-    const finalPrice =
-      pickupRequest.verifiedPrice ?? pickupRequest.estimatedPrice;
+    // What the customer owes in total, net of any coupon — the figure every branch below bills,
+    // pays off or carries as a due.
+    const finalPrice = this.payableFor(pickupRequest);
+
+    // Claimed once, here, where the parcel is actually accepted: validating at booking without
+    // redeeming means an abandoned booking never burns a limited code, and a double-tap on
+    // accept cannot burn two (the atomic claim above has already returned by now).
+    if (pickupRequest.couponId && pickupRequest.discountAmount) {
+      try {
+        await this.coupons.redeem(pickupRequest.coupon!.code);
+      } catch (error) {
+        // The parcel is already in the partner's hands and the money is taken — a code that
+        // expired in between must not strand the order. The discount the customer was promised
+        // still stands; only the redemption count misses out.
+        this.logger.warn(
+          `Coupon ${pickupRequest.coupon?.code} could not be redeemed for pickup ${id}: ${
+            error instanceof Error ? error.message : 'unknown error'
+          }`,
+        );
+      }
+    }
 
     await this.prisma.$transaction([
       this.prisma.order.update({
         where: { id: order.id },
+        // The coupon travels with the order so the invoice can print the code and the rupees it
+        // took off — see Order.couponId/discountAmount.
         // A deferred pickup produces an unpaid order carrying what is owed and who approved the
         // wait — the customer sees it in their portal, and marking it paid later clears it.
-        data: pickupRequest.paymentDeferredAt
+        data: {
+          couponId: pickupRequest.couponId,
+          discountAmount: pickupRequest.discountAmount,
+          ...(pickupRequest.paymentDeferredAt
           ? {
-              paymentStatus: 'PENDING',
+              paymentStatus: 'PENDING' as const,
               dueAmount: finalPrice,
               dueApprovedByAdminId: pickupRequest.paymentDueApprovedByAdminId,
               paymentMarkedByAdminId: partnerId,
             }
-          : {
-              paymentStatus: 'PAID',
-              paymentMethod: pickupRequest.paymentMethod,
-              paidAmount: pickupRequest.collectedAmount ?? finalPrice,
-              paidAt: pickupRequest.paymentCollectedAt,
-              paymentMarkedByAdminId: partnerId,
-            },
+          : pickupRequest.paymentDueApprovedByAdminId
+            ? {
+                // Part-paid at the door: money was taken AND a remainder is owed, so the order
+                // carries both. Not PAID — the balance is still outstanding and has to show up
+                // in the customer's dues and on the office's books.
+                paymentStatus: 'PENDING' as const,
+                paymentMethod: pickupRequest.paymentMethod,
+                paidAmount: pickupRequest.collectedAmount,
+                paidAt: pickupRequest.paymentCollectedAt,
+                dueAmount: round2(
+                  finalPrice - (pickupRequest.collectedAmount ?? 0),
+                ),
+                dueApprovedByAdminId: pickupRequest.paymentDueApprovedByAdminId,
+                paymentMarkedByAdminId: partnerId,
+              }
+            : {
+                paymentStatus: 'PAID' as const,
+                paymentMethod: pickupRequest.paymentMethod,
+                paidAmount: pickupRequest.collectedAmount ?? finalPrice,
+                paidAt: pickupRequest.paymentCollectedAt,
+                paymentMarkedByAdminId: partnerId,
+              }),
+        },
       }),
       this.prisma.quote.update({
         where: { id: pickupRequest.quoteId },

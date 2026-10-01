@@ -21,6 +21,14 @@ export function toPickupRequestDto(
     estimatedWeightKg: pickupRequest.estimatedWeightKg,
     estimatedPrice: pickupRequest.estimatedPrice,
     currency: pickupRequest.currency,
+    couponCode: pickupRequest.coupon?.code ?? null,
+    discountAmount: pickupRequest.discountAmount,
+    // Computed here so the customer app, the partner app and the door all quote one figure.
+    payableAmount: Math.max(
+      0,
+      (pickupRequest.verifiedPrice ?? pickupRequest.estimatedPrice) -
+        (pickupRequest.discountAmount ?? 0),
+    ),
 
     dropAtWarehouse: pickupRequest.dropAtWarehouse,
     pickupContactName: pickupRequest.pickupContactName,

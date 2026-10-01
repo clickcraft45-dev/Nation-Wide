@@ -136,6 +136,16 @@ export interface PickupRequestDto {
   estimatedPrice: number;
   currency: string;
 
+  /**
+   * The discount code the customer applied when booking, and the rupees it takes off. The amount
+   * is frozen at booking — a code can be retired or re-priced before the parcel is collected,
+   * and this is the figure the customer was shown.
+   */
+  couponCode: string | null;
+  discountAmount: number | null;
+  /** What is actually collected at the door: the priced amount less the discount. */
+  payableAmount: number;
+
   dropAtWarehouse: boolean;
   pickupContactName: string;
   pickupContactPhone: string;

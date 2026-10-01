@@ -111,7 +111,13 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
   const [isCollectingPayment, setIsCollectingPayment] = useState(false);
   // "Take the payment later": nobody pays at the door, and an admin has to be named as having
   // approved it. The list is fetched when the payment step is reached.
-  const [isDue, setIsDue] = useState(false);
+  // "partial" is money at the door AND a remainder owed, so it needs both halves of this form.
+  const [payMode, setPayMode] = useState<"now" | "partial" | "later">("now");
+  const [partialAmount, setPartialAmount] = useState("");
+  const isDue = payMode === "later";
+  const isPartial = payMode === "partial";
+  const needsApprover = isDue || isPartial;
+  const takesMoney = payMode !== "later";
   const [dueApprovedByAdminId, setDueApprovedByAdminId] = useState("");
   const [dueNote, setDueNote] = useState("");
   const [dueApprovers, setDueApprovers] = useState<{ id: string; name: string }[]>([]);
@@ -137,8 +143,13 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
   // No rate card and no admin-set price: only older unpriced pickups (unpriced quotes now go to an
   // admin first — see QuotesService.create), so the partner names the price at the door. An
   // admin-quoted pickup already carries its price in estimatedPrice.
-  const needsManualPrice =
+  const unpricedPickup =
     pickup !== null && pickup.rateProviderId === null && pickup.estimatedPrice <= 0;
+  // The weighed parcel falls outside every slab this carrier publishes (a 9 kg box on a card that
+  // stops at 8). Blocking here would strand the partner at the door, so they name the price —
+  // the server accepts one only while no rate resolves.
+  const noRateForThisParcel = preview !== null && preview.recalculatedPrice === null;
+  const needsManualPrice = unpricedPickup || noRateForThisParcel;
 
   function load() {
     setIsLoading(true);
@@ -296,8 +307,16 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
 
   async function handleCollectPayment() {
     if (!pickup?.verifiedPrice) return;
-    if (isDue && !dueApprovedByAdminId) {
+    if (needsApprover && !dueApprovedByAdminId) {
       showToast({ variant: "error", title: "Pick the admin who approved this due." });
+      return;
+    }
+    const partPaid = Number(partialAmount);
+    if (isPartial && (!(partPaid > 0) || partPaid >= pickup.payableAmount)) {
+      showToast({
+        variant: "error",
+        title: `Enter an amount between 1 and ${pickup.payableAmount - 1}.`,
+      });
       return;
     }
     setIsCollectingPayment(true);
@@ -312,14 +331,25 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
             }
           : {
               paymentMethod,
-              collectedAmount: pickup.verifiedPrice,
+              collectedAmount: isPartial ? partPaid : pickup.payableAmount,
               paymentReference: paymentReference.trim() || undefined,
+              ...(isPartial
+                ? {
+                    deferRemainder: true,
+                    dueApprovedByAdminId,
+                    dueNote: dueNote.trim() || undefined,
+                  }
+                : {}),
             },
       );
       setPickup(updated);
       showToast({
         variant: "success",
-        title: isDue ? "Recorded as due — payment to follow" : "Payment collected",
+        title: isDue
+          ? "Recorded as due — payment to follow"
+          : isPartial
+            ? `Collected ${formatMoney(partPaid, pickup.currency)} — remainder recorded as due`
+            : "Payment collected",
       });
     } catch {
       showToast({
@@ -594,10 +624,18 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
                   </div>
 
                   {needsManualPrice ? (
-                    /* This shipment was never rated — no rate card covers it, so there is
-                       nothing for the server to recalculate and the partner is the first person
-                       to put a number on it. */
+                    /* Nothing for the server to recalculate — either this shipment was never
+                       rated, or the parcel as weighed falls outside every slab the carrier
+                       publishes. Either way the partner is the one who has to name a number,
+                       because the alternative is walking away from a packed parcel. */
                     <div className="space-y-1.5 rounded-lg border border-warning-border bg-warning-bg p-3">
+                      {noRateForThisParcel && (
+                        <p className="text-sm font-medium text-foreground">
+                          Original quote{" "}
+                          {formatMoney(pickup.estimatedPrice, pickup.currency)} · no rate covers
+                          this parcel
+                        </p>
+                      )}
                       <Label htmlFor="manual-price">Price agreed with the customer (₹)</Label>
                       <Input
                         id="manual-price"
@@ -611,8 +649,9 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
                         placeholder="0.00"
                       />
                       <p className="text-xs text-warning">
-                        No rate card covers this route, so this parcel has no quoted price. Enter
-                        what the customer pays — this is the amount they will be charged.
+                        {noRateForThisParcel
+                          ? `No rate card covers ${chargeableKg} kg as ${shipmentLabel(verifiedShipmentType)} on this carrier. Agree a price with the customer and enter it — this is what they will be charged.`
+                          : "No rate card covers this route, so this parcel has no quoted price. Enter what the customer pays — this is the amount they will be charged."}
                       </p>
                     </div>
                   ) : (
@@ -792,41 +831,77 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
                   <div className="text-center">
                     <p className="text-xs text-muted-foreground">Amount To Collect</p>
                     <p className="text-3xl font-bold text-foreground">
-                      {formatMoney(pickup.verifiedPrice, pickup.currency)}
+                      {formatMoney(pickup.payableAmount, pickup.currency)}
                     </p>
+                    {/* The customer will say "I used a code" — the figure has to show why it is
+                        lower than the price, or the partner cannot confirm it. */}
+                    {pickup.discountAmount ? (
+                      <p className="mt-1 text-xs text-success">
+                        {formatMoney(
+                          pickup.verifiedPrice ?? pickup.estimatedPrice,
+                          pickup.currency,
+                        )}{" "}
+                        less {formatMoney(pickup.discountAmount, pickup.currency)}
+                        {pickup.couponCode ? ` (${pickup.couponCode})` : ""}
+                      </p>
+                    ) : null}
                   </div>
 
                   <div>
                     <Label>Payment</Label>
-                    <div className="mt-1.5 grid grid-cols-2 gap-3">
-                      <button
-                        type="button"
-                        onClick={() => setIsDue(false)}
-                        className={cn(
-                          "rounded-lg border-2 py-3 text-center text-sm font-semibold",
-                          !isDue
-                            ? "border-primary bg-primary/5 text-primary"
-                            : "border-border text-muted-foreground",
-                        )}
-                      >
-                        Paying now
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setIsDue(true)}
-                        className={cn(
-                          "rounded-lg border-2 py-3 text-center text-sm font-semibold",
-                          isDue
-                            ? "border-primary bg-primary/5 text-primary"
-                            : "border-border text-muted-foreground",
-                        )}
-                      >
-                        Pay later (due)
-                      </button>
+                    <div className="mt-1.5 grid grid-cols-3 gap-2">
+                      {(
+                        [
+                          ["now", "Paying now"],
+                          ["partial", "Part now"],
+                          ["later", "Pay later"],
+                        ] as const
+                      ).map(([mode, label]) => (
+                        <button
+                          key={mode}
+                          type="button"
+                          onClick={() => setPayMode(mode)}
+                          className={cn(
+                            "rounded-lg border-2 px-1 py-3 text-center text-sm font-semibold",
+                            payMode === mode
+                              ? "border-primary bg-primary/5 text-primary"
+                              : "border-border text-muted-foreground",
+                          )}
+                        >
+                          {label}
+                        </button>
+                      ))}
                     </div>
                   </div>
 
-                  {isDue && (
+                  {isPartial && (
+                    <div className="space-y-1.5">
+                      <Label htmlFor="partial-amount">Collecting now (₹)</Label>
+                      <Input
+                        id="partial-amount"
+                        type="number"
+                        inputMode="decimal"
+                        step="0.01"
+                        min="1"
+                        max={pickup.payableAmount - 1}
+                        value={partialAmount}
+                        onChange={(e) => setPartialAmount(e.target.value)}
+                        className="h-12 text-lg font-semibold"
+                        placeholder="0.00"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        {Number(partialAmount) > 0 &&
+                        Number(partialAmount) < pickup.payableAmount
+                          ? `${formatMoney(
+                              pickup.payableAmount - Number(partialAmount),
+                              pickup.currency,
+                            )} will stay owing on the order.`
+                          : "The rest becomes a due on the customer's order."}
+                      </p>
+                    </div>
+                  )}
+
+                  {needsApprover && (
                     <>
                       <div className="space-y-1.5">
                         <Label htmlFor="due-approver">Approved by</Label>
@@ -860,7 +935,7 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
                     </>
                   )}
 
-                  {!isDue && (
+                  {takesMoney && (
                   <div>
                     <Label>Payment Method</Label>
                     <div className="mt-1.5 grid grid-cols-2 gap-3">
@@ -883,7 +958,7 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
                   </div>
                   )}
 
-                  {!isDue && paymentMethod === "UPI" && (
+                  {takesMoney && paymentMethod === "UPI" && (
                     <div className="space-y-1.5">
                       <Label htmlFor="payment-reference">UPI Reference Number (optional)</Label>
                       <Input
@@ -900,18 +975,31 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
                 title={isDue ? "Confirm Due" : "Confirm Payment"}
                 description={
                   isDue
-                    ? `${formatMoney(pickup.verifiedPrice, pickup.currency)} will be left owing, approved by ${
+                    ? `${formatMoney(pickup.payableAmount, pickup.currency)} will be left owing, approved by ${
                         dueApprovers.find((a) => a.id === dueApprovedByAdminId)?.name ?? "—"
                       }. The customer sees this as due in their portal.`
-                    : `Amount: ${formatMoney(pickup.verifiedPrice, pickup.currency)} · Method: ${
-                        PARTNER_PAYMENT_METHODS.find((m) => m.value === paymentMethod)?.label
-                      }. Are you sure the payment has been received?`
+                    : isPartial
+                      ? `Collecting ${formatMoney(Number(partialAmount) || 0, pickup.currency)} by ${
+                          PARTNER_PAYMENT_METHODS.find((m) => m.value === paymentMethod)?.label
+                        }, leaving ${formatMoney(
+                          pickup.payableAmount - (Number(partialAmount) || 0),
+                          pickup.currency,
+                        )} owing, approved by ${
+                          dueApprovers.find((a) => a.id === dueApprovedByAdminId)?.name ?? "—"
+                        }.`
+                      : `Amount: ${formatMoney(pickup.payableAmount, pickup.currency)} · Method: ${
+                          PARTNER_PAYMENT_METHODS.find((m) => m.value === paymentMethod)?.label
+                        }. Are you sure the payment has been received?`
                 }
                 confirmLabel={isDue ? "Confirm Due" : "Confirm Payment"}
                 onConfirm={handleCollectPayment}
                 trigger={
                   <Button size="lg" className="w-full" isLoading={isCollectingPayment}>
-                    {isDue ? "Record As Due" : "Mark Payment Collected"}
+                    {isDue
+                      ? "Record As Due"
+                      : isPartial
+                        ? "Collect Part Payment"
+                        : "Mark Payment Collected"}
                   </Button>
                 }
               />

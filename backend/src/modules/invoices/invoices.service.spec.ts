@@ -209,6 +209,43 @@ describe('InvoicesService', () => {
       expect(prisma.invoice.create).not.toHaveBeenCalled();
     });
 
+    // Post-tax by decision: the taxable value and the GST on it describe what the supply was
+    // worth, and the coupon comes off the payable total underneath — so the tax figures stay
+    // reconcilable against the rate card.
+    it('takes a coupon off AFTER tax, leaving the taxable value and GST untouched', async () => {
+      prisma.order.findUnique.mockResolvedValue(
+        makeOrder({ discountAmount: 100, coupon: { code: 'SAVE100' } }),
+      );
+
+      await service.generateForOrder('order-1', 'admin-1');
+
+      const data = prisma.invoice.create.mock.calls[0][0].data as Record<
+        string,
+        number | string
+      >;
+      const undiscounted =
+        Number(data.taxableValue) +
+        Number(data.totalTax) +
+        Number(data.nonTaxableCharges);
+      expect(data.discountAmount).toBe(100);
+      expect(data.discountCode).toBe('SAVE100');
+      expect(data.totalAmount).toBe(undiscounted - 100);
+    });
+
+    it('never lets a coupon push an invoice below zero', async () => {
+      prisma.order.findUnique.mockResolvedValue(
+        makeOrder({ discountAmount: 999_999, coupon: { code: 'HUGE' } }),
+      );
+
+      await service.generateForOrder('order-1', 'admin-1');
+
+      const data = prisma.invoice.create.mock.calls[0][0].data as Record<
+        string,
+        number
+      >;
+      expect(data.totalAmount).toBe(0);
+    });
+
     it('snapshots supplier and recipient rather than leaving them to be joined later', async () => {
       await service.generateForOrder('order-1', 'admin-1');
 
