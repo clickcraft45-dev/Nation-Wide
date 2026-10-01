@@ -12,7 +12,7 @@ import type {
   QuotePreviewResultDto,
   SavedItemDto,
 } from "@nationwide/shared-types";
-import { errorMessage } from "@/lib/api-client";
+import { ApiError, errorMessage } from "@/lib/api-client";
 import type { B2bClient } from "@/lib/b2b-client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -145,10 +145,14 @@ export function B2bPortal({ client }: { client: B2bClient }) {
       })
       .catch((err) =>
         setLoadError(
-          errorMessage(
-            err,
-            "This link is no longer valid. Ask your NationWide contact for a new one.",
-          ),
+          // A revoked or unknown link is the flat 404 B2bAccessGuard throws, and only that is
+          // worth sending someone back to their NationWide contact for. Anything else is our
+          // fault, and telling a despatch desk their working link is dead has them chasing a
+          // replacement that would fail exactly the same way — the reference id errorMessage
+          // appends to a 5xx is what actually gets it fixed.
+          err instanceof ApiError && err.status === 404
+            ? "This link is no longer valid. Ask your NationWide contact for a new one."
+            : errorMessage(err, "We couldn't open the portal. Please try again shortly."),
         ),
       )
       .finally(() => setIsLoading(false));

@@ -87,6 +87,40 @@ if [ ! -f backend/.env ]; then
   exit 1
 fi
 
+# Apply this commit's migrations BEFORE the new code starts.
+#
+# Without this the new build queries columns the database does not have yet, Prisma raises P2022,
+# and every route touching the changed table 500s — while /health, which touches none of them,
+# cheerfully reports the deploy a success. That is exactly the "finished while the service is
+# down" failure the health check below was written to catch, and it walks straight past it.
+#
+# migrate deploy only applies pending migrations and never resets or generates, so re-running it
+# on an up-to-date database is a no-op. It runs in the `build` stage image because the prisma CLI
+# is a devDependency and so is absent from the runtime image; that stage is already built and
+# cached by the compose build below.
+echo "==> Applying migrations"
+docker build -q -f backend/Dockerfile --target build -t nw-migrate .
+
+# Two things this has to get right, both of which fail confusingly:
+#
+# 1. docker's --env-file does NOT strip surrounding quotes, so a .env holding
+#    DATABASE_URL="postgres://..." reaches Prisma starting with a double quote and it rejects the
+#    protocol. Hence the sed. Passing -e DATABASE_URL=... instead would put the database password
+#    in the host's process list for anyone running ps, which is why this goes through a file.
+# 2. The container must join the COMPOSE network. On the default bridge it reaches Postgres from
+#    a different subnet than the backend does and pg_hba rejects it with P1010 — a permission
+#    error that reads like bad credentials rather than the wrong source address.
+umask 077
+MIGRATE_ENV=/tmp/nw-migrate.env
+sed -nE 's/^(DATABASE_URL|DIRECT_URL)=["'"'"']?(.*[^"'"'"'])["'"'"']?$/\1=\2/p' \
+  backend/.env > "\$MIGRATE_ENV"
+NETWORK="\$(docker inspect -f '{{range \$k,\$v := .NetworkSettings.Networks}}{{\$k}}{{end}}' \
+  nation-wide-backend-1 2>/dev/null || echo nation-wide_default)"
+trap 'rm -f "\$MIGRATE_ENV"' EXIT
+docker run --rm --env-file "\$MIGRATE_ENV" \
+  --network "\$NETWORK" --add-host=host.docker.internal:host-gateway \
+  nw-migrate npx prisma migrate deploy --schema backend/prisma/schema.prisma
+
 # --build is the whole point: the fix for rate cards and invoices is a new COPY line in the
 # Dockerfile, and a plain restart reuses the old image and changes nothing.
 docker compose up -d --build backend
