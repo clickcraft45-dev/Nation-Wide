@@ -9,6 +9,16 @@ function uniqueConstraintError(): Prisma.PrismaClientKnownRequestError {
   });
 }
 
+function uniqueConstraintOn(
+  field: string,
+): Prisma.PrismaClientKnownRequestError {
+  return new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+    code: 'P2002',
+    clientVersion: '6.19.3',
+    meta: { target: [field] },
+  });
+}
+
 function recordNotFoundError(): Prisma.PrismaClientKnownRequestError {
   return new Prisma.PrismaClientKnownRequestError('Record not found', {
     code: 'P2025',
@@ -70,6 +80,34 @@ describe('CustomersService', () => {
           consentSource: 'staff_entry',
         }),
       ).rejects.toThrow(ConflictException);
+    });
+
+    // Phone and email are both unique. Blaming the phone for an email clash sent admins off
+    // correcting a number that was never the problem — see duplicateMessage.
+    it('names the email, not the phone, when it is the email that clashes', async () => {
+      prisma.customer.create.mockRejectedValue(uniqueConstraintOn('email'));
+
+      await expect(
+        service.create({
+          name: 'Kapil Future Tech',
+          phone: '+919866927904',
+          email: 'sujith@example.com',
+          consentSource: 'admin_b2b_link',
+        }),
+      ).rejects.toThrow('A customer with email sujith@example.com already exists');
+    });
+
+    it('still names the phone when the phone is what clashes', async () => {
+      prisma.customer.create.mockRejectedValue(uniqueConstraintOn('phone'));
+
+      await expect(
+        service.create({
+          name: 'Kapil Future Tech',
+          phone: '+919866927904',
+          email: 'sujith@example.com',
+          consentSource: 'admin_b2b_link',
+        }),
+      ).rejects.toThrow('A customer with phone +919866927904 already exists');
     });
   });
 

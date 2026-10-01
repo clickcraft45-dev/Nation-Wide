@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Copy, Link2, ShieldOff } from "lucide-react";
 import type { B2bLinkDto, B2bLinkOverviewDto, CustomerDto } from "@nationwide/shared-types";
-import { apiClient, errorMessage } from "@/lib/api-client";
+import { apiClient, ApiError, errorMessage } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { SearchInput } from "@/components/ui/search-input";
@@ -277,21 +277,49 @@ function GenerateLinkDialog({ onCreated }: { onCreated: () => void }) {
       ? customer !== null
       : businessName.trim().length > 1 && /^\+[1-9]\d{7,14}$/.test(phone));
 
+  /**
+   * The account the link will belong to, creating it when this is a genuinely new business.
+   *
+   * A duplicate phone is treated as "use the one already on file" rather than an error, because
+   * from here the two are the same intent. Generating a link is two calls — create the account,
+   * then issue the link against it — and they are not atomic: if the second fails, the account
+   * survives and every retry would collide with the half-finished attempt, leaving no way to
+   * finish from this tab. The same applies when the business simply registered earlier.
+   */
+  async function resolveAccount(): Promise<CustomerDto> {
+    if (mode === "existing") return customer!;
+    const trimmedPhone = phone.trim();
+    try {
+      return await apiClient.post<CustomerDto>("/customers", {
+        name: businessName.trim(),
+        phone: trimmedPhone,
+        email: email.trim() || undefined,
+        consentSource: "admin_b2b_link",
+      });
+    } catch (err) {
+      if (!(err instanceof ApiError) || err.status !== 409) throw err;
+      // The exact number, not whatever the search ranked first — a `contains` match on a phone
+      // can return a longer number this one is a substring of.
+      const matches = await apiClient.get<CustomerDto[]>(
+        `/customers?search=${encodeURIComponent(trimmedPhone)}&pageSize=8`,
+      );
+      const existing = matches.find((c) => c.phone === trimmedPhone);
+      if (!existing) throw err;
+      showToast({
+        variant: "success",
+        title: `${existing.name} is already on file`,
+        description: "The link was issued against their existing account.",
+      });
+      return existing;
+    }
+  }
+
   async function create() {
     setIsSaving(true);
     setFormError(null);
     try {
-      // A new business is created first, then the link is issued against it — the same account
-      // the rest of the app bills, not a second kind of customer record.
-      const account =
-        mode === "existing"
-          ? customer!
-          : await apiClient.post<CustomerDto>("/customers", {
-              name: businessName.trim(),
-              phone: phone.trim(),
-              email: email.trim() || undefined,
-              consentSource: "admin_b2b_link",
-            });
+      // The same account the rest of the app bills, not a second kind of customer record.
+      const account = await resolveAccount();
       const link = await apiClient.post<B2bLinkDto>(`/admin/customers/${account.id}/b2b-links`, {
         label: label.trim(),
         contactName: contactName.trim() || undefined,

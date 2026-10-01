@@ -53,7 +53,7 @@ export class CustomersService {
         select: PUBLIC_CUSTOMER_SELECT,
       });
     } catch (error) {
-      this.rethrowKnownPrismaError(error, dto.phone);
+      this.rethrowKnownPrismaError(error, dto);
       throw error;
     }
   }
@@ -182,30 +182,52 @@ export class CustomersService {
         select: PUBLIC_CUSTOMER_SELECT,
       });
     } catch (error) {
-      this.rethrowKnownPrismaError(error, dto.phone, id);
+      this.rethrowKnownPrismaError(error, dto, id);
       throw error;
     }
   }
 
   private rethrowKnownPrismaError(
     error: unknown,
-    phone?: string,
+    values?: { phone?: string; email?: string },
     id?: string,
   ): void {
     if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
       return;
     }
     if (error.code === UNIQUE_CONSTRAINT_VIOLATION) {
-      throw new ConflictException(
-        phone
-          ? `A customer with phone ${phone} already exists`
-          : 'Duplicate value',
-      );
+      throw new ConflictException(this.duplicateMessage(error, values));
     }
     if (error.code === RECORD_NOT_FOUND) {
       throw new NotFoundException(
         id ? `Customer ${id} not found` : 'Customer not found',
       );
     }
+  }
+
+  /**
+   * Which column actually collided.
+   *
+   * Phone and email are BOTH unique on Customer, but this named the phone for every P2002 — so an
+   * admin creating a business under a shared company inbox was told the phone was taken, and went
+   * off correcting a number that was never the problem while the real clash stayed invisible.
+   */
+  private duplicateMessage(
+    error: Prisma.PrismaClientKnownRequestError,
+    values?: { phone?: string; email?: string },
+  ): string {
+    // meta.target is the offending column list, but its shape is driver-dependent — an array of
+    // field names on some versions, a constraint name like "customers_email_key" on others — so
+    // this matches the text of whatever came back rather than assuming either.
+    const target = JSON.stringify(error.meta?.target ?? '');
+    if (target.includes('email')) {
+      return values?.email
+        ? `A customer with email ${values.email} already exists`
+        : 'A customer with that email already exists';
+    }
+    if (values?.phone && (target.includes('phone') || target === '""')) {
+      return `A customer with phone ${values.phone} already exists`;
+    }
+    return 'Duplicate value';
   }
 }
