@@ -10,11 +10,14 @@ import {
   Post,
   Query,
   Req,
+  Res,
   UseGuards,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { Throttle } from '@nestjs/throttler';
 import type {
   B2bOrderResultDto,
+  InvoiceDto,
   B2bRequestSummaryDto,
   B2bSessionDto,
   CountryDto,
@@ -22,6 +25,9 @@ import type {
   SavedItemDto,
 } from '@nationwide/shared-types';
 import { AddressBookService } from '../customers/address-book.service';
+import { CustomersService, type PublicCustomer } from '../customers/customers.service';
+import { InvoicesService } from '../invoices/invoices.service';
+import { toInvoiceDto } from '../invoices/invoice.mapper';
 import { SaveItemDto } from '../customers/dto/save-item.dto';
 import { CountriesService } from '../pricing/countries.service';
 import { toCountryDto } from '../pricing/country.mapper';
@@ -50,6 +56,8 @@ export class B2bController {
     private readonly addressBook: AddressBookService,
     private readonly countries: CountriesService,
     private readonly quotes: QuotesService,
+    private readonly customers: CustomersService,
+    private readonly invoices: InvoicesService,
   ) {}
 
   /** Who the link belongs to, plus their reusable addresses, recipients and items. */
@@ -95,6 +103,44 @@ export class B2bController {
   @Get('orders')
   listOrders(@Req() req: B2bRequest): Promise<B2bRequestSummaryDto[]> {
     return this.pickupRequests.summariesForCustomer(req.b2b!.customerId);
+  }
+
+  /** The business's own details, for the portal's profile tab. */
+  @Throttle(READ_THROTTLE)
+  @Get('profile')
+  profile(@Req() req: B2bRequest): Promise<PublicCustomer> {
+    return this.customers.findOne(req.b2b!.customerId);
+  }
+
+  /** Every tax invoice issued to this business — the same rows their account's /documents shows. */
+  @Throttle(READ_THROTTLE)
+  @Get('invoices')
+  async listInvoices(@Req() req: B2bRequest): Promise<InvoiceDto[]> {
+    const invoices = await this.invoices.listForCustomer(req.b2b!.customerId);
+    return invoices.map(toInvoiceDto);
+  }
+
+  // readPdfForCustomer, not readPdf: it 404s on an invoice belonging to anyone else, so a link
+  // token can only ever pull down its own business's tax documents.
+  @Throttle(READ_THROTTLE)
+  @Get('invoices/:id/pdf')
+  async invoicePdf(
+    @Req() req: B2bRequest,
+    @Param('id') id: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    const { buffer, filename } = await this.invoices.readPdfForCustomer(
+      id,
+      req.b2b!.customerId,
+    );
+    res
+      .status(200)
+      .set({
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename="${filename}"`,
+        'Content-Length': String(buffer.length),
+      })
+      .end(buffer);
   }
 
   // The saved-items library, editable from the portal: the same rows the customer's own account

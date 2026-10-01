@@ -6,7 +6,7 @@ import { API_BASE_URL, ApiError, apiClient } from "@/lib/api-client";
  * session and no cookie: the link in the address bar is the whole credential.
  */
 export function b2bClient(token: string) {
-  async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  async function send(path: string, init?: RequestInit): Promise<Response> {
     const res = await fetch(`${API_BASE_URL}/b2b${path}`, {
       ...init,
       headers: {
@@ -31,11 +31,17 @@ export function b2bClient(token: string) {
         body,
       );
     }
+    return res;
+  }
+
+  async function request<T>(path: string, init?: RequestInit): Promise<T> {
+    const res = await send(path, init);
     return res.status === 204 ? (undefined as T) : ((await res.json()) as T);
   }
 
   return {
     get: <T>(path: string) => request<T>(path),
+    getBlob: async (path: string) => (await send(path)).blob(),
     post: <T>(path: string, body: unknown) =>
       request<T>(path, { method: "POST", body: JSON.stringify(body) }),
     patch: <T>(path: string, body: unknown) =>
@@ -53,6 +59,7 @@ export type B2bClient = ReturnType<typeof b2bClient>;
  */
 export const sessionB2bClient: B2bClient = {
   get: (path) => apiClient.get(`/b2b${path}`),
+  getBlob: async (path) => (await apiClient.getBlob(`/b2b${path}`)).blob,
   post: (path, body) => apiClient.post(`/b2b${path}`, body),
   patch: (path, body) => apiClient.patch(`/b2b${path}`, body),
   delete: (path) => apiClient.delete(`/b2b${path}`),

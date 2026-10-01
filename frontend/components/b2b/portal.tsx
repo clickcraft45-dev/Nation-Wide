@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckCircle2, Clock, Package, Plus } from "lucide-react";
+import { CheckCircle2, Clock, Plus } from "lucide-react";
 import type {
   B2bCreateOrdersDto,
   B2bOrderResultDto,
@@ -23,6 +23,13 @@ import { PincodeInput } from "@/components/ui/pincode-input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/ui/page-state";
 import { Logo } from "@/components/brand/logo";
+import { SegmentedControl } from "@/components/ui/segmented-control";
+import {
+  InvoicesPanel,
+  OrdersPanel,
+  ProfilePanel,
+  TrackingPanel,
+} from "@/components/b2b/panels";
 import {
   toRecipientPayload,
   validateRecipient,
@@ -44,6 +51,16 @@ const TIME_SLOTS: { value: PickupTimeSlot; label: string }[] = [
 ];
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
+
+type Tab = "book" | "orders" | "invoices" | "tracking" | "profile";
+
+const TABS: { value: Tab; label: string }[] = [
+  { value: "book", label: "Book" },
+  { value: "orders", label: "Orders" },
+  { value: "invoices", label: "Invoices" },
+  { value: "tracking", label: "Tracking" },
+  { value: "profile", label: "Profile" },
+];
 
 interface PickupForm {
   contactName: string;
@@ -96,6 +113,9 @@ export function B2bPortal({ client }: { client: B2bClient }) {
   const [results, setResults] = useState<B2bOrderResultDto[] | null>(null);
   const [history, setHistory] = useState<B2bRequestSummaryDto[]>([]);
   const [submissionKey, setSubmissionKey] = useState(() => crypto.randomUUID());
+  const [tab, setTab] = useState<Tab>("book");
+  // Set when an order's tracking number is clicked, so the tracking tab opens on that parcel.
+  const [trackTarget, setTrackTarget] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     Promise.all([
@@ -262,7 +282,27 @@ export function B2bPortal({ client }: { client: B2bClient }) {
         </div>
       </header>
 
-      {results ? (
+      <SegmentedControl
+        options={TABS}
+        value={tab}
+        onChange={setTab}
+        ariaLabel="Portal section"
+      />
+
+      {tab === "orders" && (
+        <OrdersPanel
+          orders={history}
+          onTrack={(trackingNumber) => {
+            setTrackTarget(trackingNumber);
+            setTab("tracking");
+          }}
+        />
+      )}
+      {tab === "invoices" && <InvoicesPanel client={client} />}
+      {tab === "tracking" && <TrackingPanel orders={history} initialTracking={trackTarget} />}
+      {tab === "profile" && <ProfilePanel client={client} />}
+
+      {tab === "book" && (results ? (
         <Card>
           <CardHeader>
             <CardTitle>Shipments submitted</CardTitle>
@@ -452,35 +492,8 @@ export function B2bPortal({ client }: { client: B2bClient }) {
             Submit {orders.length} shipment{orders.length === 1 ? "" : "s"}
           </Button>
         </form>
-      )}
+      ))}
 
-      {history.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent requests</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            {history.slice(0, 15).map((row) => (
-              <div key={row.id} className="flex items-center gap-3 border-b border-border py-2 last:border-0">
-                <Package className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate font-medium text-foreground">
-                    {row.recipientName ?? "Recipient at pickup"} · {row.destinationCountry}
-                  </span>
-                  <span className="block text-xs text-muted-foreground">
-                    {row.pickupDate ?? new Date(row.createdAt).toLocaleDateString()} ·{" "}
-                    {row.status.replaceAll("_", " ").toLowerCase()}
-                    {row.carrier ? ` · ${row.carrier}` : ""}
-                  </span>
-                </span>
-                <span className="shrink-0 font-medium text-foreground">
-                  {row.currency} {Math.round(row.price).toLocaleString("en-IN")}
-                </span>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 }

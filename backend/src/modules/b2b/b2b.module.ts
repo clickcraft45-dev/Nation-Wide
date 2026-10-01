@@ -9,6 +9,7 @@ import { PickupRequestsModule } from '../pickup-requests/pickup-requests.module'
 import { CustomersModule } from '../customers/customers.module';
 import { PricingModule } from '../pricing/pricing.module';
 import { QuotesModule } from '../quotes/quotes.module';
+import { InvoicesModule } from '../invoices/invoices.module';
 import { MailModule } from '../mail/mail.module';
 
 @Module({
@@ -19,6 +20,8 @@ import { MailModule } from '../mail/mail.module';
     CustomersModule,
     PricingModule,
     QuotesModule,
+    // The business's own tax invoices, listed and downloaded from the portal.
+    InvoicesModule,
     // The invite email that brings a business onto the portal.
     MailModule,
   ],

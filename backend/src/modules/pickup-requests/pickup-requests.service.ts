@@ -710,7 +710,19 @@ export class PickupRequestsService {
       where: { customerId },
       orderBy: { createdAt: 'desc' },
       take: 100,
-      ...withDetails,
+      include: {
+        ...withDetails.include,
+        // The tracking number only exists once acceptParcel has generated the Order, so this is
+        // null for anything still awaiting pickup — the portal shows those without a track link.
+        order: {
+          select: {
+            shipments: {
+              select: { internalTrackingNumber: true, currentStatus: true },
+              take: 1,
+            },
+          },
+        },
+      },
     });
     return requests.map((r) => ({
       id: r.id,
@@ -721,6 +733,8 @@ export class PickupRequestsService {
       price: r.verifiedPrice ?? r.estimatedPrice,
       currency: r.currency,
       carrier: r.rateProviderName,
+      trackingNumber: r.order?.shipments[0]?.internalTrackingNumber ?? null,
+      shipmentStatus: r.order?.shipments[0]?.currentStatus ?? null,
       createdAt: r.createdAt.toISOString(),
     }));
   }

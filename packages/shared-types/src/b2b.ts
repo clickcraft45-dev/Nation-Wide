@@ -109,5 +109,8 @@ export interface B2bRequestSummaryDto {
   price: number;
   currency: string;
   carrier: string | null;
+  /** Null until the pickup is accepted and a shipment exists — nothing to track before then. */
+  trackingNumber: string | null;
+  shipmentStatus: string | null;
   createdAt: string; // ISO 8601
 }
