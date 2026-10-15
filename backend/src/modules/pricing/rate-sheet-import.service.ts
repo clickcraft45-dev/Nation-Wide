@@ -13,6 +13,7 @@ import type {
 } from '@nationwide/shared-types';
 import { PrismaService } from '../../database/prisma.service';
 import { listSheets, readSheetFromBuffer } from '../../common/xlsx/xlsx-reader';
+import { buildWorkbook, type Cell } from '../../common/xlsx/xlsx-writer';
 import {
   detectRateTables,
   type DetectedTable,
@@ -47,6 +48,40 @@ export class RateSheetImportService {
   async current(providerId: string): Promise<ProviderRateSheetDto> {
     const provider = await this.provider(providerId);
     return sheetView(provider, await this.liveCards(provider.id), null, [], []);
+  }
+
+  /**
+   * The live rates as a workbook: the same grid, then the country → zone list. Upload it back
+   * (edited or not) and it reads as this provider's sheet.
+   */
+  async export(providerId: string): Promise<{ name: string; file: Buffer }> {
+    const provider = await this.provider(providerId);
+    const view = sheetView(provider, await this.liveCards(provider.id), null, [], []);
+    const links = await this.prisma.zoneCountry.findMany({
+      where: { rateProviderId: provider.id },
+      include: { zone: true, country: true },
+      orderBy: [{ zone: { name: 'asc' } }, { country: { name: 'asc' } }],
+    });
+    const allIn = view.grids.some((g) => g.allIn);
+    return {
+      name: `${provider.code.toLowerCase()}-rates`,
+      file: buildWorkbook([
+        {
+          // The code, not the name: an unrecognised sheet becomes a provider coded by its sheet
+          // name, so naming it by the code is what makes the upload land on this provider again.
+          name: `${provider.code.slice(0, 24)}${allIn ? ' All in' : ''}`,
+          rows: exportRows(
+            provider.name,
+            view.grids,
+            links.map((l) => ({
+              country: l.country.name,
+              code: l.country.code,
+              zone: l.zone.name,
+            })),
+          ),
+        },
+      ]),
+    };
   }
 
   /** What uploading this sheet would change, cell by cell. Writes nothing. */
@@ -403,6 +438,39 @@ export function pickTables(
     })),
     warnings,
   };
+}
+
+/**
+ * The grids as rows the detector reads back: a title naming the shipment type, a "Weight (kg)"
+ * header, one row per band (the band's top weight for a flat price, "from-to" for a per-kg one),
+ * then "Country | Zone". Every grid gets the same columns, so the document grid continues the
+ * package grid's column layout rather than starting a new one.
+ */
+export function exportRows(
+  providerName: string,
+  grids: RateGridDto[],
+  links: { country: string; code: string; zone: string }[],
+): Cell[][] {
+  const columns = [...new Set(grids.flatMap((g) => g.columns))];
+  const rows: Cell[][] = [];
+  for (const grid of grids) {
+    const at = columns.map((c) => grid.columns.indexOf(c));
+    rows.push([
+      `${providerName} ${grid.shipmentType === 'DOCUMENT' ? 'Document' : 'Package'} rates${grid.allIn ? ' (all-in)' : ''}`,
+    ]);
+    rows.push(['Weight (kg)', ...columns]);
+    for (const row of grid.rows) {
+      const perKg = row.cells.some((c) => c.old !== null && c.perKg);
+      rows.push([
+        perKg ? `${row.fromKg}-${row.toKg}` : row.toKg,
+        ...at.map((i) => (i < 0 ? '' : (row.cells[i].old ?? ''))),
+      ]);
+    }
+    rows.push([]);
+  }
+  rows.push(['Country', 'Zone']);
+  for (const link of links) rows.push([`${link.country} (${link.code})`, link.zone]);
+  return rows;
 }
 
 const naturally = (a: string, b: string) =>

@@ -2,22 +2,42 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Tag } from "lucide-react";
+import { Download, Tag, Upload } from "lucide-react";
 import type { RateProviderDto } from "@nationwide/shared-types";
 import { apiClient, errorMessage } from "@/lib/api-client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { EmptyState, ErrorState } from "@/components/ui/page-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RateProviderDialog } from "@/components/pricing/rate-provider-dialog";
-import { SpreadsheetActions } from "@/components/pricing/spreadsheet-actions";
+import { useToast } from "@/components/ui/toast";
+import { downloadBlob } from "@/lib/utils/download-blob";
+import { cn } from "@/lib/utils/cn";
 import { BackLink } from "@/components/ui/back-link";
 
 export default function PricingProvidersPage() {
   const [providers, setProviders] = useState<RateProviderDto[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState<string | null>(null);
+  const { showToast } = useToast();
+
+  // Each provider has its own zones, countries and rates, so its sheet goes in and out on its own.
+  async function exportSheet(p: RateProviderDto) {
+    setExporting(p.id);
+    try {
+      const { blob, headers } = await apiClient.getBlob(`/admin/pricing/providers/${p.id}/rate-sheet/export`);
+      const name =
+        /filename="([^"]+)"/.exec(headers.get("Content-Disposition") ?? "")?.[1] ??
+        `${p.code.toLowerCase()}-rates.xlsx`;
+      downloadBlob(blob, name);
+    } catch (err) {
+      showToast({ variant: "error", title: errorMessage(err, `Couldn't export ${p.name}'s rates.`) });
+    } finally {
+      setExporting(null);
+    }
+  }
 
   function load() {
     setIsLoading(true);
@@ -44,9 +64,6 @@ export default function PricingProvidersPage() {
           Pick a provider to manage its countries, weight categories, and rates.
         </p>
         <div className="flex flex-wrap items-center gap-2">
-          {/* The whole rate book in and out as one sheet — editing hundreds of bands in the
-              drill-down below is what the spreadsheet replaces. */}
-          <SpreadsheetActions resource="rate-cards" label="Rate cards" onImported={load} />
           <RateProviderDialog onSaved={() => load()} trigger={<Button size="sm">New provider</Button>} />
         </div>
       </div>
@@ -91,10 +108,28 @@ export default function PricingProvidersPage() {
                     {new Date(p.updatedAt).toLocaleDateString("en-IN")}
                   </dd>
                 </dl>
-                <Link href={`/admin/pricing/providers/${p.id}`} className="block">
-                  <Button size="sm" className="w-full">
-                    Manage
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => void exportSheet(p)}
+                    isLoading={exporting === p.id}
+                    aria-label={`Export ${p.name} rates to Excel`}
+                  >
+                    <Download className="h-4 w-4" aria-hidden />
+                    Export
                   </Button>
+                  <Link
+                    href={`/admin/pricing/rate-sheets?provider=${p.id}`}
+                    className={buttonVariants({ variant: "secondary", size: "sm" })}
+                    aria-label={`Import a rate sheet for ${p.name}`}
+                  >
+                    <Upload className="h-4 w-4" aria-hidden />
+                    Import
+                  </Link>
+                </div>
+                <Link href={`/admin/pricing/providers/${p.id}`} className={cn(buttonVariants({ size: "sm" }), "w-full")}>
+                  Manage
                 </Link>
               </CardContent>
             </Card>

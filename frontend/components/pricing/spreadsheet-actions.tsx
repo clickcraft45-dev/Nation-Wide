@@ -50,7 +50,7 @@ export function SpreadsheetActions({
   onImported,
 }: {
   /** The admin/pricing sub-path. */
-  resource: "countries" | "rate-cards";
+  resource: "countries";
   label: string;
   onImported: () => void;
 }) {

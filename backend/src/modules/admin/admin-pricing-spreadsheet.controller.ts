@@ -43,8 +43,8 @@ const upload = {
 };
 
 /**
- * Countries and rate cards as spreadsheets: export what is live, download a filled-in template,
- * and upload an edited sheet back. ADMIN only — this writes prices.
+ * Countries and provider rate sheets as spreadsheets: export what is live, and upload an edited
+ * or carrier-sent sheet back after previewing it. ADMIN only — this writes prices.
  */
 @Controller('admin/pricing')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -61,6 +61,16 @@ export class AdminPricingSpreadsheetController {
     @Param('providerId', ParseUUIDPipe) providerId: string,
   ): Promise<ProviderRateSheetDto> {
     return this.rateSheets.current(providerId);
+  }
+
+  /** The same grid as a workbook, which this page's import reads straight back. */
+  @Get('providers/:providerId/rate-sheet/export')
+  async exportRateSheet(
+    @Param('providerId', ParseUUIDPipe) providerId: string,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<StreamableFile> {
+    const { name, file } = await this.rateSheets.export(providerId);
+    return this.send(res, name, file);
   }
 
   /**
@@ -138,44 +148,6 @@ export class AdminPricingSpreadsheetController {
     @UploadedFile() file?: Express.Multer.File,
   ): Promise<ImportPlan> {
     return this.spreadsheet.importCountries(this.fileOf(file));
-  }
-
-  @Get('rate-cards/export')
-  async exportRateCards(
-    @Res({ passthrough: true }) res: Response,
-  ): Promise<StreamableFile> {
-    return this.send(
-      res,
-      'nationwide-rate-cards',
-      await this.spreadsheet.exportRateCards(),
-    );
-  }
-
-  @Get('rate-cards/template')
-  rateCardsTemplate(@Res({ passthrough: true }) res: Response): StreamableFile {
-    return this.send(
-      res,
-      'nationwide-rate-cards-template',
-      this.spreadsheet.rateCardsTemplate(),
-    );
-  }
-
-  @Post('rate-cards/preview')
-  @UseInterceptors(FileInterceptor('file', upload))
-  previewRateCards(
-    @CurrentUser() user: JwtPayload,
-    @UploadedFile() file?: Express.Multer.File,
-  ): Promise<ImportPlan> {
-    return this.spreadsheet.previewRateCards(this.fileOf(file), user.sub);
-  }
-
-  @Post('rate-cards/import')
-  @UseInterceptors(FileInterceptor('file', upload))
-  importRateCards(
-    @CurrentUser() user: JwtPayload,
-    @UploadedFile() file?: Express.Multer.File,
-  ): Promise<ImportPlan> {
-    return this.spreadsheet.importRateCards(this.fileOf(file), user.sub);
   }
 
   private fileOf(file?: Express.Multer.File): Buffer {

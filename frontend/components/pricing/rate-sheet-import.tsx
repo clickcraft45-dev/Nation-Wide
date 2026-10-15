@@ -48,7 +48,11 @@ export function RateSheetImport() {
       .get<RateProviderDto[]>("/admin/rate-providers")
       .then((list) => {
         setProviders(list);
-        setProviderId((current) => current || list[0]?.id || "");
+        // ?provider= from a provider card's Import button.
+        const wanted = new URLSearchParams(window.location.search).get("provider");
+        setProviderId(
+          (current) => current || list.find((p) => p.id === wanted)?.id || list[0]?.id || "",
+        );
         if (list.length === 0) setIsLoading(false);
       })
       .catch((err) => {

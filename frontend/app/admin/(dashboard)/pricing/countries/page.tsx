@@ -17,6 +17,7 @@ import { EmptyState, ErrorState } from "@/components/ui/page-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CountryDialog } from "@/components/pricing/country-dialog";
+import { AddCountryDialog } from "@/components/pricing/add-country-dialog";
 import { SpreadsheetActions } from "@/components/pricing/spreadsheet-actions";
 import { BackLink } from "@/components/ui/back-link";
 
@@ -47,7 +48,7 @@ export default function PricingCountriesPage() {
       <BackLink href="/admin/pricing/dashboard">Back to pricing</BackLink>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <SpreadsheetActions resource="countries" label="Countries" onImported={load} />
-        <CountryDialog onSaved={() => load()} trigger={<Button size="sm">New country</Button>} />
+        <AddCountryDialog onSaved={load} trigger={<Button size="sm">Add country</Button>} />
       </div>
 
       {isLoading && <TableSkeleton columns={4} />}

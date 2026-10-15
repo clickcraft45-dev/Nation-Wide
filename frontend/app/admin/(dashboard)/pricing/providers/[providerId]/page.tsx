@@ -13,6 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/page-state";
 import { RateProviderDialog } from "@/components/pricing/rate-provider-dialog";
 import { RateHistoryDialog } from "@/components/pricing/rate-history-dialog";
+import { AddCountryDialog } from "@/components/pricing/add-country-dialog";
 
 export default function ProviderDetailPage() {
   const params = useParams<{ providerId: string }>();
@@ -121,20 +122,20 @@ export default function ProviderDetailPage() {
           </Card>
 
           <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between gap-3">
               <CardTitle>Countries configured for this provider</CardTitle>
+              <AddCountryDialog
+                providerId={provider.id}
+                onSaved={load}
+                trigger={<Button size="sm">Add country</Button>}
+              />
             </CardHeader>
             <CardContent>
               {countries.length === 0 ? (
                 <EmptyState
                   icon={<Globe className="h-8 w-8" aria-hidden />}
                   title="No countries configured yet"
-                  description="Assign a country to a zone under this provider to start pricing it."
-                  action={
-                    <Link href="/admin/pricing/zones">
-                      <Button size="sm">Go to Zones</Button>
-                    </Link>
-                  }
+                  description="Add a country to one of this provider's zones, or upload the provider's rate sheet: its country list links them for you."
                 />
               ) : (
                 <div className="divide-y divide-border">

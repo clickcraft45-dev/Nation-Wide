@@ -232,6 +232,9 @@ const nonEmpty = (row: string[] | undefined) =>
 
 // A grid header names zones: "Zone 1", "ZONE 3", or FedEx's single letters.
 const ZONE_HEADER = /^(zone\s*[a-z0-9]{1,3}|[a-z])$/i;
+// Our own export's grid header (RateSheetImportService.export): a grid whatever its zones are
+// called, since a consolidator's zones are destinations ("Cambodia", "UK ECONOMY").
+export const EXPORT_HEADER = /^weight \(kg\)$/i;
 
 /**
  * A country-list header: at least two headings only a header has ("500 gms", "ADD 500", "6+") and
@@ -271,7 +274,7 @@ export function detectRateTables(
     const zoneHeaders = row.filter((c) => ZONE_HEADER.test(text(c))).length;
 
     const table =
-      zoneHeaders >= 3
+      zoneHeaders >= 3 || EXPORT_HEADER.test(text(row[0]))
         ? gridAt(sheet, rows, r)
         : isListHeader(row)
           ? listAt(sheet, rows, r)
@@ -370,7 +373,11 @@ function gridAt(
 
   // Zones start at the first zone heading; the weight column is somewhere to its left. (Weights
   // are numbers too, so "mostly numeric" alone would take the weight column for a zone.)
-  const firstZoneCol = header.findIndex((c) => ZONE_HEADER.test(text(c)));
+  // Our own export puts the weight first and every zone after it, named however they are.
+  const ownExport = EXPORT_HEADER.test(text(header[0]));
+  const firstZoneCol = ownExport
+    ? 1
+    : header.findIndex((c) => ZONE_HEADER.test(text(c)));
   const zoneCols: number[] = [];
   header.forEach((cell, c) => {
     if (
@@ -381,7 +388,7 @@ function gridAt(
       return;
     // A column headed "Zone N" is a zone whatever is under it; anything else ("AU", "Zone 6
     // Special") has to show prices underneath to count.
-    if (ZONE_HEADER.test(text(cell))) {
+    if (ownExport || ZONE_HEADER.test(text(cell))) {
       zoneCols.push(c);
       return;
     }

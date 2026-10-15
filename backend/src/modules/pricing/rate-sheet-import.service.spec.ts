@@ -3,9 +3,11 @@ import { join } from 'node:path';
 import type { Country } from '@prisma/client';
 import { listSheets, readSheetFromBuffer } from '../../common/xlsx/xlsx-reader';
 import { detectRateTables } from './rate-sheet-detect';
+import { buildWorkbook } from '../../common/xlsx/xlsx-writer';
 import {
   buildPlan,
   CountryMatcher,
+  exportRows,
   pickTables,
   sheetView,
 } from './rate-sheet-import.service';
@@ -127,5 +129,57 @@ describe('a provider picked by the admin', () => {
     const kept = grid.columns.indexOf('Old zone');
     expect(grid.rows[0].cells[kept]).toMatchObject({ old: 700, new: 700, changed: false });
     expect(view.summary).toMatchObject({ changed: 1, removed: 1, unchanged: 1 });
+  });
+});
+
+describe('a provider exported and uploaded back', () => {
+  // Live rates as the import would have written them, exported, read back, re-planned.
+  const roundTrip = (code: string) => {
+    const matcher = new CountryMatcher(COUNTRIES);
+    const before = buildPlan(pickTables(tables, { code, name: code }, false).tables, matcher);
+    const provider = { id: 'p', code, name: code };
+    const live = [...before.providers.get(code)!.zones.values()].flatMap((z) =>
+      [...z.cards].map(([shipmentType, bands]) => ({
+        shipmentType,
+        taxInclusive: false,
+        zone: { name: z.name },
+        weightSlabs: bands.map((b) => ({
+          weightFromKg: b.weightFromKg,
+          weightToKg: b.weightToKg,
+          baseRate: b.rate,
+          rateType: b.rateType,
+        })),
+      })),
+    );
+    const links = [...before.providers.get(code)!.zones.values()].flatMap((z) =>
+      [...z.countries.values()].map((c) => ({ country: c.name, code: c.code, zone: z.name })),
+    );
+    const view = sheetView(provider, live, null, [], []);
+    const file = buildWorkbook([{ name: code, rows: exportRows(code, view.grids, links) }]);
+    const back = listSheets(file).flatMap((sheet) =>
+      detectRateTables(sheet, readSheetFromBuffer(file, sheet)),
+    );
+    const picked = pickTables(back, provider, false);
+    const after = buildPlan(picked.tables, matcher);
+    return { before, after, warnings: picked.warnings, code };
+  };
+  const cards = (plan: ReturnType<typeof buildPlan>, code: string) =>
+    Object.fromEntries(
+      [...plan.providers.get(code)!.zones.values()].flatMap((z) =>
+        [...z.cards].map(([t, bands]) => [`${z.name.toLowerCase()}|${t}`, bands]),
+      ),
+    );
+  const zonesOf = (plan: ReturnType<typeof buildPlan>, code: string) =>
+    Object.fromEntries(
+      [...plan.providers.get(code)!.zones.values()].flatMap((z) =>
+        [...z.countries.keys()].map((id) => [id, z.name.toLowerCase()]),
+      ),
+    );
+
+  it.each(['UPS', 'DHL', 'SELF'])('%s comes back with the same bands and countries', (code) => {
+    const { before, after, warnings } = roundTrip(code);
+    expect(warnings).toEqual([]);
+    expect(cards(after, code)).toEqual(cards(before, code));
+    expect(zonesOf(after, code)).toEqual(zonesOf(before, code));
   });
 });
