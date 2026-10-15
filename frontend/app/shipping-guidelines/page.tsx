@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { MarketingNavbar } from "@/components/marketing/navbar";
 import { MarketingFooter } from "@/components/marketing/footer";
-import { LegalDocument, Section } from "@/components/marketing/legal-document";
+import { LegalDocument, ProhibitedList, Section } from "@/components/marketing/legal-document";
 import { CONTACT_EMAIL } from "@/lib/constants/contact";
 
 export const metadata: Metadata = {
@@ -25,7 +25,7 @@ export default function ShippingGuidelinesPage() {
       <MarketingNavbar />
       <LegalDocument
         title="Shipping Guidelines"
-        effectiveDate="8 September 2026"
+        effectiveDate="15 October 2026"
         intro={
           <p>
             What we can carry, where, and what paperwork each destination needs. If your shipment
@@ -34,11 +34,19 @@ export default function ShippingGuidelinesPage() {
           </p>
         }
       >
-        <Section id="not-accepted" title="We cannot carry these">
+        <Section id="prohibited-goods" title="Prohibited goods">
+          <p>
+            Do not pack any of these. Our pickup partner will refuse the parcel, and if one is
+            found later it can be held, returned or destroyed at your cost.
+          </p>
+          <ProhibitedList />
+        </Section>
+
+        <Section id="not-accepted" title="Routes we cannot serve">
           <ul className="list-disc space-y-2 pl-5">
             <li>Anything to <strong>Russia or Ukraine</strong> — no service on any network.</li>
             <li><strong>Foodstuffs to Saudi Arabia.</strong></li>
-            <li><strong>Rice and seeds to the USA and Canada.</strong> Other destinations are selective — confirm first.</li>
+            <li><strong>Rice to the USA and Canada.</strong> Other destinations are selective, so confirm first.</li>
             <li>Electronic and electrical items on networks that refuse them, including Aramex.</li>
           </ul>
         </Section>
@@ -50,8 +58,8 @@ export default function ShippingGuidelinesPage() {
               service only, with a proper medical bill and a doctor&apos;s prescription.
             </li>
             <li>
-              <strong>Mehndi, oils, liquids, electronics, electric motor parts, switchboards,
-              lenses, ayurvedic preparations</strong> — restricted, and extra charges apply.
+              <strong>Mehndi, electronics, electric motor parts, switchboards, lenses,
+              ayurvedic preparations</strong> — restricted, and extra charges apply.
             </li>
             <li>
               <strong>Singapore</strong> controls CDs, books, medicines, milk products and

@@ -1,46 +1,61 @@
 "use client";
 
-import { UserRound } from "lucide-react";
+import { useId } from "react";
 import type { SavedRecipientDto } from "@nationwide/shared-types";
+import { Label } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/select";
 
 /**
- * Recipients this customer has shipped to before, newest first. Tapping a name fills the address
- * below it AND the contents last sent to them, which is what makes a repeat consignment one tap
+ * Recipients this customer has shipped to before, newest first. Picking one fills the address
+ * below it AND the contents last sent to them, which is what makes a repeat consignment one pick
  * rather than a retype. A new recipient is remembered simply by booking to them.
+ *
+ * A searchable list rather than chips: a business ships to dozens of people, and a wall of chips
+ * stops being scannable long before that.
  */
 export function SavedRecipients({
   recipients,
   onPick,
+  id: idProp,
 }: {
   recipients: SavedRecipientDto[];
   onPick: (recipient: SavedRecipientDto) => void;
+  id?: string;
 }) {
+  const fallbackId = useId();
   if (recipients.length === 0) return null;
+  const id = idProp ?? fallbackId;
   return (
     <div className="space-y-1.5">
-      <p className="text-xs text-muted-foreground">Previous recipients — tap to fill</p>
-      <div className="flex flex-wrap gap-2">
+      <Label htmlFor={id}>
+        Saved recipients <span className="font-normal text-muted-foreground">({recipients.length})</span>
+      </Label>
+      <NativeSelect
+        id={id}
+        searchable
+        searchPlaceholder="Search name, city or country"
+        // Always back on the placeholder: this is an action ("fill from"), not a stored choice.
+        value=""
+        onChange={(e) => {
+          const picked = recipients[Number(e.target.value)];
+          if (picked) onPick(picked);
+        }}
+      >
+        <option value="">Fill from someone you have shipped to…</option>
         {recipients.map((r, i) => (
-          <button
-            key={i}
-            type="button"
-            onClick={() => onPick(r)}
-            title={[r.addressLine1, r.city, r.country].filter(Boolean).join(", ")}
-            className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-border px-3 py-1 text-xs text-foreground hover:bg-muted"
-          >
-            <UserRound className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
-            <span className="truncate">
-              {r.name} · {r.city}, {r.country}
-              {r.lastItems?.length ? (
-                <span className="text-muted-foreground">
-                  {" "}
-                  · {r.lastItems.length} saved item{r.lastItems.length === 1 ? "" : "s"}
-                </span>
-              ) : null}
+          <option key={i} value={String(i)}>
+            {/* textOf() flattens these spans, so the search matches name, city and country. */}
+            <span className="font-medium">{r.name}</span>
+            <span className="text-muted-foreground">
+              {" · "}
+              {[r.city, r.country].filter(Boolean).join(", ")}
+              {r.lastItems?.length
+                ? ` · ${r.lastItems.length} saved item${r.lastItems.length === 1 ? "" : "s"}`
+                : ""}
             </span>
-          </button>
+          </option>
         ))}
-      </div>
+      </NativeSelect>
     </div>
   );
 }

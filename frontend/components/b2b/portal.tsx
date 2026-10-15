@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckCircle2, Clock, Plus } from "lucide-react";
+import { CalendarClock, CheckCircle2, Clock, MapPin, Plus } from "lucide-react";
 import type {
   B2bCreateOrdersDto,
   B2bOrderResultDto,
@@ -17,10 +17,10 @@ import type { B2bClient } from "@/lib/b2b-client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input, Label, FieldError } from "@/components/ui/input";
-import { NativeSelect } from "@/components/ui/select";
 import { DateField } from "@/components/ui/date-field";
 import { PincodeInput } from "@/components/ui/pincode-input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
 import { ErrorState } from "@/components/ui/page-state";
 import { Logo } from "@/components/brand/logo";
 import { SegmentedControl } from "@/components/ui/segmented-control";
@@ -45,9 +45,9 @@ import {
 } from "@/components/shipment/shipment-card";
 
 const TIME_SLOTS: { value: PickupTimeSlot; label: string }[] = [
-  { value: "09:00-12:00", label: "9:00 AM – 12:00 PM" },
-  { value: "12:00-15:00", label: "12:00 PM – 3:00 PM" },
-  { value: "15:00-18:00", label: "3:00 PM – 6:00 PM" },
+  { value: "09:00-12:00", label: "9 AM – 12 PM" },
+  { value: "12:00-15:00", label: "12 – 3 PM" },
+  { value: "15:00-18:00", label: "3 – 6 PM" },
 ];
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
@@ -116,6 +116,7 @@ export function B2bPortal({ client }: { client: B2bClient }) {
   const [tab, setTab] = useState<Tab>("book");
   // Set when an order's tracking number is clicked, so the tracking tab opens on that parcel.
   const [trackTarget, setTrackTarget] = useState<string | undefined>(undefined);
+  const [usedSavedPickup, setUsedSavedPickup] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -131,6 +132,7 @@ export function B2bPortal({ client }: { client: B2bClient }) {
         const last = sessionRes.addressBook.lastPickup;
         // Where they shipped from last time; overwriting it here makes the new one their default.
         if (last) {
+          setUsedSavedPickup(true);
           setPickup((p) => ({
             ...p,
             contactName: last.contactName,
@@ -262,40 +264,61 @@ export function B2bPortal({ client }: { client: B2bClient }) {
 
   if (isLoading) {
     return (
-      <div className="mx-auto max-w-3xl space-y-4 px-4 py-10">
-        <Skeleton className="h-8 w-56" />
-        <Skeleton className="h-64 w-full" />
+      <div className="mx-auto w-full max-w-6xl space-y-6 px-4 py-8 sm:px-6">
+        <Skeleton className="h-10 w-56" />
+        <Skeleton className="h-11 w-full max-w-xl rounded-xl" />
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+          <Skeleton className="h-96 w-full rounded-2xl" />
+          <Skeleton className="hidden h-64 w-full rounded-2xl lg:block" />
+        </div>
       </div>
     );
   }
   if (loadError || !session) {
     return (
-      <div className="mx-auto max-w-lg px-4 py-16">
+      <div className="mx-auto w-full max-w-lg px-4 py-16">
         <ErrorState message={loadError ?? "Something went wrong."} />
       </div>
     );
   }
 
+  const pickupSlot = TIME_SLOTS.find((t) => t.value === pickup.timeSlot)?.label;
+  const priced = orders.filter((o) => typeof o.estimate === "number");
+  const estimatedTotal = priced.reduce((sum, o) => sum + (o.estimate ?? 0), 0);
+
   return (
-    <div className="mx-auto max-w-3xl space-y-6 px-4 py-8 pb-16">
-      <header className="flex items-center justify-between gap-3">
-        <Logo className="h-7" />
-        <div className="text-right">
-          <p className="text-sm font-semibold text-foreground">{session.customerName}</p>
-          <p className="text-xs text-muted-foreground">{session.linkLabel}</p>
+    <div className="mx-auto w-full max-w-6xl space-y-6 px-4 py-6 pb-20 sm:px-6 lg:py-8">
+      <header className="flex items-center justify-between gap-4">
+        <Logo className="h-7 min-w-0" />
+        <div className="flex shrink-0 items-center gap-3">
+          <div className="hidden text-right sm:block">
+            <p className="text-sm font-semibold text-foreground">{session.customerName}</p>
+            <p className="text-xs text-muted-foreground">{session.linkLabel}</p>
+          </div>
+          <span
+            title={session.customerName}
+            aria-hidden
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-foreground text-sm font-semibold text-background"
+          >
+            {session.customerName.trim().charAt(0).toUpperCase()}
+          </span>
         </div>
       </header>
 
-      <SegmentedControl
-        options={TABS}
-        value={tab}
-        onChange={setTab}
-        ariaLabel="Portal section"
-      />
+      <nav className="max-w-xl">
+        <SegmentedControl
+          options={TABS}
+          value={tab}
+          onChange={setTab}
+          ariaLabel="Portal section"
+        />
+      </nav>
 
       {tab === "orders" && (
         <OrdersPanel
+          client={client}
           orders={history}
+          onBook={() => setTab("book")}
           onTrack={(trackingNumber) => {
             setTrackTarget(trackingNumber);
             setTab("tracking");
@@ -307,29 +330,29 @@ export function B2bPortal({ client }: { client: B2bClient }) {
       {tab === "profile" && <ProfilePanel client={client} />}
 
       {tab === "book" && (results ? (
-        <Card>
+        <Card className="max-w-2xl">
           <CardHeader>
-            <CardTitle>Shipments submitted</CardTitle>
+            <CardTitle className="text-lg font-semibold text-foreground">Shipments submitted</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             {results.map((r) => (
               <div
                 key={r.index}
-                className="flex items-start gap-3 rounded-lg border border-border p-3 text-sm"
+                className="flex items-start gap-3 rounded-xl border border-border bg-white/50 p-4 text-sm"
               >
                 {r.status === "BOOKED" ? (
-                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden />
+                  <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-success" aria-hidden />
                 ) : (
-                  <Clock className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
+                  <Clock className="mt-0.5 h-5 w-5 shrink-0 text-warning" aria-hidden />
                 )}
-                <div className="flex-1">
+                <div className="min-w-0 flex-1">
                   <p className="font-medium text-foreground">
                     {r.recipientName} · {r.destinationCountry}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     {r.status === "BOOKED"
-                      ? `${r.carrier ?? "Carrier"} · ${r.currency} ${Math.round(r.price ?? 0).toLocaleString("en-IN")} — a pickup partner will collect it.`
-                      : "No published rate covers this route — our team will price it and contact you."}
+                      ? `${r.carrier ?? "Carrier"} · ${formatMoney(r.price ?? 0, r.currency ?? "INR")}. A pickup partner will collect it.`
+                      : "No published rate covers this route. Our team will price it and contact you."}
                   </p>
                 </div>
               </div>
@@ -337,170 +360,251 @@ export function B2bPortal({ client }: { client: B2bClient }) {
             <p className="text-xs text-muted-foreground">
               Final prices are confirmed when the partner weighs and measures each box at pickup.
             </p>
-            <Button type="button" onClick={startAnother}>
-              Book more shipments
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" onClick={startAnother}>
+                Book more shipments
+              </Button>
+              <Button type="button" variant="secondary" onClick={() => setTab("orders")}>
+                View orders
+              </Button>
+            </div>
           </CardContent>
         </Card>
       ) : (
-        <form onSubmit={handleSubmit} className="space-y-5" noValidate>
-          <div>
-            <h1 className="text-xl font-semibold text-foreground">Request a pickup</h1>
-            <p className="text-sm text-muted-foreground">
-              One collection, as many shipments as you need. Your saved addresses and items are
-              filled in below.
-            </p>
+        <form
+          onSubmit={handleSubmit}
+          noValidate
+          className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start"
+        >
+          <div className="min-w-0 space-y-5">
+            <div>
+              <h1 className="text-2xl font-semibold tracking-tight text-foreground">Request a pickup</h1>
+              <p className="mt-1 text-sm text-muted-foreground">
+                One collection, as many shipments as you need. Your saved addresses and items are
+                ready to pick from.
+              </p>
+            </div>
+
+            <Card>
+              <CardHeader className="flex-row items-center justify-between gap-3 border-b border-[color:var(--glass-edge)] pb-4">
+                <div className="flex items-center gap-3">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-foreground">
+                    <MapPin className="h-4 w-4" aria-hidden />
+                  </span>
+                  <div>
+                    <CardTitle className="text-xs uppercase tracking-wider">Pickup</CardTitle>
+                    <p className="font-semibold text-foreground">Collect from</p>
+                  </div>
+                </div>
+                {usedSavedPickup && <Badge variant="neutral">Saved address</Badge>}
+              </CardHeader>
+              <CardContent className="space-y-4 pt-5">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field label="Contact name" error={errors.contactName} htmlFor="pickup-name">
+                    <Input
+                      id="pickup-name"
+                      autoComplete="name"
+                      value={pickup.contactName}
+                      onChange={(e) => setPickup((p) => ({ ...p, contactName: e.target.value }))}
+                      error={Boolean(errors.contactName)}
+                    />
+                  </Field>
+                  <Field label="Contact phone" error={errors.contactPhone} htmlFor="pickup-phone">
+                    <Input
+                      id="pickup-phone"
+                      type="tel"
+                      autoComplete="tel"
+                      value={pickup.contactPhone}
+                      onChange={(e) => setPickup((p) => ({ ...p, contactPhone: e.target.value }))}
+                      error={Boolean(errors.contactPhone)}
+                    />
+                  </Field>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field label="Address" error={errors.addressLine1} htmlFor="pickup-address">
+                    <Input
+                      id="pickup-address"
+                      autoComplete="address-line1"
+                      value={pickup.addressLine1}
+                      onChange={(e) => setPickup((p) => ({ ...p, addressLine1: e.target.value }))}
+                      error={Boolean(errors.addressLine1)}
+                    />
+                  </Field>
+                  <Field label="Landmark / unit (optional)" htmlFor="pickup-address-2">
+                    <Input
+                      id="pickup-address-2"
+                      autoComplete="address-line2"
+                      value={pickup.addressLine2}
+                      onChange={(e) => setPickup((p) => ({ ...p, addressLine2: e.target.value }))}
+                    />
+                  </Field>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <Field label="PIN code" error={errors.postalCode} htmlFor="pickup-pin">
+                    <PincodeInput
+                      id="pickup-pin"
+                      value={pickup.postalCode}
+                      onChange={(postalCode) => setPickup((p) => ({ ...p, postalCode }))}
+                      onResolved={({ city, district, state }) =>
+                        setPickup((p) => ({
+                          ...p,
+                          city: city || district || p.city,
+                          state: state || p.state,
+                        }))
+                      }
+                      error={Boolean(errors.postalCode)}
+                    />
+                  </Field>
+                  <Field label="City" error={errors.city} htmlFor="pickup-city">
+                    <Input
+                      id="pickup-city"
+                      autoComplete="address-level2"
+                      value={pickup.city}
+                      onChange={(e) => setPickup((p) => ({ ...p, city: e.target.value }))}
+                      error={Boolean(errors.city)}
+                    />
+                  </Field>
+                  <Field label="State" error={errors.state} htmlFor="pickup-state">
+                    <Input
+                      id="pickup-state"
+                      autoComplete="address-level1"
+                      value={pickup.state}
+                      onChange={(e) => setPickup((p) => ({ ...p, state: e.target.value }))}
+                      error={Boolean(errors.state)}
+                    />
+                  </Field>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field label="Pickup date" error={errors.date} htmlFor="pickup-date">
+                    <DateField
+                      id="pickup-date"
+                      title="Pickup date"
+                      min={todayIso()}
+                      value={pickup.date}
+                      onChange={(date) => setPickup((p) => ({ ...p, date }))}
+                      error={Boolean(errors.date)}
+                    />
+                  </Field>
+                  <div className="space-y-1.5">
+                    <p className="text-sm font-medium text-foreground">Time slot</p>
+                    <SegmentedControl
+                      options={TIME_SLOTS}
+                      value={pickup.timeSlot}
+                      onChange={(timeSlot) => setPickup((p) => ({ ...p, timeSlot }))}
+                      ariaLabel="Pickup time slot"
+                    />
+                  </div>
+                </div>
+                <Field label="Instructions (optional)" htmlFor="pickup-instructions">
+                  <Input
+                    id="pickup-instructions"
+                    placeholder="e.g. Ask for the despatch desk at Gate 2"
+                    value={pickup.instructions}
+                    onChange={(e) => setPickup((p) => ({ ...p, instructions: e.target.value }))}
+                  />
+                </Field>
+              </CardContent>
+            </Card>
+
+            {orders.map((order, index) => (
+              <ShipmentCard
+                key={order.key}
+                index={index}
+                draft={order}
+                countries={countries}
+                recipients={session.addressBook.recipients}
+                savedItems={savedItems}
+                onSavedItemsChange={setSavedItems}
+                // The portal's client is already scoped to /b2b and carries the link token.
+                savedItemsBase=""
+                savedItemsClient={client}
+                fetchPreview={(query) => client.get<QuotePreviewResultDto>(`/preview?${query}`)}
+                recipientErrors={recipientErrors[order.key] ?? {}}
+                error={orderErrors[order.key]}
+                canRemove={orders.length > 1}
+                onRemove={() => setOrders((all) => all.filter((o) => o.key !== order.key))}
+                onChange={(patch) => updateOrder(order.key, patch)}
+              />
+            ))}
+
+            <button
+              type="button"
+              onClick={() => setOrders((all) => [...all, newShipment()])}
+              className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-border py-4 text-sm font-medium text-muted-foreground transition-colors hover:border-foreground/40 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <Plus className="h-4 w-4" aria-hidden /> Add another delivery
+            </button>
           </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Collect from</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Contact name" error={errors.contactName} htmlFor="pickup-name">
-                  <Input
-                    id="pickup-name"
-                    value={pickup.contactName}
-                    onChange={(e) => setPickup((p) => ({ ...p, contactName: e.target.value }))}
-                    error={Boolean(errors.contactName)}
-                  />
-                </Field>
-                <Field label="Contact phone" error={errors.contactPhone} htmlFor="pickup-phone">
-                  <Input
-                    id="pickup-phone"
-                    type="tel"
-                    value={pickup.contactPhone}
-                    onChange={(e) => setPickup((p) => ({ ...p, contactPhone: e.target.value }))}
-                    error={Boolean(errors.contactPhone)}
-                  />
-                </Field>
-              </div>
-              <Field label="Address" error={errors.addressLine1} htmlFor="pickup-address">
-                <Input
-                  id="pickup-address"
-                  value={pickup.addressLine1}
-                  onChange={(e) => setPickup((p) => ({ ...p, addressLine1: e.target.value }))}
-                  error={Boolean(errors.addressLine1)}
-                />
-              </Field>
-              <Field label="Landmark / unit (optional)" htmlFor="pickup-address-2">
-                <Input
-                  id="pickup-address-2"
-                  value={pickup.addressLine2}
-                  onChange={(e) => setPickup((p) => ({ ...p, addressLine2: e.target.value }))}
-                />
-              </Field>
-              <div className="grid gap-4 sm:grid-cols-3">
-                <Field label="City" error={errors.city} htmlFor="pickup-city">
-                  <Input
-                    id="pickup-city"
-                    value={pickup.city}
-                    onChange={(e) => setPickup((p) => ({ ...p, city: e.target.value }))}
-                    error={Boolean(errors.city)}
-                  />
-                </Field>
-                <Field label="State" error={errors.state} htmlFor="pickup-state">
-                  <Input
-                    id="pickup-state"
-                    value={pickup.state}
-                    onChange={(e) => setPickup((p) => ({ ...p, state: e.target.value }))}
-                    error={Boolean(errors.state)}
-                  />
-                </Field>
-                <Field label="PIN code" error={errors.postalCode} htmlFor="pickup-pin">
-                  <PincodeInput
-                    id="pickup-pin"
-                    value={pickup.postalCode}
-                    onChange={(postalCode) => setPickup((p) => ({ ...p, postalCode }))}
-                    onResolved={({ city, district, state }) =>
-                      setPickup((p) => ({
-                        ...p,
-                        city: city || district || p.city,
-                        state: state || p.state,
-                      }))
-                    }
-                    error={Boolean(errors.postalCode)}
-                  />
-                </Field>
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Pickup date" error={errors.date} htmlFor="pickup-date">
-                  <DateField
-                    id="pickup-date"
-                    title="Pickup date"
-                    min={todayIso()}
-                    value={pickup.date}
-                    onChange={(date) => setPickup((p) => ({ ...p, date }))}
-                    error={Boolean(errors.date)}
-                  />
-                </Field>
-                <Field label="Time slot" htmlFor="pickup-slot">
-                  <NativeSelect
-                    id="pickup-slot"
-                    value={pickup.timeSlot}
-                    onChange={(e) =>
-                      setPickup((p) => ({ ...p, timeSlot: e.target.value as PickupTimeSlot }))
-                    }
-                  >
-                    {TIME_SLOTS.map((s) => (
-                      <option key={s.value} value={s.value}>
-                        {s.label}
-                      </option>
-                    ))}
-                  </NativeSelect>
-                </Field>
-              </div>
-              <Field label="Instructions (optional)" htmlFor="pickup-instructions">
-                <Input
-                  id="pickup-instructions"
-                  placeholder="e.g. Ask for the despatch desk at Gate 2"
-                  value={pickup.instructions}
-                  onChange={(e) => setPickup((p) => ({ ...p, instructions: e.target.value }))}
-                />
-              </Field>
-            </CardContent>
-          </Card>
+          {/* The summary rides alongside the form on desktop and closes it on a phone, so the
+              submit button is always where the eye ends up. */}
+          <aside className="lg:sticky lg:top-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-xs uppercase tracking-wider">Summary</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-start gap-3 rounded-xl bg-muted/60 p-3 text-sm">
+                  <CalendarClock className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+                  <div className="min-w-0">
+                    <p className="font-medium text-foreground">
+                      {pickup.date ? formatDay(pickup.date) : "Pick a date"} · {pickupSlot}
+                    </p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {[pickup.city, pickup.postalCode].filter(Boolean).join(" ") || "Pickup address not set"}
+                    </p>
+                  </div>
+                </div>
 
-          {orders.map((order, index) => (
-            <ShipmentCard
-              key={order.key}
-              index={index}
-              draft={order}
-              countries={countries}
-              recipients={session.addressBook.recipients}
-              savedItems={savedItems}
-              onSavedItemsChange={setSavedItems}
-              // The portal's client is already scoped to /b2b and carries the link token.
-              savedItemsBase=""
-              savedItemsClient={client}
-              fetchPreview={(query) => client.get<QuotePreviewResultDto>(`/preview?${query}`)}
-              recipientErrors={recipientErrors[order.key] ?? {}}
-              error={orderErrors[order.key]}
-              canRemove={orders.length > 1}
-              onRemove={() => setOrders((all) => all.filter((o) => o.key !== order.key))}
-              onChange={(patch) => updateOrder(order.key, patch)}
-            />
-          ))}
+                <ul className="divide-y divide-border text-sm">
+                  {orders.map((o, i) => (
+                    <li key={o.key} className="flex items-center justify-between gap-3 py-2.5">
+                      <span className="min-w-0 truncate text-foreground">
+                        <span className="mr-2 tabular-nums text-muted-foreground">{i + 1}.</span>
+                        {o.recipient.name.trim() || o.destinationCountry || "New delivery"}
+                      </span>
+                      <span className="shrink-0 font-medium tabular-nums text-foreground">
+                        {typeof o.estimate === "number" ? formatMoney(o.estimate, "INR") : "–"}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
 
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={() => setOrders((all) => [...all, newShipment()])}
-          >
-            <Plus className="h-4 w-4" aria-hidden /> Add another shipment
-          </Button>
+                <div className="flex items-baseline justify-between border-t border-border pt-3">
+                  <span className="text-sm text-muted-foreground">Estimated total</span>
+                  <span className="text-xl font-semibold tabular-nums text-foreground">
+                    {formatMoney(estimatedTotal, "INR")}
+                  </span>
+                </div>
+                {priced.length < orders.length && (
+                  <p className="text-xs text-muted-foreground">
+                    {orders.length - priced.length} of {orders.length} not priced yet. Fill in the
+                    country and boxes to see a price.
+                  </p>
+                )}
 
-          {submitError && <FieldError>{submitError}</FieldError>}
-          <Button type="submit" size="lg" className="w-full" isLoading={isSubmitting}>
-            Submit {orders.length} shipment{orders.length === 1 ? "" : "s"}
-          </Button>
+                {submitError && <FieldError>{submitError}</FieldError>}
+                <Button type="submit" size="lg" className="w-full" isLoading={isSubmitting}>
+                  Submit {orders.length} shipment{orders.length === 1 ? "" : "s"}
+                </Button>
+                <p className="text-center text-xs text-muted-foreground">
+                  Final prices are confirmed when each box is weighed at pickup.
+                </p>
+              </CardContent>
+            </Card>
+          </aside>
         </form>
       ))}
-
     </div>
   );
 }
+
+const formatMoney = (value: number, currency: string) =>
+  `${currency === "INR" ? "₹" : `${currency} `}${Math.round(value).toLocaleString("en-IN")}`;
+
+// The date field holds yyyy-mm-dd; parsed as local noon so no timezone tips it a day either way.
+const formatDay = (iso: string) =>
+  new Date(`${iso}T12:00:00`).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
 
 function Field({
   label,

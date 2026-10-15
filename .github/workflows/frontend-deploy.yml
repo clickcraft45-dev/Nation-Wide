@@ -84,6 +84,12 @@ jobs:
             exit 1
           }
 
+      # A green build can still be a Worker that throws on every request (error 1101, 12 Oct 2026:
+      # Next 16.4 under an OpenNext that did not support it). This boots it and requests real pages.
+      - name: Check the Worker serves pages
+        working-directory: frontend
+        run: npm run check:cf
+
       # The same command that works manually, using the repo's pinned wrangler and the existing
       # frontend/wrangler.jsonc. Output is not piped or suppressed, so a deploy failure surfaces
       # verbatim in the job log and fails the run.

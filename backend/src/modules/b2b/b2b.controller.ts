@@ -19,13 +19,17 @@ import type {
   B2bOrderResultDto,
   InvoiceDto,
   B2bRequestSummaryDto,
+  PickupRequestDto,
   B2bSessionDto,
   CountryDto,
   QuotePreviewResultDto,
   SavedItemDto,
 } from '@nationwide/shared-types';
 import { AddressBookService } from '../customers/address-book.service';
-import { CustomersService, type PublicCustomer } from '../customers/customers.service';
+import {
+  CustomersService,
+  type PublicCustomer,
+} from '../customers/customers.service';
 import { InvoicesService } from '../invoices/invoices.service';
 import { toInvoiceDto } from '../invoices/invoice.mapper';
 import { SaveItemDto } from '../customers/dto/save-item.dto';
@@ -34,6 +38,7 @@ import { toCountryDto } from '../pricing/country.mapper';
 import { QuotesService } from '../quotes/quotes.service';
 import { QuotePreviewQueryDto } from '../quotes/dto/quote-preview.dto';
 import { PickupRequestsService } from '../pickup-requests/pickup-requests.service';
+import { toPickupRequestDto } from '../pickup-requests/pickup-requests.mapper';
 import { B2bCreateOrdersDto } from '../pickup-requests/dto/b2b-create-orders.dto';
 import { B2bAccessGuard, type B2bRequest } from './b2b-access.guard';
 
@@ -103,6 +108,22 @@ export class B2bController {
   @Get('orders')
   listOrders(@Req() req: B2bRequest): Promise<B2bRequestSummaryDto[]> {
     return this.pickupRequests.summariesForCustomer(req.b2b!.customerId);
+  }
+
+  /**
+   * One order in full, for the portal's detail view: route, boxes, contents, pickup slot, partner
+   * and payment. The same customer-scoped lookup the customer app uses, so another business's id
+   * is a 404, never a leak.
+   */
+  @Throttle(READ_THROTTLE)
+  @Get('orders/:id')
+  async order(
+    @Req() req: B2bRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<PickupRequestDto> {
+    return toPickupRequestDto(
+      await this.pickupRequests.findOneForCustomer(id, req.b2b!.customerId),
+    );
   }
 
   /** The business's own details, for the portal's profile tab. */

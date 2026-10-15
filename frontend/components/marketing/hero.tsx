@@ -16,6 +16,31 @@ import { useAuthGate } from "@/lib/auth/use-auth-gate";
 import { TrackingLookupPanel } from "@/features/tracking/TrackingLookupPanel";
 import { HeroGlobe } from "@/components/marketing/hero-globe";
 import { TypingText } from "@/components/marketing/typing-text";
+import { AssetImage } from "@/components/marketing/asset-image";
+import { HERO_IMAGES } from "@/lib/constants/assets";
+
+// The three photos beside the copy: what a sender actually experiences, in order. xl+ only, where
+// there is room either side of the 768px column; below that the hero stays copy, tracking, planet.
+const HERO_PHOTOS = [
+  {
+    image: HERO_IMAGES.handover,
+    label: "Pickup from your door",
+    className: "left-[max(2rem,calc(50%-36rem))] top-36 w-52 aspect-[4/5] -rotate-3",
+    delay: "560ms",
+  },
+  {
+    image: HERO_IMAGES.air,
+    label: "Flown to 240+ countries",
+    className: "right-[max(2rem,calc(50%-37rem))] top-32 w-60 aspect-[3/2] rotate-2",
+    delay: "640ms",
+  },
+  {
+    image: HERO_IMAGES.warehouse,
+    label: "Packed and dispatched",
+    className: "right-[max(4rem,calc(50%-33rem))] top-[22rem] w-40 aspect-[2/3] -rotate-2",
+    delay: "720ms",
+  },
+] as const;
 
 const HEADLINE_WORDS = ["Worldwide.", "On Time.", "With Care.", "Door to Door."];
 
@@ -109,6 +134,25 @@ export function MarketingHero() {
           <HeroGlobe className="h-full w-full" />
         </div>
       </motion.div>
+
+      {/* Photo cards: decorative (the copy says the same thing), so hidden from assistive tech.
+          Above the planet (z-0), below the copy (z-10). */}
+      <div aria-hidden className="pointer-events-none absolute inset-0 z-[5] hidden xl:block">
+        {HERO_PHOTOS.map(({ image, label, className, delay }) => (
+          <figure
+            key={image.src}
+            className={`glass-panel absolute animate-rise-in rounded-3xl p-2 ${className}`}
+            style={{ animationDelay: delay }}
+          >
+            <div className="relative h-full w-full overflow-hidden rounded-2xl">
+              <AssetImage src={image.src} alt="" sizes="240px" priority />
+            </div>
+            <figcaption className="glass-panel absolute -bottom-3 left-4 whitespace-nowrap rounded-full bg-white/90 px-3 py-1 text-[11px] font-medium text-foreground/80">
+              {label}
+            </figcaption>
+          </figure>
+        ))}
+      </div>
 
       {/* pt clears the pinned navbar, which is fixed and so overlays this hero rather than
           sitting above it in flow. */}

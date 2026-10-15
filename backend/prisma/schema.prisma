@@ -656,6 +656,10 @@ model RateCard {
   zoneId           String   @map("zone_id")
   shipmentType     String   @map("shipment_type") // DOCUMENT | PARCEL | PACKAGE — never OTHER
   currency         String   @default("INR")
+  /// True when the rates came from an "all-in" sheet: each band already includes fuel, surcharges
+  /// and GST. The engine then adds nothing on top and takes the GST back out of the figure, so a
+  /// tax invoice still shows it. False for a normal sheet, where fuel, PSS and GST are added.
+  taxInclusive     Boolean  @default(false) @map("tax_inclusive")
   createdByAdminId String   @map("created_by_admin_id")
   createdAt        DateTime @default(now()) @map("created_at")
   updatedAt        DateTime @updatedAt @map("updated_at")

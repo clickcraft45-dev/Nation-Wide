@@ -2,6 +2,8 @@ import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { buildWorkbook, type Cell } from '../../common/xlsx/xlsx-writer';
 import { readSheetFromBuffer } from '../../common/xlsx/xlsx-reader';
+import { rateCardShipmentType } from './pricing-engine.service';
+import { findOverlappingSlabs } from './weight-slab-overlap';
 
 /**
  * Countries and rate cards, in and out as .xlsx — the format the pricing team already works in.
@@ -166,7 +168,13 @@ export class PricingSpreadsheetService {
       include: {
         rateCard: { include: { zone: { include: { rateProvider: true } } } },
       },
-      orderBy: [{ rateCard: { zoneId: 'asc' } }, { weightFromKg: 'asc' }],
+      // Grouped the way a person reads a rate book: carrier, zone, type, then weight.
+      orderBy: [
+        { rateCard: { zone: { rateProvider: { code: 'asc' } } } },
+        { rateCard: { zone: { name: 'asc' } } },
+        { rateCard: { shipmentType: 'asc' } },
+        { weightFromKg: 'asc' },
+      ],
     });
     const rows = slabs.map((slab): Cell[] => [
       slab.rateCard.zone.rateProvider.code,
@@ -220,10 +228,10 @@ export class PricingSpreadsheetService {
             'FEDEX',
             'FedEx',
             'Zone 1',
-            'PARCEL',
+            'PACKAGE',
             'INR',
+            0,
             0.5,
-            1,
             1850,
             'FLAT',
             18,
@@ -234,10 +242,10 @@ export class PricingSpreadsheetService {
             'FEDEX',
             'FedEx',
             'Zone 1',
-            'PARCEL',
+            'PACKAGE',
             'INR',
+            0.51,
             1,
-            2,
             2400,
             'FLAT',
             18,
@@ -248,10 +256,10 @@ export class PricingSpreadsheetService {
             'FEDEX',
             'FedEx',
             'Zone 1',
-            'PARCEL',
+            'PACKAGE',
             'INR',
-            2,
-            5,
+            21,
+            44,
             780,
             'PER_KG',
             18,
@@ -305,11 +313,20 @@ export class PricingSpreadsheetService {
       'Rate Cards',
     );
     const plan = emptyPlan(commit);
+    const placed = new Map<
+      string,
+      { weightFromKg: number; weightToKg: number }[]
+    >();
 
     for (const { line, value, number } of rows) {
       const providerCode = value('Provider Code').toUpperCase();
       const zoneName = value('Zone');
-      const shipmentType = value('Shipment Type').toUpperCase();
+      const typed = value('Shipment Type').toUpperCase();
+      // PARCEL is priced from the PACKAGE card (rateCardShipmentType): a PARCEL card would be
+      // written and then never read by a single quote.
+      const shipmentType = ['DOCUMENT', 'PARCEL', 'PACKAGE'].includes(typed)
+        ? rateCardShipmentType(typed as 'DOCUMENT' | 'PARCEL' | 'PACKAGE')
+        : typed;
       if (!providerCode && !zoneName) {
         plan.skipped += 1;
         continue;
@@ -346,6 +363,15 @@ export class PricingSpreadsheetService {
         );
         continue;
       }
+      if (weightFromKg < 0 || baseRate <= 0) {
+        this.reject(
+          plan,
+          line,
+          label,
+          'Weight from cannot be negative and base rate must be above 0.',
+        );
+        continue;
+      }
       if (weightToKg <= weightFromKg) {
         this.reject(
           plan,
@@ -362,8 +388,34 @@ export class PricingSpreadsheetService {
       }
 
       const currency = value('Currency') || 'INR';
-      const gstPercent = number('GST %') ?? 0;
-      const nationwideCut = number('NationWide Cut') ?? 0;
+      // Blank means 0; anything typed that is not a number is an error, never a silent 0.
+      const gstPercent = value('GST %') ? number('GST %') : 0;
+      const nationwideCut = value('NationWide Cut')
+        ? number('NationWide Cut')
+        : 0;
+      if (gstPercent === null || nationwideCut === null) {
+        this.reject(
+          plan,
+          line,
+          label,
+          'GST % and NationWide Cut must be numbers (18, not "eighteen").',
+        );
+        continue;
+      }
+      // A cell formatted as a percentage stores 18% as 0.18, which would charge 0.18% GST.
+      if (gstPercent > 100 || (gstPercent > 0 && gstPercent < 1)) {
+        this.reject(
+          plan,
+          line,
+          label,
+          `GST % of ${gstPercent} looks wrong. Type 18 for 18%, in a cell not formatted as a percentage.`,
+        );
+        continue;
+      }
+      if (nationwideCut < 0) {
+        this.reject(plan, line, label, 'NationWide Cut cannot be negative.');
+        continue;
+      }
       const isActive = this.yesNo(value('Active'), true);
 
       // Read-only lookups first: the plan has to be able to describe a new provider/zone/card
@@ -391,6 +443,40 @@ export class PricingSpreadsheetService {
             where: { rateCardId: rateCard.id, weightFromKg, weightToKg },
           })
         : null;
+
+      // A new band must not overlap a live one on the same card, or the engine has two prices
+      // for one weight. Bands created earlier in this same file count too, so the preview
+      // catches it before the import does.
+      const cardKey = `${providerCode}|${zoneName.toLowerCase()}|${shipmentType}`;
+      if (!placed.has(cardKey)) {
+        placed.set(
+          cardKey,
+          rateCard
+            ? await this.prisma.weightSlab.findMany({
+                where: { rateCardId: rateCard.id, isActive: true },
+                select: { weightFromKg: true, weightToKg: true },
+              })
+            : [],
+        );
+      }
+      const siblings = placed.get(cardKey)!;
+      if (!existing && isActive) {
+        const clash = findOverlappingSlabs([
+          ...siblings,
+          { weightFromKg, weightToKg },
+        ]);
+        if (clash) {
+          this.reject(
+            plan,
+            line,
+            label,
+            `${weightFromKg}–${weightToKg} kg overlaps the ${clash[0].weightFromKg}–${clash[0].weightToKg} kg band. ` +
+              'Ranges include both ends, so follow 0–0.5 with 0.51–1, not 0.5–1.',
+          );
+          continue;
+        }
+        siblings.push({ weightFromKg, weightToKg });
+      }
 
       const newRows: ImportRowChange[] = [];
       if (!provider)
@@ -532,7 +618,7 @@ export class PricingSpreadsheetService {
       const value = (column: string) =>
         (cells[index.get(column.toLowerCase())!] ?? '').trim();
       const number = (column: string) => {
-        const text = value(column).replace(/[, ₹]/g, '');
+        const text = value(column).replace(/[, ₹%]/g, '');
         const n = Number(text);
         return text && Number.isFinite(n) ? n : null;
       };
@@ -653,13 +739,15 @@ const HOW_TO_USE_RATES: Cell[][] = [
     '2. Provider Code + Zone + Shipment Type identify the rate card; missing ones are created.',
   ],
   [
-    '3. Weight From/To are in kg. From is inclusive, To is exclusive (0.5–1 then 1–2).',
+    '3. Weight From/To are in kg and include both ends, so bands must not touch: 0–0.5, then 0.51–1, then 1.01–1.5.',
   ],
   [
-    '4. Rate Type: FLAT charges Base Rate for the band; PER_KG multiplies it by the weight.',
+    '4. Rate Type: FLAT charges Base Rate for the band; PER_KG multiplies it by the weight rounded up to the next whole kg.',
   ],
-  ['5. GST % and NationWide Cut are numbers, not text ("18", not "18%").'],
-  ['6. Shipment Type: DOCUMENT, PARCEL or PACKAGE.'],
+  ['5. GST % and NationWide Cut are plain numbers: 18, not 18% or 0.18.'],
+  [
+    '6. Shipment Type: DOCUMENT or PACKAGE. PARCEL is accepted and saved as PACKAGE, which is what parcels are priced from.',
+  ],
   ['7. Active: Yes or No.'],
   [''],
   [

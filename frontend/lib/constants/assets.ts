@@ -25,6 +25,27 @@ export const SERVICE_IMAGES = {
   },
 } as const;
 
+// Hero photography, shown beside the copy on wide screens only. Free under the Unsplash License
+// (commercial use, no attribution required); chosen because none shows another carrier's or
+// retailer's branding. Sources, for when they are swapped for NationWide's own photos:
+//   handover   https://unsplash.com/photos/BFdSCxmqvYc
+//   air        https://unsplash.com/photos/Su1gc1A63xE
+//   warehouse  https://unsplash.com/photos/8wy9mGgmGoU
+export const HERO_IMAGES = {
+  handover: {
+    src: "/assets/images/hero-parcel-handover.webp",
+    alt: "A parcel being handed over at the door",
+  },
+  air: {
+    src: "/assets/images/hero-air-freight.webp",
+    alt: "An aircraft coming in to land",
+  },
+  warehouse: {
+    src: "/assets/images/hero-warehouse.webp",
+    alt: "Packed boxes staged on pallets for dispatch",
+  },
+} as const;
+
 export const WORLD_MAP_IMAGE = {
   src: "/assets/images/world-map-placeholder.svg",
   alt: "World map showing NationWide Logistics' global reach",

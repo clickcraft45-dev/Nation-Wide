@@ -58,9 +58,10 @@ export interface InvoiceBranding {
 }
 
 const INK = '#0b0b0c';
-const MUTED = '#667085';
-const PAPER = '#f7f7f8';
-const LINE = '#dde1e6';
+const MUTED = '#6b6b72';
+const PAPER = '#f6f6f7';
+const LINE = '#e4e4e7';
+const DANGER = '#b91c1c';
 const BRAND_FALLBACK = '#7f1020';
 
 /**
@@ -72,6 +73,93 @@ export function termLines(text: string): string[] {
     .split(/\r?\n/)
     .map((line) => line.replace(/^\s*(?:\d+[.)]|[-*•])\s*/, '').trim())
     .filter(Boolean);
+}
+
+const ONES = [
+  '',
+  'One',
+  'Two',
+  'Three',
+  'Four',
+  'Five',
+  'Six',
+  'Seven',
+  'Eight',
+  'Nine',
+  'Ten',
+  'Eleven',
+  'Twelve',
+  'Thirteen',
+  'Fourteen',
+  'Fifteen',
+  'Sixteen',
+  'Seventeen',
+  'Eighteen',
+  'Nineteen',
+];
+const TENS = [
+  '',
+  '',
+  'Twenty',
+  'Thirty',
+  'Forty',
+  'Fifty',
+  'Sixty',
+  'Seventy',
+  'Eighty',
+  'Ninety',
+];
+
+function belowThousand(n: number): string {
+  const hundreds = Math.floor(n / 100);
+  const rest = n % 100;
+  const tail =
+    rest < 20
+      ? ONES[rest]
+      : [TENS[Math.floor(rest / 10)], ONES[rest % 10]]
+          .filter(Boolean)
+          .join('-');
+  return [hundreds ? `${ONES[hundreds]} Hundred` : '', tail]
+    .filter(Boolean)
+    .join(' ');
+}
+
+/** Whole rupees in the Indian system: crore, lakh, thousand. */
+function indianWords(n: number): string {
+  if (n === 0) return '';
+  const crore = Math.floor(n / 10_000_000);
+  const lakh = Math.floor((n % 10_000_000) / 100_000);
+  const thousand = Math.floor((n % 100_000) / 1000);
+  return [
+    crore ? `${indianWords(crore)} Crore` : '',
+    lakh ? `${belowThousand(lakh)} Lakh` : '',
+    thousand ? `${belowThousand(thousand)} Thousand` : '',
+    belowThousand(n % 1000),
+  ]
+    .filter(Boolean)
+    .join(' ');
+}
+
+/**
+ * The total spelled out, as Indian invoices print it under the figure: a written amount is the
+ * customary guard against a digit being misread or altered on a printed copy.
+ */
+export function rupeesInWords(amount: number): string {
+  const totalPaise = Math.round(Math.abs(amount) * 100);
+  const rupees = indianWords(Math.floor(totalPaise / 100)) || 'Zero';
+  const paise = totalPaise % 100;
+  return `Rupees ${rupees}${paise ? ` and ${belowThousand(paise)} Paise` : ''} Only`;
+}
+
+/** "https://www.example.com/admin/x" → "example.com": a letterhead names the site, not a page. */
+export function websiteHost(value: string): string {
+  try {
+    return new URL(
+      /^[a-z]+:\/\//i.test(value) ? value : `https://${value}`,
+    ).host.replace(/^www\./, '');
+  } catch {
+    return value;
+  }
 }
 
 function brandColor(value: string | null | undefined): string {
@@ -93,11 +181,15 @@ function ensureFontRegistered(
       { src: join(fontsDir, 'NotoSans-Bold.ttf'), fontWeight: 'bold' },
     ],
   });
+  // react-pdf hyphenates by default, which split "Telangana" across lines in an address. Names,
+  // GSTINs and AWB numbers must never break mid-word.
+  Font.registerHyphenationCallback((word) => [word]);
   fontRegistered = true;
 }
 
+// en-IN grouping (₹1,23,456.00) is how every Indian reader parses an amount at a glance.
 function money(value: number): string {
-  return `₹${value.toFixed(2)}`;
+  return `₹${value.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function formatDate(date: Date): string {
@@ -131,180 +223,184 @@ export async function renderTaxInvoice(
 
   const s = StyleSheet.create({
     page: {
-      padding: 32,
-      fontSize: 9,
+      paddingTop: 36,
+      paddingHorizontal: 40,
+      // Room for the fixed footer, so the last table row never runs under it.
+      paddingBottom: 64,
+      fontSize: 8.5,
+      lineHeight: 1.4,
       fontFamily: 'NotoSans',
       color: INK,
     },
-    // Shared with the rate card — see WATERMARK_STYLE.
-    watermark: WATERMARK_STYLE,
-    topRule: {
-      height: 5,
+    // Shared with the rate card, but fainter here: an invoice is read for its figures, and the
+    // mark sat right behind the line items.
+    watermark: { ...WATERMARK_STYLE, opacity: 0.025 },
+    accent: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      height: 4,
       backgroundColor: brand,
-      marginHorizontal: -32,
-      marginTop: -32,
-      marginBottom: 22,
     },
     masthead: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'flex-start',
-      marginBottom: 16,
     },
     identity: {
       flexDirection: 'row',
       alignItems: 'center',
       flex: 1,
-      paddingRight: 12,
+      paddingRight: 16,
     },
-    logoFrame: {
-      width: 52,
-      height: 52,
-      borderWidth: 1,
-      borderColor: LINE,
-      borderRadius: 10,
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginRight: 10,
-      backgroundColor: '#ffffff',
-    },
-    title: {
-      fontSize: 19,
+    logo: { width: 44, height: 44, objectFit: 'contain', marginRight: 12 },
+    logoFallback: {
+      width: 44,
+      height: 44,
+      marginRight: 12,
+      borderRadius: 8,
+      backgroundColor: brand,
+      color: '#ffffff',
+      fontSize: 15,
       fontWeight: 'bold',
-      textAlign: 'right',
-      letterSpacing: 0.5,
+      textAlign: 'center',
+      paddingTop: 11,
     },
-    subtitle: {
-      fontSize: 8.5,
-      textAlign: 'right',
-      color: MUTED,
-      marginTop: 3,
-    },
-    companyName: { fontSize: 15, fontWeight: 'bold', color: INK },
+    companyName: { fontSize: 14, fontWeight: 'bold', lineHeight: 1.2 },
     tagline: { fontSize: 8, color: MUTED, marginTop: 2 },
-    website: { fontSize: 7.5, color: brand, marginTop: 4 },
-    supplierRow: {
+    website: { fontSize: 8, color: brand, marginTop: 1 },
+    titleBlock: { alignItems: 'flex-end' },
+    title: {
+      fontSize: 18,
+      fontWeight: 'bold',
+      letterSpacing: 1.5,
+      lineHeight: 1.2,
+    },
+    subtitle: { fontSize: 8, color: MUTED, marginTop: 2 },
+    cancelled: {
+      marginTop: 14,
+      borderWidth: 1,
+      borderColor: DANGER,
+      borderRadius: 4,
+      paddingVertical: 6,
+      paddingHorizontal: 10,
+      color: DANGER,
+      fontWeight: 'bold',
+      textAlign: 'center',
+      letterSpacing: 1,
+    },
+    metaStrip: {
       flexDirection: 'row',
-      justifyContent: 'space-between',
-      marginBottom: 12,
-    },
-    logo: { width: 42, height: 42, objectFit: 'contain' },
-    logoFallback: { fontSize: 15, color: '#ffffff', fontWeight: 'bold' },
-    box: {
-      borderWidth: 1,
-      borderColor: LINE,
-      padding: 9,
-      marginBottom: 8,
-    },
-    invoiceMeta: {
-      width: '38%',
-      borderWidth: 1,
-      borderColor: LINE,
-      borderTopWidth: 3,
-      borderTopColor: brand,
-      borderRadius: 7,
-      padding: 9,
+      marginTop: 18,
+      paddingVertical: 10,
+      paddingHorizontal: 12,
       backgroundColor: PAPER,
+      borderRadius: 6,
     },
-    twoCol: { flexDirection: 'row', gap: 10, marginBottom: 12 },
-    col: {
-      flex: 1,
-      borderWidth: 1,
-      borderColor: LINE,
-      borderRadius: 7,
-      padding: 10,
-      backgroundColor: '#ffffff',
-    },
+    metaCell: { flex: 1, paddingRight: 8 },
     label: {
-      fontSize: 7.5,
+      fontSize: 6.5,
       color: MUTED,
-      marginBottom: 2,
       textTransform: 'uppercase',
+      letterSpacing: 0.8,
+      marginBottom: 2,
     },
+    metaValue: { fontSize: 9, fontWeight: 'bold' },
+    parties: { flexDirection: 'row', marginTop: 20, gap: 24 },
+    party: { flex: 1 },
+    partyName: { fontWeight: 'bold', fontSize: 9.5, marginBottom: 1 },
+    muted: { color: MUTED },
     strong: { fontWeight: 'bold' },
-    h: { fontSize: 9, fontWeight: 'bold', marginBottom: 4, color: INK },
-    small: { fontSize: 8, color: MUTED, marginTop: 3 },
+    small: { fontSize: 7.5, color: MUTED },
     row: { flexDirection: 'row' },
-    th: {
-      backgroundColor: INK,
-      color: '#ffffff',
-      fontWeight: 'bold',
-      padding: 6,
-      borderWidth: 1,
-      borderColor: INK,
-    },
-    td: { padding: 6, borderWidth: 1, borderColor: LINE },
-    // The schedule carries twelve columns on a portrait page, so it gets its own tighter cell
-    // styles rather than squeezing the main table's padding and hurting every other invoice.
-    sth: {
-      backgroundColor: INK,
-      color: '#ffffff',
-      fontWeight: 'bold',
-      fontSize: 6.5,
-      padding: 3,
-      borderWidth: 1,
-      borderColor: INK,
-    },
-    std: {
-      fontSize: 6.5,
-      padding: 3,
-      borderWidth: 1,
-      borderColor: LINE,
-    },
     right: { textAlign: 'right' },
-    totalsWrap: {
-      flexDirection: 'row',
-      justifyContent: 'flex-end',
-      marginTop: 6,
+    table: { marginTop: 22 },
+    th: {
+      fontSize: 6.5,
+      fontWeight: 'bold',
+      color: MUTED,
+      textTransform: 'uppercase',
+      letterSpacing: 0.8,
+      paddingVertical: 6,
+      paddingHorizontal: 4,
     },
-    totals: { width: '55%' },
+    headRow: {
+      flexDirection: 'row',
+      borderBottomWidth: 1,
+      borderBottomColor: INK,
+    },
+    bodyRow: {
+      flexDirection: 'row',
+      borderBottomWidth: 0.5,
+      borderBottomColor: LINE,
+    },
+    td: { paddingVertical: 8, paddingHorizontal: 4 },
+    // The schedule carries twelve columns on a portrait page, so it gets its own tighter cells
+    // rather than squeezing the main table and hurting every other invoice.
+    sth: {
+      fontSize: 6,
+      fontWeight: 'bold',
+      color: MUTED,
+      textTransform: 'uppercase',
+      paddingVertical: 4,
+      paddingHorizontal: 2,
+    },
+    std: { fontSize: 6.5, paddingVertical: 4, paddingHorizontal: 2 },
+    sectionTitle: { fontSize: 9, fontWeight: 'bold', marginBottom: 4 },
+    summary: { flexDirection: 'row', marginTop: 14, gap: 24 },
+    words: { flex: 1, paddingTop: 4 },
+    totals: { width: '44%' },
     totalRow: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       paddingVertical: 3,
-      paddingHorizontal: 6,
+      paddingHorizontal: 4,
     },
     grand: {
       flexDirection: 'row',
       justifyContent: 'space-between',
-      paddingVertical: 7,
-      paddingHorizontal: 8,
-      backgroundColor: INK,
-      color: '#ffffff',
-      borderRadius: 6,
-      fontWeight: 'bold',
-      fontSize: 11,
+      // flex-end, not baseline: react-pdf ignores baseline, and the two sizes differ.
+      alignItems: 'flex-end',
+      marginTop: 4,
+      paddingTop: 7,
+      paddingHorizontal: 4,
+      borderTopWidth: 1.5,
+      borderTopColor: INK,
     },
-    notes: { flexDirection: 'row', gap: 10, marginTop: 16 },
-    note: { flex: 1, borderTopWidth: 1, borderTopColor: LINE, paddingTop: 7 },
-    foot: { marginTop: 12, fontSize: 7.5, color: MUTED, lineHeight: 1.35 },
-    footerBar: {
-      marginTop: 12,
-      borderTopWidth: 1,
+    grandLabel: { fontSize: 10, fontWeight: 'bold', paddingBottom: 2 },
+    grandValue: { fontSize: 14, fontWeight: 'bold' },
+    notes: { flexDirection: 'row', gap: 24, marginTop: 26 },
+    note: { flex: 1 },
+    noteText: { fontSize: 7.5, color: MUTED, lineHeight: 1.45 },
+    footer: {
+      position: 'absolute',
+      // Anchored from the top, not `bottom: 24`: with the page's lineHeight set, react-pdf drops a
+      // bottom-anchored fixed view entirely. 800pt puts it 24pt above the foot of an A4 page.
+      top: 800,
+      left: 40,
+      right: 40,
+      borderTopWidth: 0.5,
       borderTopColor: LINE,
-      paddingTop: 8,
+      paddingTop: 7,
       flexDirection: 'row',
       justifyContent: 'space-between',
-    },
-    cancelled: {
-      color: '#b91c1c',
-      fontWeight: 'bold',
-      textAlign: 'center',
-      marginBottom: 10,
+      fontSize: 7,
+      color: MUTED,
     },
   });
 
   const isIntraState = invoice.cgstAmount > 0 || invoice.sgstAmount > 0;
 
-  const field = (label: string, value: string | null | undefined) =>
-    h(View, { key: label, style: { marginBottom: 5 } }, [
+  const meta = (label: string, value: string) =>
+    h(View, { key: label, style: s.metaCell }, [
       h(Text, { key: 'l', style: s.label }, label),
-      h(Text, { key: 'v', style: s.strong }, value ?? '—'),
+      h(Text, { key: 'v', style: s.metaValue }, value),
     ]);
 
   const totalRow = (label: string, value: string) =>
     h(View, { key: label, style: s.totalRow }, [
-      h(Text, { key: 'l' }, label),
+      h(Text, { key: 'l', style: s.muted }, label),
       h(Text, { key: 'v' }, value),
     ]);
 
@@ -342,52 +438,87 @@ export async function renderTaxInvoice(
     fsc: { width: '9%' },
     tot: { flex: 1 },
   } as const;
-  // Printed under the invoice number so the document says up front what period it settles —
+  // Printed with the invoice details so the document says up front what period it settles —
   // without it a consolidated bill is a list of amounts with no stated scope.
   const periodLabel =
     extras.periodFrom && extras.periodTo
-      ? `${formatDate(extras.periodFrom)} — ${formatDate(extras.periodTo)}`
+      ? `${formatDate(extras.periodFrom)} – ${formatDate(extras.periodTo)}`
       : null;
+
+  // One column set for the main table, so header and rows cannot drift apart.
+  const col = {
+    n: { width: '6%' },
+    desc: { flex: 1 },
+    sac: { width: '13%' },
+    amt: { width: '20%' },
+  } as const;
+
+  const itemRow = (
+    key: string,
+    n: string,
+    lines: (string | null)[],
+    amount: number,
+  ) =>
+    h(View, { key, style: s.bodyRow, wrap: false }, [
+      h(Text, { key: 'a', style: [s.td, col.n, s.muted] }, n),
+      h(
+        View,
+        { key: 'b', style: [s.td, col.desc] },
+        lines
+          .filter((line): line is string => line !== null)
+          .map((line, i) =>
+            h(
+              Text,
+              { key: String(i), style: i === 0 ? undefined : s.small },
+              line,
+            ),
+          ),
+      ),
+      h(Text, { key: 'c', style: [s.td, col.sac] }, invoice.sacCode),
+      h(Text, { key: 'd', style: [s.td, col.amt, s.right] }, money(amount)),
+    ]);
 
   return h(
     Document,
-    { title: invoice.invoiceNumber },
+    {
+      title: invoice.invoiceNumber,
+      author: displayName,
+      subject: 'Tax invoice',
+    },
     h(Page, { size: 'A4', style: s.page }, [
       // FIRST child, so everything else paints over it: react-pdf draws in document order, and a
       // watermark added last would sit on top of the figures. The fixed flag repeats it on page two
       // a long consolidated invoice rather than leaving those pages bare.
       watermark
-        ? h(Image, { key: 'watermark', src: watermark, style: s.watermark, fixed: true })
+        ? h(Image, {
+            key: 'watermark',
+            src: watermark,
+            style: s.watermark,
+            fixed: true,
+          })
         : null,
-      h(View, { key: 'rule', style: s.topRule }),
+      h(View, { key: 'accent', style: s.accent, fixed: true }),
+
       h(View, { key: 'masthead', style: s.masthead }, [
         h(View, { key: 'identity', style: s.identity }, [
-          h(
-            View,
-            {
-              key: 'logo-frame',
-              style: [
-                s.logoFrame,
-                !logoImage
-                  ? { backgroundColor: brand, borderColor: brand }
-                  : undefined,
-              ],
-            },
-            logoImage
-              ? h(Image, { key: 'logo', src: logoImage, style: s.logo })
-              : h(Text, { key: 'fallback', style: s.logoFallback }, 'NW'),
-          ),
-          h(View, { key: 'brand-copy' }, [
+          logoImage
+            ? h(Image, { key: 'logo', src: logoImage, style: s.logo })
+            : h(Text, { key: 'fallback', style: s.logoFallback }, 'NW'),
+          h(View, { key: 'brand-copy', style: { flex: 1 } }, [
             h(Text, { key: 'company', style: s.companyName }, displayName),
             branding.tagline
               ? h(Text, { key: 'tagline', style: s.tagline }, branding.tagline)
               : null,
             branding.website
-              ? h(Text, { key: 'website', style: s.website }, branding.website)
+              ? h(
+                  Text,
+                  { key: 'website', style: s.website },
+                  websiteHost(branding.website),
+                )
               : null,
           ]),
         ]),
-        h(View, { key: 'title-block' }, [
+        h(View, { key: 'title-block', style: s.titleBlock }, [
           h(Text, { key: 't', style: s.title }, 'TAX INVOICE'),
           h(
             Text,
@@ -403,106 +534,90 @@ export async function renderTaxInvoice(
         ? h(
             Text,
             { key: 'x', style: s.cancelled },
-            `CANCELLED${invoice.cancellationReason ? ` — ${invoice.cancellationReason}` : ''}`,
+            `CANCELLED${invoice.cancellationReason ? ` · ${invoice.cancellationReason}` : ''}`,
           )
         : null,
 
-      // --- Supplier + invoice meta ---
-      h(View, { key: 'hdr', style: s.supplierRow }, [
-        h(
-          View,
-          {
-            key: 'sup',
-            style: [
-              s.box,
-              { flex: 1, marginRight: 10, marginBottom: 0, borderRadius: 7 },
-            ],
-          },
-          [
-            h(
-              Text,
-              { key: 'label', style: s.label },
-              'Supplier / registered business',
-            ),
-            h(Text, { key: 'n', style: s.strong }, invoice.supplierName),
-            h(Text, { key: 'a' }, invoice.supplierAddress),
-            h(Text, { key: 'g' }, `GSTIN: ${invoice.supplierGstin}`),
-            h(
-              Text,
-              { key: 's' },
-              `State: ${invoice.supplierStateName} (${invoice.supplierStateCode})`,
-            ),
-            invoice.supplierEmail
-              ? h(Text, { key: 'e' }, invoice.supplierEmail)
-              : null,
-            invoice.supplierPhone
-              ? h(Text, { key: 'p' }, invoice.supplierPhone)
-              : null,
-          ],
+      // --- Invoice details ---
+      h(View, { key: 'meta', style: s.metaStrip }, [
+        meta('Invoice no.', invoice.invoiceNumber),
+        meta('Invoice date', formatDate(invoice.invoiceDate)),
+        periodLabel ? meta('Billing period', periodLabel) : null,
+        meta(
+          'Place of supply',
+          `${invoice.placeOfSupplyState} (${invoice.placeOfSupplyCode})`,
         ),
-        h(View, { key: 'meta', style: s.invoiceMeta }, [
-          field('Invoice No.', invoice.invoiceNumber),
-          field('Invoice Date', formatDate(invoice.invoiceDate)),
-          periodLabel ? field('Billing period', periodLabel) : null,
-          field(
-            'Place of Supply',
-            `${invoice.placeOfSupplyState} (${invoice.placeOfSupplyCode})`,
-          ),
-          field('SAC', invoice.sacCode),
-        ]),
+        meta('SAC', invoice.sacCode),
       ]),
 
-      // --- Recipient ---
-      h(View, { key: 'party', style: s.twoCol }, [
-        h(View, { key: 'bill', style: s.col }, [
-          h(Text, { key: 'h', style: s.h }, 'Billed to'),
-          h(Text, { key: 'n', style: s.strong }, invoice.recipientName),
-          invoice.recipientAddress
-            ? h(Text, { key: 'a' }, invoice.recipientAddress)
+      // --- Supplier, recipient, supply ---
+      h(View, { key: 'parties', style: s.parties }, [
+        h(View, { key: 'sup', style: s.party }, [
+          h(Text, { key: 'label', style: s.label }, 'From'),
+          h(Text, { key: 'n', style: s.partyName }, invoice.supplierName),
+          h(Text, { key: 'a', style: s.muted }, invoice.supplierAddress),
+          h(Text, { key: 'g' }, `GSTIN ${invoice.supplierGstin}`),
+          h(
+            Text,
+            { key: 's', style: s.muted },
+            `State: ${invoice.supplierStateName} (${invoice.supplierStateCode})`,
+          ),
+          invoice.supplierEmail
+            ? h(Text, { key: 'e', style: s.muted }, invoice.supplierEmail)
             : null,
-          h(Text, { key: 'p' }, invoice.recipientPhone),
+          invoice.supplierPhone
+            ? h(Text, { key: 'p', style: s.muted }, invoice.supplierPhone)
+            : null,
+        ]),
+        h(View, { key: 'bill', style: s.party }, [
+          h(Text, { key: 'label', style: s.label }, 'Billed to'),
+          h(Text, { key: 'n', style: s.partyName }, invoice.recipientName),
+          invoice.recipientAddress
+            ? h(Text, { key: 'a', style: s.muted }, invoice.recipientAddress)
+            : null,
+          h(Text, { key: 'p', style: s.muted }, invoice.recipientPhone),
           h(
             Text,
             { key: 'g' },
             // Spelled out rather than left blank: "Unregistered" is a meaningful statement on a
             // GST invoice, an empty line is just an omission.
-            `GSTIN: ${invoice.recipientGstin ?? 'Unregistered (B2C)'}`,
+            `GSTIN ${invoice.recipientGstin ?? 'Unregistered (B2C)'}`,
           ),
         ]),
-        h(View, { key: 'rc', style: s.col }, [
-          h(Text, { key: 'h', style: s.h }, 'Supply details'),
-          h(Text, { key: 'r' }, 'Reverse charge applicable: No'),
+        h(View, { key: 'rc', style: s.party }, [
+          h(Text, { key: 'label', style: s.label }, 'Supply details'),
+          h(Text, { key: 'r' }, 'Reverse charge: No'),
           h(Text, { key: 'c' }, `Currency: ${invoice.currency}`),
           extras.destination
             ? h(
                 Text,
-                { key: 'd', style: s.small },
+                { key: 'd', style: s.muted },
                 `Destination: ${extras.destination}`,
               )
             : null,
           extras.shipments.length
             ? h(
                 Text,
-                { key: 'awb', style: s.small },
+                { key: 'awb', style: s.muted },
                 `${extras.shipments.length} shipment${extras.shipments.length === 1 ? '' : 's'} included`,
               )
             : null,
         ]),
       ]),
 
-      // --- Line item ---
-      h(View, { key: 'tbl' }, [
-        h(View, { key: 'head', style: s.row }, [
-          h(Text, { key: 'a', style: [s.th, { width: '8%' }] }, '#'),
+      // --- Line items ---
+      h(View, { key: 'tbl', style: s.table }, [
+        h(View, { key: 'head', style: s.headRow, fixed: true }, [
+          h(Text, { key: 'a', style: [s.th, col.n] }, '#'),
           h(
             Text,
-            { key: 'b', style: [s.th, { flex: 1 }] },
+            { key: 'b', style: [s.th, col.desc] },
             'Description of service',
           ),
-          h(Text, { key: 'c', style: [s.th, { width: '14%' }] }, 'SAC'),
+          h(Text, { key: 'c', style: [s.th, col.sac] }, 'SAC'),
           h(
             Text,
-            { key: 'd', style: [s.th, s.right, { width: '22%' }] },
+            { key: 'd', style: [s.th, col.amt, s.right] },
             'Taxable value',
           ),
         ]),
@@ -511,174 +626,160 @@ export async function renderTaxInvoice(
         // our invoices side by side should not be reading two different documents.
         ...(scheduleLines.length > 0
           ? [
-              h(View, { key: 'sched-line', style: s.row }, [
-                h(Text, { key: 'a', style: [s.td, { width: '8%' }] }, '1'),
-                h(View, { key: 'b', style: [s.td, { flex: 1 }] }, [
-                  h(Text, { key: 'd' }, descriptionLines[0]),
-                  h(
-                    Text,
-                    { key: 's', style: s.small },
-                    'Itemised in the shipment schedule below.',
-                  ),
-                ]),
-                h(
-                  Text,
-                  { key: 'c', style: [s.td, { width: '14%' }] },
-                  invoice.sacCode,
-                ),
-                h(
-                  Text,
-                  { key: 'e', style: [s.td, s.right, { width: '22%' }] },
-                  money(invoice.taxableValue),
-                ),
-              ]),
+              itemRow(
+                'sched-line',
+                '1',
+                [
+                  descriptionLines[0],
+                  'Itemised in the shipment schedule below.',
+                ],
+                invoice.taxableValue,
+              ),
             ]
           : consolidatedLines.length > 0
-          ? consolidatedLines.map((line, i) =>
-              h(View, { key: `body-${i}`, style: s.row }, [
-                h(
-                  Text,
-                  { key: 'a', style: [s.td, { width: '8%' }] },
+            ? consolidatedLines.map((line, i) =>
+                itemRow(
+                  `body-${i}`,
                   String(i + 1),
+                  [line.description, `Supplied ${formatDate(line.supplyDate)}`],
+                  line.amount,
                 ),
-                h(View, { key: 'b', style: [s.td, { flex: 1 }] }, [
-                  h(Text, { key: 'd' }, line.description),
-                  h(
-                    Text,
-                    { key: 's', style: s.small },
-                    `Supplied ${formatDate(line.supplyDate)}`,
-                  ),
-                ]),
-                h(
-                  Text,
-                  { key: 'c', style: [s.td, { width: '14%' }] },
-                  invoice.sacCode,
-                ),
-                h(
-                  Text,
-                  { key: 'e', style: [s.td, s.right, { width: '22%' }] },
-                  money(line.amount),
-                ),
-              ]),
-            )
-          : [
-              h(View, { key: 'body', style: s.row }, [
-                h(Text, { key: 'a', style: [s.td, { width: '8%' }] }, '1'),
-                h(
-                  View,
-                  { key: 'b', style: [s.td, { flex: 1 }] },
-                  descriptionLines.map((line, i) =>
-                    h(Text, { key: String(i) }, line),
-                  ),
-                ),
-                h(
-                  Text,
-                  { key: 'c', style: [s.td, { width: '14%' }] },
-                  invoice.sacCode,
-                ),
-                h(
-                  Text,
-                  { key: 'd', style: [s.td, s.right, { width: '22%' }] },
-                  money(invoice.taxableValue),
-                ),
-              ]),
-            ]),
+              )
+            : [itemRow('body', '1', descriptionLines, invoice.taxableValue)]),
       ]),
 
       // --- Shipment schedule (custom invoices billed from a freight list) ---
       scheduleLines.length > 0
-        ? h(View, { key: 'sched', style: { marginTop: 12 } }, [
-            h(Text, { key: 'h', style: s.h }, 'Shipment schedule'),
-            h(View, { key: 'head', style: s.row }, [
+        ? h(View, { key: 'sched', style: { marginTop: 18 } }, [
+            h(Text, { key: 'h', style: s.sectionTitle }, 'Shipment schedule'),
+            h(View, { key: 'head', style: s.headRow }, [
               h(Text, { key: 'n', style: [s.sth, schedW.sl] }, '#'),
               h(Text, { key: 'a', style: [s.sth, schedW.awb] }, 'AWB No.'),
               h(Text, { key: 'd', style: [s.sth, schedW.date] }, 'Date'),
               h(Text, { key: 'x', style: [s.sth, schedW.dest] }, 'Destination'),
               h(Text, { key: 'w', style: [s.sth, schedW.net] }, 'Network'),
               h(Text, { key: 'v', style: [s.sth, schedW.svc] }, 'D/S'),
-              h(Text, { key: 'k', style: [s.sth, s.right, schedW.kg] }, 'Wt (kg)'),
-              h(Text, { key: 'm', style: [s.sth, s.right, schedW.amt] }, 'Amount'),
-              h(Text, { key: 'g', style: [s.sth, s.right, schedW.gmr] }, 'GMR/Comm'),
+              h(
+                Text,
+                { key: 'k', style: [s.sth, s.right, schedW.kg] },
+                'Wt (kg)',
+              ),
+              h(
+                Text,
+                { key: 'm', style: [s.sth, s.right, schedW.amt] },
+                'Amount',
+              ),
+              h(
+                Text,
+                { key: 'g', style: [s.sth, s.right, schedW.gmr] },
+                'GMR/Comm',
+              ),
               h(Text, { key: 'p', style: [s.sth, s.right, schedW.pss] }, 'PSS'),
               h(Text, { key: 'f', style: [s.sth, s.right, schedW.fsc] }, 'FSC'),
-              h(Text, { key: 't', style: [s.sth, s.right, schedW.tot] }, 'Total'),
+              h(
+                Text,
+                { key: 't', style: [s.sth, s.right, schedW.tot] },
+                'Total',
+              ),
             ]),
             ...scheduleLines.map((line, i) =>
-              h(View, { key: 'sched-row-' + i, style: s.row }, [
-                h(Text, { key: 'n', style: [s.std, schedW.sl] }, String(i + 1)),
-                h(
-                  Text,
-                  { key: 'a', style: [s.std, schedW.awb] },
-                  line.awbNumber ?? '—',
-                ),
-                h(
-                  Text,
-                  { key: 'd', style: [s.std, schedW.date] },
-                  line.supplyDate ? formatDate(new Date(line.supplyDate)) : '—',
-                ),
-                h(
-                  Text,
-                  { key: 'x', style: [s.std, schedW.dest] },
-                  line.destination ?? '—',
-                ),
-                h(
-                  Text,
-                  { key: 'w', style: [s.std, schedW.net] },
-                  line.network ?? '—',
-                ),
-                h(
-                  Text,
-                  { key: 'v', style: [s.std, schedW.svc] },
-                  line.service ?? '—',
-                ),
-                h(
-                  Text,
-                  { key: 'k', style: [s.std, s.right, schedW.kg] },
-                  line.weightKg === null || line.weightKg === undefined
-                    ? '—'
-                    : line.weightKg.toFixed(2),
-                ),
-                h(
-                  Text,
-                  { key: 'm', style: [s.std, s.right, schedW.amt] },
-                  money(line.amount),
-                ),
-                h(
-                  Text,
-                  { key: 'g', style: [s.std, s.right, schedW.gmr] },
-                  money(line.otherCharges ?? 0),
-                ),
-                h(
-                  Text,
-                  { key: 'p', style: [s.std, s.right, schedW.pss] },
-                  money(line.pss ?? 0),
-                ),
-                h(
-                  Text,
-                  { key: 'f', style: [s.std, s.right, schedW.fsc] },
-                  money(line.fsc ?? 0),
-                ),
-                h(
-                  Text,
-                  { key: 't', style: [s.std, s.right, schedW.tot, s.strong] },
-                  money(customInvoiceLineTotal(line)),
-                ),
-              ]),
+              h(
+                View,
+                { key: 'sched-row-' + i, style: s.bodyRow, wrap: false },
+                [
+                  h(
+                    Text,
+                    { key: 'n', style: [s.std, schedW.sl, s.muted] },
+                    String(i + 1),
+                  ),
+                  h(
+                    Text,
+                    { key: 'a', style: [s.std, schedW.awb] },
+                    line.awbNumber ?? '—',
+                  ),
+                  h(
+                    Text,
+                    { key: 'd', style: [s.std, schedW.date] },
+                    line.supplyDate
+                      ? formatDate(new Date(line.supplyDate))
+                      : '—',
+                  ),
+                  h(
+                    Text,
+                    { key: 'x', style: [s.std, schedW.dest] },
+                    line.destination ?? '—',
+                  ),
+                  h(
+                    Text,
+                    { key: 'w', style: [s.std, schedW.net] },
+                    line.network ?? '—',
+                  ),
+                  h(
+                    Text,
+                    { key: 'v', style: [s.std, schedW.svc] },
+                    line.service ?? '—',
+                  ),
+                  h(
+                    Text,
+                    { key: 'k', style: [s.std, s.right, schedW.kg] },
+                    line.weightKg === null || line.weightKg === undefined
+                      ? '—'
+                      : line.weightKg.toFixed(2),
+                  ),
+                  h(
+                    Text,
+                    { key: 'm', style: [s.std, s.right, schedW.amt] },
+                    money(line.amount),
+                  ),
+                  h(
+                    Text,
+                    { key: 'g', style: [s.std, s.right, schedW.gmr] },
+                    money(line.otherCharges ?? 0),
+                  ),
+                  h(
+                    Text,
+                    { key: 'p', style: [s.std, s.right, schedW.pss] },
+                    money(line.pss ?? 0),
+                  ),
+                  h(
+                    Text,
+                    { key: 'f', style: [s.std, s.right, schedW.fsc] },
+                    money(line.fsc ?? 0),
+                  ),
+                  h(
+                    Text,
+                    { key: 't', style: [s.std, s.right, schedW.tot, s.strong] },
+                    money(customInvoiceLineTotal(line)),
+                  ),
+                ],
+              ),
             ),
             // The schedule is tax-inclusive, like every figure staff type into the form. Said
             // out loud so nobody reconciles these rows against the taxable value above, finds a
             // gap, and assumes the invoice is wrong.
             h(
               Text,
-              { key: 'note', style: s.small },
+              { key: 'note', style: [s.small, { marginTop: 4 }] },
               'Schedule amounts include GST. The taxable value and tax shown above are derived from this total.',
             ),
           ])
         : null,
 
-      // --- Totals ---
-      h(View, { key: 'tot', style: s.totalsWrap }, [
-        h(View, { key: 'inner', style: s.totals }, [
+      // --- Amount in words + totals, kept together so a total never starts a page alone ---
+      h(View, { key: 'summary', style: s.summary, wrap: false }, [
+        h(View, { key: 'words', style: s.words }, [
+          invoice.currency === 'INR'
+            ? h(View, { key: 'w' }, [
+                h(Text, { key: 'l', style: s.label }, 'Amount in words'),
+                h(
+                  Text,
+                  { key: 'v', style: s.strong },
+                  rupeesInWords(invoice.totalAmount),
+                ),
+              ])
+            : null,
+        ]),
+        h(View, { key: 'totals', style: s.totals }, [
           totalRow('Taxable value', money(invoice.taxableValue)),
           ...(isIntraState
             ? [
@@ -714,8 +815,12 @@ export async function renderTaxInvoice(
               )
             : null,
           h(View, { key: 'g', style: s.grand }, [
-            h(Text, { key: 'l' }, 'Total'),
-            h(Text, { key: 'v' }, money(invoice.totalAmount)),
+            h(Text, { key: 'l', style: s.grandLabel }, 'Total'),
+            h(
+              Text,
+              { key: 'v', style: s.grandValue },
+              money(invoice.totalAmount),
+            ),
           ]),
         ]),
       ]),
@@ -723,14 +828,14 @@ export async function renderTaxInvoice(
       branding.termsAndConditions ||
       branding.footerNotes ||
       branding.legalDisclaimer
-        ? h(View, { key: 'notes', style: s.notes }, [
+        ? h(View, { key: 'notes', style: s.notes, wrap: false }, [
             branding.termsAndConditions
               ? h(View, { key: 'terms', style: s.note }, [
-                  h(Text, { key: 'h', style: s.label }, 'Terms & Conditions'),
+                  h(Text, { key: 'h', style: s.label }, 'Terms & conditions'),
                   ...termLines(branding.termsAndConditions).map((term, i) =>
                     h(
                       Text,
-                      { key: `t${i}`, style: s.foot },
+                      { key: `t${i}`, style: s.noteText },
                       `${i + 1}. ${term}`,
                     ),
                   ),
@@ -741,7 +846,7 @@ export async function renderTaxInvoice(
                   h(Text, { key: 'h', style: s.label }, 'Notes'),
                   h(
                     Text,
-                    { key: 'v', style: s.foot },
+                    { key: 'v', style: s.noteText },
                     branding.footerNotes ?? branding.legalDisclaimer,
                   ),
                 ])
@@ -749,25 +854,30 @@ export async function renderTaxInvoice(
           ])
         : null,
 
-      h(View, { key: 'foot', style: s.foot }, [
+      // --- Footer, on every page ---
+      h(View, { key: 'foot', style: s.footer, fixed: true }, [
         h(
           Text,
           { key: 'a' },
-          'This is a computer-generated invoice and does not require a physical signature.',
+          'Computer-generated invoice. No signature required.',
         ),
-        h(View, { key: 'bar', style: s.footerBar }, [
-          h(
-            Text,
-            { key: 'b' },
-            `Issued ${formatDate(invoice.invoiceDate)} · FY ${invoice.financialYear}`,
-          ),
-          h(
-            Text,
-            { key: 'c' },
-            [supportEmail, supportPhone].filter(Boolean).join(' · ') ||
-              'Customer support',
-          ),
-        ]),
+        h(
+          Text,
+          { key: 'b' },
+          [supportEmail, supportPhone].filter(Boolean).join(' · ') ||
+            `FY ${invoice.financialYear}`,
+        ),
+        h(Text, {
+          key: 'c',
+          render: ({
+            pageNumber,
+            totalPages,
+          }: {
+            pageNumber: number;
+            totalPages: number;
+          }) =>
+            `${invoice.invoiceNumber} · Page ${pageNumber} of ${totalPages}`,
+        }),
       ]),
     ]),
   );

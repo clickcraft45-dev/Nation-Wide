@@ -17,7 +17,7 @@ import {
   type SelectHTMLAttributes,
 } from "react";
 import { createPortal } from "react-dom";
-import { Check, ChevronDown } from "lucide-react";
+import { Check, ChevronDown, Search } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
 interface Option {
@@ -64,13 +64,21 @@ function readOptions(children: ReactNode): Option[] {
  * real change event whose `e.target.value` is the picked value. That works because a real
  * <select> stays in the DOM, hidden — picking sets its value and dispatches `change` on it — so
  * forms, `name`, `required` and refs keep behaving exactly as they did.
+ *
+ * `searchable` puts a filter box at the top of the list, for lists too long to scroll (countries,
+ * saved recipients). Typing filters on the option's text; the arrows and Enter still pick.
  */
-export const NativeSelect = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSelectElement>>(
-  ({ className, children, id, disabled, value, defaultValue, style, ...props }, ref) => {
+export const NativeSelect = forwardRef<
+  HTMLSelectElement,
+  SelectHTMLAttributes<HTMLSelectElement> & { searchable?: boolean; searchPlaceholder?: string }
+>(
+  ({ className, children, id, disabled, value, defaultValue, style, searchable, searchPlaceholder, ...props }, ref) => {
     const options = readOptions(children);
     const selectRef = useRef<HTMLSelectElement>(null);
     const triggerRef = useRef<HTMLButtonElement>(null);
+    const panelRef = useRef<HTMLDivElement>(null);
     const listRef = useRef<HTMLUListElement>(null);
+    const searchRef = useRef<HTMLInputElement>(null);
     useImperativeHandle(ref, () => selectRef.current!);
 
     const controlled = value !== undefined;
@@ -85,6 +93,10 @@ export const NativeSelect = forwardRef<HTMLSelectElement, SelectHTMLAttributes<H
     const [pos, setPos] = useState<{ left: number; width: number; top?: number; bottom?: number; maxHeight: number }>();
     const listId = useId();
     const typed = useRef({ text: "", at: 0 });
+    const [query, setQuery] = useState("");
+    const q = query.trim().toLowerCase();
+    // What the list shows, and what `active` indexes into.
+    const visible = searchable && q ? options.filter((o) => o.text.toLowerCase().includes(q)) : options;
 
     function place() {
       const rect = triggerRef.current?.getBoundingClientRect();
@@ -94,10 +106,12 @@ export const NativeSelect = forwardRef<HTMLSelectElement, SelectHTMLAttributes<H
       // Opens upward only when there is clearly more room there — a field near the bottom of a
       // phone screen or a dialog.
       const up = below < 220 && above > below;
+      const width = Math.min(Math.max(rect.width, 160), window.innerWidth - 16);
       setPos({
-        left: rect.left,
-        width: Math.max(rect.width, 160),
-        maxHeight: Math.min(320, up ? above : below),
+        // Kept on screen: a narrow trigger at the right edge of a phone would push the list off it.
+        left: Math.max(8, Math.min(rect.left, window.innerWidth - width - 8)),
+        width,
+        maxHeight: Math.min(searchable ? 380 : 320, up ? above : below),
         ...(up ? { bottom: window.innerHeight - rect.top + 4 } : { top: rect.bottom + 4 }),
       });
     }
@@ -105,6 +119,7 @@ export const NativeSelect = forwardRef<HTMLSelectElement, SelectHTMLAttributes<H
     function openList() {
       if (disabled) return;
       place();
+      setQuery("");
       setActive(Math.max(0, options.findIndex((o) => o.value === current)));
       setOpen(true);
     }
@@ -127,9 +142,9 @@ export const NativeSelect = forwardRef<HTMLSelectElement, SelectHTMLAttributes<H
     }
 
     function move(from: number, step: 1 | -1) {
-      for (let i = 1; i <= options.length; i++) {
-        const next = (from + step * i + options.length) % options.length;
-        if (!options[next].disabled) return next;
+      for (let i = 1; i <= visible.length; i++) {
+        const next = (from + step * i + visible.length) % visible.length;
+        if (!visible[next].disabled) return next;
       }
       return from;
     }
@@ -142,6 +157,8 @@ export const NativeSelect = forwardRef<HTMLSelectElement, SelectHTMLAttributes<H
         }
         return;
       }
+      // In the search box, printable keys (space too) and Home/End edit the text.
+      if (searchable && (e.key.length === 1 || e.key === "Home" || e.key === "End")) return;
       if (e.key === "Escape" || e.key === "Tab") {
         if (e.key === "Escape") e.preventDefault();
         close(e.key === "Escape");
@@ -150,10 +167,10 @@ export const NativeSelect = forwardRef<HTMLSelectElement, SelectHTMLAttributes<H
         setActive((i) => move(i, e.key === "ArrowDown" ? 1 : -1));
       } else if (e.key === "Home" || e.key === "End") {
         e.preventDefault();
-        setActive(e.key === "Home" ? move(-1, 1) : move(options.length, -1));
+        setActive(e.key === "Home" ? move(-1, 1) : move(visible.length, -1));
       } else if (e.key === "Enter" || e.key === " ") {
         e.preventDefault();
-        if (options[active]) pick(options[active]);
+        if (visible[active]) pick(visible[active]);
       } else if (e.key.length === 1) {
         // Type-ahead: letters typed in quick succession jump to the first matching option.
         const now = Date.now();
@@ -171,10 +188,10 @@ export const NativeSelect = forwardRef<HTMLSelectElement, SelectHTMLAttributes<H
       if (!open) return;
       function onPointerDown(e: PointerEvent) {
         const target = e.target as Node;
-        if (!triggerRef.current?.contains(target) && !listRef.current?.contains(target)) close(false);
+        if (!triggerRef.current?.contains(target) && !panelRef.current?.contains(target)) close(false);
       }
       function onScroll(e: Event) {
-        if (listRef.current?.contains(e.target as Node)) return;
+        if (panelRef.current?.contains(e.target as Node)) return;
         place();
       }
       document.addEventListener("pointerdown", onPointerDown);
@@ -185,7 +202,14 @@ export const NativeSelect = forwardRef<HTMLSelectElement, SelectHTMLAttributes<H
         window.removeEventListener("scroll", onScroll, true);
         window.removeEventListener("resize", place);
       };
+      // Bound once per opening; place() only reads refs and the `searchable` prop, which a list
+      // that is already open never sees change.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open]);
+
+    useEffect(() => {
+      if (open && searchable) searchRef.current?.focus();
+    }, [open, searchable]);
 
     // Keep the highlighted option in view while arrowing through a long list (dial codes).
     useLayoutEffect(() => {
@@ -249,46 +273,81 @@ export const NativeSelect = forwardRef<HTMLSelectElement, SelectHTMLAttributes<H
         {open &&
           pos &&
           createPortal(
-            <ul
-              ref={listRef}
-              id={listId}
-              role="listbox"
-              aria-label={props["aria-label"]}
+            <div
+              ref={panelRef}
               // pointerEvents: a modal Radix dialog sets pointer-events:none on <body>, and this list
               // is portalled there. Clicks and wheel still count as "inside" the dialog, because
               // Radix follows the React tree, which this portal is part of.
-              style={{ pointerEvents: "auto", position: "fixed", left: pos.left, top: pos.top, bottom: pos.bottom, minWidth: pos.width, maxHeight: pos.maxHeight }}
+              style={{ pointerEvents: "auto", position: "fixed", left: pos.left, top: pos.top, bottom: pos.bottom, minWidth: pos.width, maxWidth: `calc(100vw - ${pos.left + 8}px)`, maxHeight: pos.maxHeight }}
               // Above dialogs (z-50) and the map sheet (z-60).
-              className="glass-raised z-70 overflow-y-auto overscroll-contain rounded-xl p-1 text-sm animate-in fade-in-0 zoom-in-95"
+              className="glass-raised z-70 flex flex-col overflow-hidden rounded-xl text-sm animate-in fade-in-0 zoom-in-95"
             >
-              {options.map((o, i) => {
-                const isSelected = o.value === current;
-                return (
-                  <li
-                    key={`${o.value}-${i}`}
-                    id={`${listId}-${i}`}
-                    role="option"
-                    aria-selected={isSelected}
-                    aria-disabled={o.disabled || undefined}
-                    onMouseEnter={() => !o.disabled && setActive(i)}
-                    // pointerdown, not click, so the trigger never blurs first and flickers.
-                    onPointerDown={(e) => {
-                      e.preventDefault();
-                      pick(o);
-                    }}
-                    className={cn(
-                      "flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-2 text-foreground transition-colors",
-                      i === active && "bg-white/70",
-                      isSelected && "font-medium",
-                      o.disabled && "cursor-not-allowed opacity-50",
-                    )}
-                  >
-                    <span className="min-w-0 flex-1 truncate">{o.label}</span>
-                    {isSelected && <Check className="h-4 w-4 shrink-0 text-primary" aria-hidden />}
+              {searchable && (
+                <div className="border-b border-[color:var(--glass-edge)] p-1.5">
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute left-2.5 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+                    <input
+                      ref={searchRef}
+                      type="text"
+                      role="combobox"
+                      aria-expanded
+                      aria-controls={listId}
+                      aria-autocomplete="list"
+                      aria-activedescendant={visible[active] ? `${listId}-${active}` : undefined}
+                      aria-label={searchPlaceholder ?? "Search"}
+                      placeholder={searchPlaceholder ?? "Search…"}
+                      value={query}
+                      onChange={(e) => {
+                        setQuery(e.target.value);
+                        setActive(0);
+                      }}
+                      onKeyDown={onKeyDown}
+                      className="h-9 w-full rounded-lg bg-white/70 pl-8 pr-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    />
+                  </div>
+                </div>
+              )}
+              <ul
+                ref={listRef}
+                id={listId}
+                role="listbox"
+                aria-label={props["aria-label"]}
+                className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-1"
+              >
+                {visible.map((o, i) => {
+                  const isSelected = o.value === current;
+                  return (
+                    <li
+                      key={`${o.value}-${i}`}
+                      id={`${listId}-${i}`}
+                      role="option"
+                      aria-selected={isSelected}
+                      aria-disabled={o.disabled || undefined}
+                      onMouseEnter={() => !o.disabled && setActive(i)}
+                      // pointerdown, not click, so the trigger never blurs first and flickers.
+                      onPointerDown={(e) => {
+                        e.preventDefault();
+                        pick(o);
+                      }}
+                      className={cn(
+                        "flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-2 text-foreground transition-colors",
+                        i === active && "bg-white/70",
+                        isSelected && "font-medium",
+                        o.disabled && "cursor-not-allowed opacity-50",
+                      )}
+                    >
+                      <span className="min-w-0 flex-1 truncate">{o.label}</span>
+                      {isSelected && <Check className="h-4 w-4 shrink-0 text-primary" aria-hidden />}
+                    </li>
+                  );
+                })}
+                {visible.length === 0 && (
+                  <li role="presentation" className="px-2.5 py-3 text-center text-muted-foreground">
+                    No matches for &ldquo;{query.trim()}&rdquo;
                   </li>
-                );
-              })}
-            </ul>,
+                )}
+              </ul>
+            </div>,
             document.body,
           )}
       </div>

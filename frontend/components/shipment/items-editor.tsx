@@ -6,6 +6,7 @@ import type { SavedItemDto, ShipmentItemDto } from "@nationwide/shared-types";
 import { apiClient, errorMessage } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
 import { Input, Label, FieldError } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toast";
 
 export interface ItemForm {
@@ -121,6 +122,19 @@ export function ItemsEditor({
     );
   }
 
+  // A saved item lands in the first empty row, or a new one; the server remembers new ones itself.
+  function addSaved(item: SavedItemDto) {
+    const blank = value.findIndex((r) => !r.description.trim());
+    const row: ItemForm = {
+      category: item.category ?? "",
+      description: item.description,
+      quantity: "1",
+      unitValue: String(item.unitValue),
+      hsCode: item.hsCode ?? "",
+    };
+    onChange(blank >= 0 ? value.map((r, i) => (i === blank ? row : r)) : [...value, row]);
+  }
+
   const total = value.reduce((sum, r) => sum + (Number(r.quantity) || 0) * (Number(r.unitValue) || 0), 0);
 
   return (
@@ -139,8 +153,8 @@ export function ItemsEditor({
       </datalist>
 
       {value.map((row, i) => (
-        <div key={i} className="grid grid-cols-6 items-end gap-2 rounded-lg border border-border p-3">
-          <div className="col-span-3 space-y-1 sm:col-span-2">
+        <div key={i} className="grid grid-cols-6 items-end gap-2 rounded-lg border border-border p-3 sm:grid-cols-12">
+          <div className="col-span-3 space-y-1 sm:col-span-3">
             <Label htmlFor={`item-${i}-category`}>Type</Label>
             <Input
               id={`item-${i}-category`}
@@ -150,7 +164,7 @@ export function ItemsEditor({
               onChange={(e) => setRow(i, "category", e.target.value)}
             />
           </div>
-          <div className="col-span-3 space-y-1 sm:col-span-2">
+          <div className="col-span-3 space-y-1 sm:col-span-3">
             <Label htmlFor={`item-${i}-description`}>Item</Label>
             <Input
               id={`item-${i}-description`}
@@ -161,7 +175,7 @@ export function ItemsEditor({
               error={Boolean(error)}
             />
           </div>
-          <div className="col-span-2 space-y-1 sm:col-span-1">
+          <div className="col-span-2 space-y-1 sm:col-span-2">
             <Label htmlFor={`item-${i}-quantity`}>Qty</Label>
             <Input
               id={`item-${i}-quantity`}
@@ -173,7 +187,7 @@ export function ItemsEditor({
               onChange={(e) => setRow(i, "quantity", e.target.value)}
             />
           </div>
-          <div className="col-span-2 space-y-1 sm:col-span-1">
+          <div className="col-span-2 space-y-1 sm:col-span-2">
             <Label htmlFor={`item-${i}-value`}>Value ₹ /unit</Label>
             <Input
               id={`item-${i}-value`}
@@ -185,7 +199,7 @@ export function ItemsEditor({
               onChange={(e) => setRow(i, "unitValue", e.target.value)}
             />
           </div>
-          <div className="col-span-2 flex items-end gap-1 sm:col-span-1">
+          <div className="col-span-2 flex items-end gap-1 sm:col-span-2">
             <div className="flex-1 space-y-1">
               <Label htmlFor={`item-${i}-hs`}>HS code</Label>
               <Input
@@ -210,9 +224,37 @@ export function ItemsEditor({
       ))}
 
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <Button type="button" variant="secondary" size="sm" onClick={() => onChange([...value, { ...emptyItem }])}>
-          <Plus className="h-4 w-4" aria-hidden /> Add item
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button type="button" variant="secondary" size="sm" onClick={() => onChange([...value, { ...emptyItem }])}>
+            <Plus className="h-4 w-4" aria-hidden /> Add item
+          </Button>
+          {saved.length > 0 && (
+            <div className="w-64 max-w-full">
+              <NativeSelect
+                aria-label="Add a saved item"
+                searchable
+                searchPlaceholder="Search saved items"
+                // An action, not a stored choice: it always returns to the placeholder.
+                value=""
+                onChange={(e) => {
+                  const item = saved.find((s) => s.id === e.target.value);
+                  if (item) addSaved(item);
+                }}
+              >
+                <option value="">Add a saved item…</option>
+                {saved.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    <span className="font-medium">{s.description}</span>
+                    <span className="text-muted-foreground">
+                      {` · ₹${s.unitValue.toLocaleString("en-IN")}`}
+                      {s.category ? ` · ${s.category}` : ""}
+                    </span>
+                  </option>
+                ))}
+              </NativeSelect>
+            </div>
+          )}
+        </div>
         <p className="text-xs text-muted-foreground">
           Declared value: <span className="font-semibold text-foreground">₹{total.toLocaleString("en-IN")}</span>
         </p>
@@ -226,17 +268,7 @@ export function ItemsEditor({
           libraryBase={libraryBase}
           client={client}
           onChange={onSavedItemsChange}
-          onUse={(item) => {
-            const blank = value.findIndex((r) => !r.description.trim());
-            const row: ItemForm = {
-              category: item.category ?? "",
-              description: item.description,
-              quantity: "1",
-              unitValue: String(item.unitValue),
-              hsCode: item.hsCode ?? "",
-            };
-            onChange(blank >= 0 ? value.map((r, i) => (i === blank ? row : r)) : [...value, row]);
-          }}
+          onUse={addSaved}
         />
       )}
     </div>
@@ -296,8 +328,8 @@ function SavedItemsLibrary({
 
   return (
     <details className="rounded-lg border border-border">
-      <summary className="cursor-pointer px-3 py-2 text-sm font-medium text-foreground">
-        Saved items ({items.length})
+      <summary className="cursor-pointer px-3 py-2.5 text-sm font-medium text-foreground hover:bg-muted/50">
+        Manage saved items <span className="font-normal text-muted-foreground">({items.length})</span>
       </summary>
       <ul className="divide-y divide-border border-t border-border">
         {items.map((item) =>
@@ -398,7 +430,7 @@ function IconButton({
       aria-label={label}
       onClick={onClick}
       disabled={disabled}
-      className={`rounded p-1 text-muted-foreground hover:bg-muted disabled:opacity-50 ${
+      className={`inline-flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 ${
         danger ? "hover:text-danger" : "hover:text-foreground"
       }`}
     >

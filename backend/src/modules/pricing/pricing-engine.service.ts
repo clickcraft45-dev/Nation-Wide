@@ -30,6 +30,11 @@ export interface PriceCalculationInput {
   baseRate: number;
   /** FLAT when omitted, so every existing caller keeps its current behaviour. */
   rateType?: 'FLAT' | 'PER_KG';
+  /**
+   * The base rate is an all-in figure (fuel, surcharges and GST already in it). Nothing is added
+   * on top except NationWide's cut, and the GST is taken back out so the breakdown still shows it.
+   */
+  taxInclusive?: boolean;
   fuelChargePercent: number;
   pssPerKg: number;
   weightKg: number;
@@ -72,21 +77,33 @@ export function calculateFinalPrice(
   const {
     baseRate,
     rateType = 'FLAT',
-    fuelChargePercent,
+    taxInclusive = false,
     pssPerKg,
     weightKg,
     gstPercent,
     nationwideCut,
   } = input;
-  const pssAmount = round2(pssPerKg * weightKg);
+  // An all-in rate already carries fuel and surcharges: charging them again would double them.
+  const fuelChargePercent = taxInclusive ? 0 : input.fuelChargePercent;
+  const pssAmount = taxInclusive ? 0 : round2(pssPerKg * weightKg);
 
   // Carrier tariffs price heavy freight per kilogram (FedEx: 21-44 kg at Rs.444/kg). Resolving
   // that to an amount HERE, before step 3, is deliberate: every step below — fuel, GST, the
   // taxable subtotal — is defined against the base rate for this shipment, so they must all see
   // the resolved figure. Applying fuel to the per-kg unit rate instead would under-charge it by
   // exactly the weight multiple.
-  const effectiveBaseRate =
-    rateType === 'PER_KG' ? round2(baseRate * weightKg) : baseRate;
+  // Per-kg weight is billed in whole kilos, as the carriers bill it (30.3 kg is charged as 31):
+  // pricing the bare 30.3 would under-charge against the carrier's own invoice. toFixed strips
+  // float noise first so 31.000000001 does not become 32.
+  const resolvedRate =
+    rateType === 'PER_KG'
+      ? round2(baseRate * Math.ceil(Number(weightKg.toFixed(6))))
+      : baseRate;
+  // All-in: the figure is the taxable amount plus GST, so the taxable amount is it ÷ (1 + GST).
+  // Steps 4-6 below then add the same GST back and land on the all-in figure again (to the paisa).
+  const effectiveBaseRate = taxInclusive
+    ? round2(resolvedRate / (1 + gstPercent / 100))
+    : resolvedRate;
 
   // Step 3: Fuel Charge applies ONLY to Base Rate — never to PSS/GST/NationWide Cut.
   const fuelChargeAmount = round2(
@@ -145,7 +162,12 @@ export function marginFromBands(
 
 const withActiveWeightSlabs = {
   include: {
-    weightSlabs: { where: { isActive: true } },
+    // Ordered so a weight sitting on a shared edge (an old "0.5–1, 1–2" sheet) always takes the
+    // lower band, "up to 1 kg", instead of whichever row Postgres happens to return first.
+    weightSlabs: {
+      where: { isActive: true },
+      orderBy: { weightFromKg: 'asc' as const },
+    },
     zone: { include: { rateProvider: { include: { marginBands: true } } } },
   },
 };
@@ -262,6 +284,7 @@ export class PricingEngineService {
     const breakdown = calculateFinalPrice({
       baseRate: slab.baseRate,
       rateType: slab.rateType,
+      taxInclusive: rateCard.taxInclusive,
       fuelChargePercent: rateCard.zone.rateProvider.fuelChargePercent,
       pssPerKg: rateCard.zone.rateProvider.pssPerKg,
       weightKg,

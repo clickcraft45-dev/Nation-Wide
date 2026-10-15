@@ -11,6 +11,30 @@ export function googleMapsEnabled(): boolean {
   return KEY.length > 0;
 }
 
+type MapsService = "geocoding" | "places";
+
+// Services Google has refused for this key: the API not enabled on the project, or the key not
+// allowed to call it. Google's own script logs a console error on every refused call, so after the
+// first refusal the forms stop asking and fall back to plain typing for the rest of the page's life.
+// ponytail: per page load, not persisted; the real fix is enabling the API, which this cannot do.
+const refused = new Set<MapsService>();
+
+export function mapsServiceAvailable(service: MapsService): boolean {
+  return googleMapsEnabled() && !refused.has(service);
+}
+
+/** Whether an error from Google means "this key may not use that API", as opposed to a miss. */
+export function isRefusal(error: unknown): boolean {
+  const { code, message } = (error ?? {}) as { code?: unknown; message?: unknown };
+  // The Geocoder rejects with REQUEST_DENIED; Places (New) with gRPC PERMISSION_DENIED, code 7.
+  if (code === "REQUEST_DENIED" || code === "PERMISSION_DENIED" || code === 7) return true;
+  return /not activated|has not been used|is disabled|not authorized/i.test(String(message ?? ""));
+}
+
+export function noteMapsFailure(service: MapsService, error: unknown): void {
+  if (isRefusal(error)) refused.add(service);
+}
+
 declare global {
   interface Window {
     __nwGoogleMapsReady?: () => void;
@@ -128,6 +152,7 @@ export type PostalLookup =
  * the whole country, and "found: Afghanistan" would read as a verified code.
  */
 export async function lookupPostalCode(country: string, postalCode: string): Promise<PostalLookup> {
+  if (!mapsServiceAvailable("geocoding")) return { kind: "unavailable" };
   try {
     await loadGoogleMaps();
     const { Geocoder } = (await google.maps.importLibrary("geocoding")) as google.maps.GeocodingLibrary;
@@ -142,6 +167,7 @@ export async function lookupPostalCode(country: string, postalCode: string): Pro
   } catch (error) {
     // The geocoder rejects with ZERO_RESULTS for an unknown code; anything else (no key, Geocoding
     // API not enabled, offline) means we simply couldn't check.
+    noteMapsFailure("geocoding", error);
     return (error as { code?: string }).code === "ZERO_RESULTS" ? { kind: "not-found" } : { kind: "unavailable" };
   }
 }

@@ -43,6 +43,28 @@ describe("<NativeSelect>", () => {
     expect(screen.queryByRole("listbox")).toBeNull();
   });
 
+  it("filters a searchable list and picks the match with Enter", async () => {
+    const onChange = vi.fn();
+    render(
+      <NativeSelect aria-label="Country" searchable value="" onChange={(e) => onChange(e.target.value)}>
+        <option value="">Select a country…</option>
+        {["Austria", "Australia", "India"].map((c) => (
+          <option key={c} value={c}>
+            {c}
+          </option>
+        ))}
+      </NativeSelect>,
+    );
+
+    await userEvent.click(screen.getByRole("combobox", { name: "Country" }));
+    // Focus moves into the search box, so typing filters rather than jumping.
+    await userEvent.keyboard("ind");
+    expect(screen.getAllByRole("option").map((o) => o.textContent)).toEqual(["India"]);
+    await userEvent.keyboard("{Enter}");
+
+    expect(onChange).toHaveBeenCalledWith("India");
+  });
+
   it("picks with the keyboard", async () => {
     const onChange = vi.fn();
     render(<Controlled onChange={onChange} />);

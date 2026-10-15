@@ -1,7 +1,10 @@
 import {
   BadRequestException,
+  Body,
   Controller,
   Get,
+  Param,
+  ParseUUIDPipe,
   Post,
   Res,
   StreamableFile,
@@ -17,16 +20,22 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/types/jwt-payload.type';
+import type {
+  ProviderRateSheetDto,
+  RateSheetApplyResultDto,
+} from '@nationwide/shared-types';
 import {
   PricingSpreadsheetService,
   type ImportPlan,
 } from '../pricing/pricing-spreadsheet.service';
+import { RateSheetImportService } from '../pricing/rate-sheet-import.service';
 
 const XLSX_MIME =
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-// Big enough for the whole rate book several times over; small enough that an accidental upload of
-// something else is refused before it is parsed.
-const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
+// Carrier workbooks arrive with logos and pictures embedded: the July rate book is 7.6 MB, which a
+// 5 MB cap refused outright. Big enough for that several times over; small enough that an
+// accidental upload of something else is refused before it is parsed. ADMIN-only route.
+const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 
 const upload = {
   storage: memoryStorage(),
@@ -41,7 +50,57 @@ const upload = {
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('ADMIN')
 export class AdminPricingSpreadsheetController {
-  constructor(private readonly spreadsheet: PricingSpreadsheetService) {}
+  constructor(
+    private readonly spreadsheet: PricingSpreadsheetService,
+    private readonly rateSheets: RateSheetImportService,
+  ) {}
+
+  /** The provider's live rates, laid out as the carrier's own weight × zone sheet. */
+  @Get('providers/:providerId/rate-sheet')
+  rateSheet(
+    @Param('providerId', ParseUUIDPipe) providerId: string,
+  ): Promise<ProviderRateSheetDto> {
+    return this.rateSheets.current(providerId);
+  }
+
+  /**
+   * The carrier's workbook as they sent it, compared cell by cell with the live rates. Writes
+   * nothing. `allIn`: "true" when the sheet's prices already include fuel and GST.
+   */
+  @Post('providers/:providerId/rate-sheet/preview')
+  @UseInterceptors(FileInterceptor('file', upload))
+  previewRateSheet(
+    @Param('providerId', ParseUUIDPipe) providerId: string,
+    @Body() body: { allIn?: string },
+    @UploadedFile() file?: Express.Multer.File,
+  ): Promise<ProviderRateSheetDto> {
+    return this.rateSheets.preview(
+      providerId,
+      this.fileOf(file),
+      body.allIn === 'true',
+    );
+  }
+
+  /** The same file again: brings every rate of this provider in line with it. */
+  @Post('providers/:providerId/rate-sheet/import')
+  @UseInterceptors(FileInterceptor('file', upload))
+  importRateSheet(
+    @CurrentUser() user: JwtPayload,
+    @Param('providerId', ParseUUIDPipe) providerId: string,
+    @Body() body: { allIn?: string; gstPercent?: string },
+    @UploadedFile() file?: Express.Multer.File,
+  ): Promise<RateSheetApplyResultDto> {
+    return this.rateSheets.import(
+      providerId,
+      this.fileOf(file),
+      {
+        allIn: body.allIn === 'true',
+        // A cleared field arrives as "", and Number("") is 0: that would import every band at 0% GST.
+        gstPercent: Number(body.gstPercent?.trim() || 18),
+      },
+      user.sub,
+    );
+  }
 
   @Get('countries/export')
   async exportCountries(

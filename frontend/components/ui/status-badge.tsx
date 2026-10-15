@@ -90,7 +90,7 @@ export function PickupStatusBadge({ status }: { status: PickupStatusCode }) {
   );
 }
 
-const PICKUP_REQUEST_STATUS_VARIANT: Record<PickupRequestStatusCode, BadgeProps["variant"]> = {
+export const PICKUP_REQUEST_STATUS_VARIANT: Record<PickupRequestStatusCode, BadgeProps["variant"]> = {
   PENDING_ASSIGNMENT: "warning",
   ASSIGNED: "info",
   SCHEDULED: "info",

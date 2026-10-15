@@ -27,7 +27,10 @@ describe('AdminPricingSpreadsheetController downloads', () => {
       exportRateCards: jest.fn().mockResolvedValue(workbook),
     };
     res = { set: jest.fn() };
-    controller = new AdminPricingSpreadsheetController(spreadsheet as never);
+    controller = new AdminPricingSpreadsheetController(
+      spreadsheet as never,
+      {} as never,
+    );
   });
 
   const response = () => res as unknown as Response;

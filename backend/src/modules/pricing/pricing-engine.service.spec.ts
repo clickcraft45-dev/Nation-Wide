@@ -388,6 +388,34 @@ describe('PricingEngineService', () => {
       expect(result.finalPrice).toBe(17760);
     });
 
+    it('charges an all-in rate as it stands: no fuel or PSS on top, GST taken back out', () => {
+      const r = calculateFinalPrice({
+        baseRate: 1180,
+        taxInclusive: true,
+        fuelChargePercent: 25,
+        pssPerKg: 40,
+        weightKg: 2,
+        gstPercent: 18,
+        nationwideCut: 200,
+      });
+      expect(r).toMatchObject({
+        baseRate: 1000,
+        fuelChargeAmount: 0,
+        pssAmount: 0,
+        gstAmount: 180,
+        finalPrice: 1380,
+      });
+    });
+
+    it('bills a per-kg band on whole kilos, as the carrier does', () => {
+      const result = calculateFinalPrice({
+        ...base,
+        rateType: 'PER_KG',
+        weightKg: 30.3,
+      });
+      expect(result.baseRate).toBe(444 * 31);
+    });
+
     it('leaves FLAT slabs alone, which is every slab that existed before', () => {
       const result = calculateFinalPrice({
         ...base,

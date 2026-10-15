@@ -5,7 +5,8 @@ import { MapPin } from "lucide-react";
 import { Input, type InputProps } from "@/components/ui/input";
 import { cn } from "@/lib/utils/cn";
 import {
-  googleMapsEnabled,
+  mapsServiceAvailable,
+  noteMapsFailure,
   loadGoogleMaps,
   parseAddressComponents,
   type PickedAddress,
@@ -65,7 +66,7 @@ export function AddressAutocomplete({
   const regionKey = regionCodes?.join(",") ?? "";
 
   useEffect(() => {
-    if (!typedRef.current || !googleMapsEnabled() || value.trim().length < 3) return;
+    if (!typedRef.current || !mapsServiceAvailable("places") || value.trim().length < 3) return;
     let cancelled = false;
     const timer = setTimeout(async () => {
       try {
@@ -88,7 +89,8 @@ export function AddressAutocomplete({
         setSuggestions(next);
         setActive(-1);
         setOpen(next.length > 0);
-      } catch {
+      } catch (error) {
+        noteMapsFailure("places", error);
         if (!cancelled) setOpen(false);
       }
     }, 250);
@@ -119,7 +121,8 @@ export function AddressAutocomplete({
         latitude: place.location?.lat() ?? null,
         longitude: place.location?.lng() ?? null,
       });
-    } catch {
+    } catch (error) {
+      noteMapsFailure("places", error);
       // The details lookup failed — keep at least the address text they chose.
       onChange(suggestion.text);
     }

@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { PROHIBITED_ITEMS } from "@/lib/constants/prohibited-items";
 
 /**
  * Shell for the legal pages, replacing LegalPlaceholder's "coming soon".
@@ -39,5 +40,16 @@ export function Section({ id, title, children }: { id: string; title: string; ch
         {children}
       </div>
     </section>
+  );
+}
+
+/** The prohibited goods list, shared by /terms and /shipping-guidelines. */
+export function ProhibitedList() {
+  return (
+    <ul className="list-disc gap-x-10 pl-5 sm:columns-2 [&>li]:mb-1.5 [&>li]:break-inside-avoid">
+      {PROHIBITED_ITEMS.map((item) => (
+        <li key={item}>{item}</li>
+      ))}
+    </ul>
   );
 }

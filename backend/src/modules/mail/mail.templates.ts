@@ -1,46 +1,68 @@
 import type { OutboundEmail } from './mail.service';
 
 const BRAND = 'NationWide Logistics';
-// The brand maroon, same value as CompanySettings.primaryColor's default.
+// The brand oxblood, same value as CompanySettings.primaryColor's default and globals.css.
 const ACCENT = '#7F1020';
+const INK = '#0b0b0c';
+const BODY_INK = '#3f3f46';
+const MUTED_INK = '#71717a';
+
+/**
+ * Neumorphic ("soft UI") surfaces: one zinc-tinted base colour everywhere, and depth made only of
+ * a light shadow up-left plus a dark one down-right. Raised for the card and button, pressed in
+ * for the details panel. Outlook ignores box-shadow, so each surface also carries a hairline
+ * border: there it reads as a plain bordered card, which is the right way to fail.
+ */
+const BASE = '#eef0f3';
+const RAISED =
+  'box-shadow:9px 9px 18px #cfd2d8,-9px -9px 18px #ffffff;border:1px solid #e4e6ea;';
+const PRESSED =
+  'box-shadow:inset 4px 4px 9px #d3d6dc,inset -4px -4px 9px #ffffff;border:1px solid #e4e6ea;';
+const FONT = "Poppins,'Segoe UI',Arial,Helvetica,sans-serif";
+const MONO = "'Geist Mono',SFMono-Regular,Consolas,'Courier New',monospace";
 
 /**
  * The header logo, as an absolute URL on the public site.
  *
  * Absolute because an email client has no origin to resolve a relative path against, and served
  * rather than attached because a CID image would turn every send into a multipart upload for one
- * 4KB mark. The transparent-background PNG is the one that works here: it sits directly on the
- * maroon band, and a white-boxed logo on a coloured header is the usual giveaway of a template
- * nobody looked at. Most clients block remote images by default, so the wordmark next to it stays
- * as live text and the alt text carries the brand when the image never loads.
+ * 4KB mark. The mark is black on transparent, which is why it sits on the light base rather than
+ * on a brand-red band. Most clients block remote images by default, so the wordmark next to it
+ * stays as live text and the alt text carries the brand when the image never loads.
  */
 const LOGO_URL = `${process.env.PUBLIC_FRONTEND_URL?.replace(/\/+$/, '') ?? 'https://nationwidelogistics.co'}/assets/logo/logo-mark.png`;
 
 /** Email clients strip <style> blocks and ignore most CSS, so everything here is inline. */
 function shell(heading: string, bodyHtml: string): string {
   return `<!doctype html>
-<html lang="en"><body style="margin:0;padding:0;background:#f4f1f0;font-family:Arial,Helvetica,sans-serif;color:#1c1517;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f1f0;padding:24px 12px;">
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light only"></head>
+<body style="margin:0;padding:0;background:${BASE};font-family:${FONT};color:${INK};">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${BASE};padding:32px 14px;">
     <tr><td align="center">
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:8px;overflow:hidden;">
-        <tr><td style="background:${ACCENT};padding:18px 28px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;">
+        <tr><td style="padding:0 6px 22px;">
           <table role="presentation" cellpadding="0" cellspacing="0"><tr>
-            <td style="padding-right:10px;vertical-align:middle;">
-              <img src="${LOGO_URL}" width="32" height="32" alt="${BRAND}"
-                   style="display:block;width:32px;height:32px;border:0;outline:none;text-decoration:none;">
-            </td>
             <td style="vertical-align:middle;">
-              <span style="color:#ffffff;font-size:17px;font-weight:bold;letter-spacing:.02em;">${BRAND}</span>
+              <table role="presentation" cellpadding="0" cellspacing="0"><tr>
+                <td style="background:${BASE};border-radius:14px;padding:7px;${RAISED}">
+                  <img src="${LOGO_URL}" width="30" height="30" alt="${BRAND}"
+                       style="display:block;width:30px;height:30px;border:0;outline:none;text-decoration:none;">
+                </td>
+              </tr></table>
+            </td>
+            <td style="vertical-align:middle;padding-left:14px;">
+              <span style="color:${INK};font-size:16px;font-weight:600;letter-spacing:.01em;">${BRAND}</span>
             </td>
           </tr></table>
         </td></tr>
-        <tr><td style="padding:28px;">
-          <h1 style="margin:0 0 16px;font-size:20px;line-height:1.3;color:#1c1517;">${heading}</h1>
+        <tr><td style="background:${BASE};border-radius:24px;padding:34px 30px;${RAISED}">
+          <div style="width:36px;height:4px;border-radius:4px;background:${ACCENT};margin:0 0 18px;line-height:4px;font-size:0;">&nbsp;</div>
+          <h1 style="margin:0 0 18px;font-size:21px;line-height:1.3;font-weight:600;color:${INK};">${heading}</h1>
           ${bodyHtml}
         </td></tr>
-        <tr><td style="padding:18px 28px;background:#faf8f7;border-top:1px solid #e6dedc;">
-          <p style="margin:0;font-size:12px;color:#8c7f82;">
-            Sent by ${BRAND}. If this was not expected, you can ignore it.
+        <tr><td style="padding:24px 8px 0;">
+          <p style="margin:0;font-size:12px;line-height:1.6;color:${MUTED_INK};">
+            Sent by ${BRAND}, Hyderabad. If this was not expected, you can ignore it.
           </p>
         </td></tr>
       </table>
@@ -50,20 +72,28 @@ function shell(heading: string, bodyHtml: string): string {
 }
 
 function button(href: string, label: string): string {
-  return `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:22px 0;">
-  <tr><td style="background:${ACCENT};border-radius:6px;">
-    <a href="${href}" style="display:inline-block;padding:12px 22px;color:#ffffff;font-size:15px;font-weight:bold;text-decoration:none;">${label}</a>
+  return `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:26px 0;">
+  <tr><td style="background:${ACCENT};border-radius:14px;box-shadow:6px 6px 14px #cfd2d8,-6px -6px 14px #ffffff;">
+    <a href="${href}" style="display:inline-block;padding:14px 26px;color:#ffffff;font-family:${FONT};font-size:15px;font-weight:600;text-decoration:none;border-radius:14px;">${label}</a>
   </td></tr></table>`;
 }
 
-const P = 'margin:0 0 12px;font-size:15px;line-height:1.6;color:#3d3336;';
-const MUTED = 'margin:0;font-size:13px;line-height:1.6;color:#8c7f82;';
+const P = `margin:0 0 14px;font-size:15px;line-height:1.65;color:${BODY_INK};`;
+const MUTED = `margin:0 0 8px;font-size:13px;line-height:1.6;color:${MUTED_INK};`;
 
 function row(label: string, value: string): string {
   return `<tr>
-    <td style="padding:6px 0;font-size:14px;color:#8c7f82;width:130px;">${label}</td>
-    <td style="padding:6px 0;font-size:14px;color:#1c1517;">${value}</td>
+    <td style="padding:7px 0;font-size:13px;color:${MUTED_INK};width:110px;vertical-align:top;">${label}</td>
+    <td style="padding:7px 0;font-size:14px;color:${INK};word-break:break-all;">${value}</td>
   </tr>`;
+}
+
+/** A pressed-in panel for key/value details: reads as "this is the part to copy". */
+function details(rows: string): string {
+  return `<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;margin:20px 0;"><tr>
+    <td style="background:${BASE};border-radius:16px;padding:14px 18px;${PRESSED}">
+      <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;">${rows}</table>
+    </td></tr></table>`;
 }
 
 /** Values land inside HTML — an applicant controls all of them, so none may render as markup. */
@@ -253,7 +283,7 @@ export function feedbackRequest(
     subject: `How did we do? Shipment ${trackingNumber}`,
     html: shell(
       'How did we do?',
-      `<p style="${P}">Hi ${name}, your shipment <strong>${awb}</strong> has been delivered.</p>
+      `<p style="${P}">Hi ${name}, your shipment <strong style="font-family:${MONO};">${awb}</strong> has been delivered.</p>
        <p style="${P}">If you have a moment, tell us how it went. It takes about thirty seconds and it genuinely shapes how we run the service.</p>
        ${button(feedbackUrl, 'Leave feedback')}
        <p style="${MUTED}">This link is for your shipment only and works once.</p>`,
@@ -293,12 +323,12 @@ export function pickupPartnerCredentials(
 ): OutboundEmail {
   const name = escapeHtml(input.name);
   const firstName = name.split(' ')[0] || 'there';
-  const details = [
+  const rows = [
     row('Name', name),
     row('Email', escapeHtml(input.email)),
     row(
       'Password',
-      `<code style="font-family:monospace;font-size:14px;">${escapeHtml(input.password)}</code>`,
+      `<code style="font-family:${MONO};font-size:14px;">${escapeHtml(input.password)}</code>`,
     ),
   ].join('');
 
@@ -309,7 +339,7 @@ export function pickupPartnerCredentials(
     html: shell(
       'Your partner account is ready',
       `<p style="${P}">Hi ${firstName}, an account has been created for you as a NationWide pickup partner. Sign in with the details below.</p>
-       <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;margin:18px 0;">${details}</table>
+       ${details(rows)}
        ${button(input.loginUrl, 'Sign in')}
        <p style="${P}">Please change this password after your first sign-in.</p>
        <p style="${MUTED}">If you were not expecting this, let us know and we will remove the account.</p>`,

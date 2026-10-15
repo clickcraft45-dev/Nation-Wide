@@ -20,3 +20,4 @@ export * from "./command-centre";
 export * from "./fuel-surcharge";
 export * from "./expense";
 export * from "./coupon";
+export * from "./rate-sheet";

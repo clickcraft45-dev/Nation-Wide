@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { MarketingNavbar } from "@/components/marketing/navbar";
 import { MarketingFooter } from "@/components/marketing/footer";
-import { LegalDocument, Section } from "@/components/marketing/legal-document";
+import { LegalDocument, ProhibitedList, Section } from "@/components/marketing/legal-document";
 import { CONTACT_EMAIL, CONTACT_PHONE } from "@/lib/constants/contact";
 
 export const metadata: Metadata = {
@@ -29,7 +29,7 @@ export default function TermsPage() {
       <MarketingNavbar />
       <LegalDocument
         title="Terms & Conditions"
-        effectiveDate="8 September 2026"
+        effectiveDate="15 October 2026"
         intro={
           <p>
             These terms govern shipments booked with NationWide Courier Delivery Service, whether
@@ -78,20 +78,33 @@ export default function TermsPage() {
           </p>
         </Section>
 
+        <Section id="prohibited-goods" title="Prohibited goods">
+          <p>
+            You may not send any of the following, to any destination. A parcel found to contain
+            them is refused at pickup, or held, returned or destroyed if found later, and any
+            charges, penalties or seizure that follow are yours.
+          </p>
+          <ProhibitedList />
+        </Section>
+
         <Section id="prohibited" title="What we cannot carry">
           <p>
             Some items and destinations we cannot accept at all; others need paperwork or attract
             extra charges. Confirm with us before booking if any of this applies to your shipment.
           </p>
           <p>
-            <strong>Not accepted:</strong> shipments to Russia and Ukraine. Foodstuffs to Saudi
-            Arabia. Electronic and electrical items on networks that refuse them. Rice and seeds to
-            the USA and Canada.
+            <strong>Not accepted:</strong> anything on the{" "}
+            <a href="#prohibited-goods" className="font-medium text-primary hover:underline">
+              prohibited goods
+            </a>{" "}
+            list above. Shipments to Russia and Ukraine. Foodstuffs to Saudi
+            Arabia. Electronic and electrical items on networks that refuse them. Rice to the USA
+            and Canada.
           </p>
           <p>
             <strong>Restricted, or carrying extra charges:</strong> medicines (limited quantity,
-            with a prescription and doctor&apos;s documentation, on specific services only); mehndi,
-            oils and liquids; electronics, motor parts, switchboards and lenses; ayurvedic
+            with a prescription and doctor&apos;s documentation, on specific services only); mehndi;
+            electronics, motor parts, switchboards and lenses; ayurvedic
             preparations. Controlled into Singapore: CDs, books, medicines, milk products and
             perishables.
           </p>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseAddressComponents, type AddressComponent } from "./google-maps";
+import { isRefusal, parseAddressComponents, type AddressComponent } from "./google-maps";
 
 const c = (long: string, types: string[], short = long): AddressComponent => ({ long, short, types });
 
@@ -62,5 +62,15 @@ describe("parseAddressComponents", () => {
       c("Madhapur", ["sublocality_level_1"]),
     ]);
     expect(parsed.addressLine1).toBe("Madhapur");
+  });
+});
+
+describe("isRefusal", () => {
+  it("treats a disabled API as a refusal and an unknown code as a miss", () => {
+    expect(isRefusal({ code: "REQUEST_DENIED" })).toBe(true);
+    expect(isRefusal({ code: 7, message: "Places API (New) has not been used in project 1" })).toBe(true);
+    expect(isRefusal(new Error("Geocoding Service: This API is not activated on your API project."))).toBe(true);
+    expect(isRefusal({ code: "ZERO_RESULTS" })).toBe(false);
+    expect(isRefusal(new Error("Failed to fetch"))).toBe(false);
   });
 });

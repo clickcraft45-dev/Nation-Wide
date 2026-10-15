@@ -8,12 +8,14 @@ import { PricingEngineService } from './pricing-engine.service';
 import { PricingOverviewService } from './pricing-overview.service';
 import { PricingSpreadsheetService } from './pricing-spreadsheet.service';
 import { FuelSurchargeService } from './fuel-surcharge.service';
+import { RateSheetImportService } from './rate-sheet-import.service';
 
 @Module({
   controllers: [CountriesController],
   providers: [
     FuelSurchargeService,
     PricingSpreadsheetService,
+    RateSheetImportService,
     CountriesService,
     RateProvidersService,
     ZonesService,
@@ -24,6 +26,7 @@ import { FuelSurchargeService } from './fuel-surcharge.service';
   exports: [
     FuelSurchargeService,
     PricingSpreadsheetService,
+    RateSheetImportService,
     CountriesService,
     RateProvidersService,
     ZonesService,

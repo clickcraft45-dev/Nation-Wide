@@ -13,6 +13,8 @@ import {
 } from "@nationwide/shared-types";
 import { useDebouncedValue } from "@/lib/utils/use-debounced-value";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Input, Label, FieldError } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/select";
 import {
@@ -54,6 +56,8 @@ export interface ShipmentDraft {
   rateProviderId: string | null;
   /** Staff only: what to charge when no rate card covers the route. */
   manualPrice: string;
+  /** Price of the picked carrier, for a running total. Display only; the server prices the booking. */
+  estimate?: number | null;
 }
 
 export function newShipment(): ShipmentDraft {
@@ -131,6 +135,7 @@ export function ShipmentCard({
       // Dropping a now-stale price when the shipment stops being priceable — one render.
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setPreview(null);
+      onChange({ estimate: null });
       return;
     }
     let cancelled = false;
@@ -142,10 +147,15 @@ export function ShipmentCard({
         if (cancelled) return;
         setPreview(result);
         const cheapest = [...result.options].sort((a, b) => a.finalPrice - b.finalPrice)[0];
-        onChange({ rateProviderId: cheapest?.rateProviderId ?? null });
+        onChange({
+          rateProviderId: cheapest?.rateProviderId ?? null,
+          estimate: cheapest?.finalPrice ?? null,
+        });
       })
       .catch(() => {
-        if (!cancelled) setPreview(null);
+        if (cancelled) return;
+        setPreview(null);
+        onChange({ estimate: null });
       })
       .finally(() => {
         if (!cancelled) setIsPricing(false);
@@ -160,87 +170,101 @@ export function ShipmentCard({
     (r) => !draft.destinationCountry || r.country === draft.destinationCountry,
   );
 
+  const title = draft.recipient.name.trim()
+    ? [draft.recipient.name.trim(), draft.destinationCountry].filter(Boolean).join(" · ")
+    : draft.destinationCountry || "New delivery";
+  const options = preview ? [...preview.options].sort((a, b) => a.finalPrice - b.finalPrice) : [];
+
   return (
     <Card>
-      <CardHeader className="flex-row items-center justify-between gap-2">
-        <CardTitle>Delivery address {index + 1}</CardTitle>
+      <CardHeader className="flex-row items-center justify-between gap-3 border-b border-[color:var(--glass-edge)] pb-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-foreground text-sm font-semibold tabular-nums text-background">
+            {index + 1}
+          </span>
+          <div className="min-w-0">
+            <CardTitle className="text-xs uppercase tracking-wider">Delivery {index + 1}</CardTitle>
+            <p className="truncate font-semibold text-foreground">{title}</p>
+          </div>
+        </div>
         {canRemove && (
           <button
             type="button"
             onClick={onRemove}
-            aria-label={`Remove delivery address ${index + 1}`}
-            className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-danger"
+            aria-label={`Remove delivery ${index + 1}`}
+            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-danger-bg hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <Trash2 className="h-4 w-4" aria-hidden />
           </button>
         )}
       </CardHeader>
-      <CardContent className="space-y-4" aria-invalid={Boolean(error)} tabIndex={-1}>
-        <SavedRecipients
-          recipients={forCountry.length > 0 ? forCountry : recipients}
-          onPick={(r) =>
-            onChange({
-              recipient: recipientFrom(r),
-              destinationCountry: r.country,
-              // Their usual goods come back with the address; still editable.
-              ...(r.lastItems?.length ? { items: itemsFrom(r.lastItems) } : {}),
-            })
-          }
-        />
+      <CardContent className="space-y-7 pt-5" aria-invalid={Boolean(error)} tabIndex={-1}>
+        <Section title="Recipient">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <SavedRecipients
+              id={`saved-recipient-${draft.key}`}
+              recipients={forCountry.length > 0 ? forCountry : recipients}
+              onPick={(r) =>
+                onChange({
+                  recipient: recipientFrom(r),
+                  destinationCountry: r.country,
+                  // Their usual goods come back with the address; still editable.
+                  ...(r.lastItems?.length ? { items: itemsFrom(r.lastItems) } : {}),
+                })
+              }
+            />
+            <div className="space-y-1.5">
+              <Label htmlFor={`country-${draft.key}`}>Destination country</Label>
+              <NativeSelect
+                id={`country-${draft.key}`}
+                searchable
+                searchPlaceholder="Search countries"
+                value={draft.destinationCountry}
+                onChange={(e) => onChange({ destinationCountry: e.target.value })}
+              >
+                <option value="">Select a country…</option>
+                {countries.map((c) => (
+                  <option key={c.id} value={c.name}>
+                    {c.name}
+                  </option>
+                ))}
+              </NativeSelect>
+            </div>
+          </div>
 
-        <div className="space-y-1.5">
-          <Label htmlFor={`country-${draft.key}`}>Destination country</Label>
-          <NativeSelect
-            id={`country-${draft.key}`}
-            value={draft.destinationCountry}
-            onChange={(e) => onChange({ destinationCountry: e.target.value })}
-          >
-            <option value="">Select a country…</option>
-            {countries.map((c) => (
-              <option key={c.id} value={c.name}>
-                {c.name}
-              </option>
-            ))}
-          </NativeSelect>
-        </div>
+          <RecipientFields
+            value={draft.recipient}
+            onChange={(update) =>
+              onChange({
+                recipient: typeof update === "function" ? update(draft.recipient) : update,
+              })
+            }
+            errors={recipientErrors}
+            isIndia={draft.destinationCountry === "India"}
+            country={draft.destinationCountry}
+            idPrefix={`recipient-${draft.key}`}
+          />
+        </Section>
 
-        <RecipientFields
-          value={draft.recipient}
-          onChange={(update) =>
-            onChange({
-              recipient: typeof update === "function" ? update(draft.recipient) : update,
-            })
-          }
-          errors={recipientErrors}
-          isIndia={draft.destinationCountry === "India"}
-          country={draft.destinationCountry}
-          idPrefix={`recipient-${draft.key}`}
-        />
+        <Section title="Parcel">
+          <div className="space-y-1.5">
+            <p className="text-sm font-medium text-foreground">Shipment type</p>
+            <SegmentedControl
+              ariaLabel="Shipment type"
+              options={SHIPMENT_TYPES}
+              value={draft.shipmentType}
+              onChange={(shipmentType) => onChange({ shipmentType })}
+            />
+          </div>
+          <PackagesEditor
+            value={draft.boxes}
+            onChange={(boxes) => onChange({ boxes })}
+            requireDimensions={draft.shipmentType !== "DOCUMENT"}
+            idPrefix={`box-${draft.key}`}
+          />
+        </Section>
 
-        <div className="space-y-1.5">
-          <Label htmlFor={`type-${draft.key}`}>Shipment type</Label>
-          <NativeSelect
-            id={`type-${draft.key}`}
-            value={draft.shipmentType}
-            onChange={(e) => onChange({ shipmentType: e.target.value as ShipmentTypeCode })}
-          >
-            {SHIPMENT_TYPES.map((t) => (
-              <option key={t.value} value={t.value}>
-                {t.label}
-              </option>
-            ))}
-          </NativeSelect>
-        </div>
-
-        <PackagesEditor
-          value={draft.boxes}
-          onChange={(boxes) => onChange({ boxes })}
-          requireDimensions={draft.shipmentType !== "DOCUMENT"}
-          idPrefix={`box-${draft.key}`}
-        />
-
-        <div className="space-y-2">
-          <p className="text-sm font-medium text-foreground">What is going to this address</p>
+        <Section title="Contents">
           <ItemsEditor
             value={draft.items}
             onChange={(items) => onChange({ items })}
@@ -249,53 +273,65 @@ export function ShipmentCard({
             libraryBase={savedItemsBase}
             client={savedItemsClient}
           />
-        </div>
+        </Section>
 
-        <div className="rounded-lg border border-border bg-muted/30 p-3 text-sm">
-          {isPricing && <p className="text-muted-foreground">Checking prices…</p>}
+        <Section title="Carrier">
+          {isPricing && (
+            <div className="grid gap-2 sm:grid-cols-2" aria-busy="true" aria-label="Checking prices">
+              <Skeleton className="h-14 w-full rounded-xl" />
+              <Skeleton className="h-14 w-full rounded-xl" />
+            </div>
+          )}
           {!isPricing && !preview && (
-            <p className="text-muted-foreground">
-              Choose a country and enter the boxes to see prices.
-            </p>
+            <Hint>Choose a country and enter the boxes to see prices.</Hint>
           )}
-          {!isPricing && preview && preview.options.length === 0 && !allowManualPrice && (
-            <p className="text-muted-foreground">
-              No published rate covers this route — submit it anyway and our team will price it.
-            </p>
+          {!isPricing && preview && options.length === 0 && !allowManualPrice && (
+            <Hint>No published rate covers this route. Submit it anyway and our team will price it.</Hint>
           )}
-          {!isPricing && preview && preview.options.length > 0 && (
-            <div className="space-y-1.5">
-              <p className="text-xs text-muted-foreground">Carrier · {chargeable} kg chargeable</p>
-              {[...preview.options]
-                .sort((a, b) => a.finalPrice - b.finalPrice)
-                .map((o) => (
-                  <label key={o.rateProviderId} className="flex cursor-pointer items-center gap-3">
+          {!isPricing && options.length > 0 && (
+            <fieldset className="space-y-2">
+              <legend className="mb-2 text-xs text-muted-foreground">
+                Priced on {chargeable} kg chargeable weight
+              </legend>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {options.map((o, i) => (
+                  <label key={o.rateProviderId} className={CHOICE}>
                     <input
                       type="radio"
+                      className="h-4 w-4 shrink-0 accent-[var(--foreground)]"
                       name={`carrier-${draft.key}`}
                       checked={draft.rateProviderId === o.rateProviderId}
-                      onChange={() => onChange({ rateProviderId: o.rateProviderId, manualPrice: "" })}
+                      onChange={() =>
+                        onChange({ rateProviderId: o.rateProviderId, manualPrice: "", estimate: o.finalPrice })
+                      }
                     />
-                    <span className="flex-1 font-medium text-foreground">{o.rateProviderName}</span>
-                    <span className="font-semibold text-foreground">
-                      {o.currency} {Math.round(o.finalPrice).toLocaleString("en-IN")}
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-medium text-foreground">{o.rateProviderName}</span>
+                      {i === 0 && options.length > 1 && (
+                        <span className="text-xs text-success">Lowest price</span>
+                      )}
+                    </span>
+                    <span className="font-semibold tabular-nums text-foreground">
+                      {money(o.finalPrice, o.currency)}
                     </span>
                   </label>
                 ))}
-            </div>
+              </div>
+            </fieldset>
           )}
           {allowManualPrice && preview && (
-            <label className="mt-2 flex cursor-pointer items-center gap-3 border-t border-border pt-2">
+            <label className={CHOICE}>
               <input
                 type="radio"
+                className="h-4 w-4 shrink-0 accent-[var(--foreground)]"
                 name={`carrier-${draft.key}`}
                 checked={draft.rateProviderId === null}
-                onChange={() => onChange({ rateProviderId: null })}
+                onChange={() => onChange({ rateProviderId: null, estimate: null })}
               />
               <span className="flex-1 font-medium text-foreground">Enter a price manually</span>
               {draft.rateProviderId === null && (
                 <Input
-                  aria-label={`Price in INR for delivery address ${index + 1}`}
+                  aria-label={`Price in INR for delivery ${index + 1}`}
                   type="number"
                   min="0"
                   step="0.01"
@@ -307,10 +343,34 @@ export function ShipmentCard({
               )}
             </label>
           )}
-        </div>
+        </Section>
 
         {error && <FieldError>{error}</FieldError>}
       </CardContent>
     </Card>
+  );
+}
+
+// A selectable card around a radio: the whole card is the hit area, the picked one is inked.
+const CHOICE =
+  "flex cursor-pointer items-center gap-3 rounded-xl border border-border bg-white/50 px-4 py-3 text-sm transition-colors hover:border-foreground/30 has-[:checked]:border-foreground has-[:checked]:bg-white has-[:checked]:shadow-sm has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring";
+
+const money = (value: number, currency: string) =>
+  `${currency === "INR" ? "₹" : `${currency} `}${Math.round(value).toLocaleString("en-IN")}`;
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="space-y-4">
+      <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{title}</h4>
+      {children}
+    </section>
+  );
+}
+
+function Hint({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="rounded-xl border border-dashed border-border px-4 py-3 text-sm text-muted-foreground">
+      {children}
+    </p>
   );
 }
