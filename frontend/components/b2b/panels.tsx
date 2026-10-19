@@ -346,7 +346,7 @@ export function InvoicesPanel({ client }: { client: B2bClient }) {
               </p>
               <p className="text-xs text-muted-foreground md:order-2 md:text-sm">
                 {invoice.kind === "CONSOLIDATED" && invoice.periodFrom && invoice.periodTo
-                  ? `${formatDate(invoice.periodFrom)} – ${formatDate(invoice.periodTo)}`
+                  ? `${formatDate(invoice.periodFrom)} to ${formatDate(invoice.periodTo)}`
                   : `Issued ${formatDate(invoice.invoiceDate)}`}
               </p>
               <div className="text-right md:order-4">

@@ -12,11 +12,11 @@ import { REGISTERED_COMPANY } from "@nationwide/shared-types";
 export const metadata: Metadata = {
   title: "Contact us",
   description:
-    "Talk to NationWide Logistics about international shipping, business accounts and bulk pickups — phone, email and office address.",
+    "Talk to NationWide Logistics about international shipping, business accounts and bulk pickups: phone, email and office address.",
   alternates: { canonical: "/contact" },
 };
 
-const OFFICE_HOURS = "Monday – Saturday, 9:00 AM – 7:00 PM IST";
+const OFFICE_HOURS = "Monday to Saturday, 9:00 AM - 7:00 PM IST";
 
 // The registered address is the one on the GST certificate (shared-types), so this page and every
 // generated invoice name the same place — there is no second copy to fall out of date.
@@ -57,7 +57,7 @@ export default function ContactPage() {
           <SectionHeading
             eyebrow="Contact"
             title="Talk to us"
-            description="Rates, a pickup that needs chasing, or opening a business account — a person answers."
+            description="Rates, a pickup that needs chasing, or opening a business account. A person answers."
           />
 
           <div className="mt-12 grid gap-6 lg:grid-cols-2">
@@ -74,7 +74,7 @@ export default function ContactPage() {
                       </p>
                       <a
                         href={channel.href}
-                        className="block break-words text-lg font-semibold text-foreground hover:text-primary"
+                        className="block [overflow-wrap:anywhere] text-lg font-semibold text-foreground hover:text-primary"
                       >
                         {channel.value}
                       </a>
@@ -95,7 +95,7 @@ export default function ContactPage() {
                     </p>
                     <p className="text-base font-medium text-foreground">{OFFICE_HOURS}</p>
                     <p className="mt-1 text-sm text-muted-foreground">
-                      Pickups run in three slots: 9–12, 12–3 and 3–6.
+                      Pickups run in three slots: 9-12, 12-3 and 3-6.
                     </p>
                   </div>
                 </CardContent>
@@ -140,7 +140,7 @@ export default function ContactPage() {
                   <p className="text-sm text-muted-foreground">
                     Shipping regularly? Call or email us and we will set up an account for your
                     team: book many shipments in one pickup, with your addresses and usual contents
-                    saved. We send the invitation — there is nothing to sign up for here.
+                    saved. We send the invitation. There is nothing to sign up for here.
                   </p>
                   <div className="flex flex-wrap gap-2 pt-1">
                     <a

@@ -119,7 +119,7 @@ export function MarkPaidDialog({
               )}
               {usableCoupon && (
                 <p className="text-xs text-muted-foreground">
-                  {rupees(discount)} off — {rupees(payable)} to collect.
+                  {rupees(discount)} off: {rupees(payable)} to collect.
                 </p>
               )}
             </div>

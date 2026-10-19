@@ -135,7 +135,7 @@ export default function PartnerDashboardHomePage() {
         ) : openRequests.length === 0 ? (
           <div className="glass flex items-center gap-3 rounded-2xl px-4 py-3 text-sm text-muted-foreground">
             <Inbox className="h-4 w-4 shrink-0" aria-hidden />
-            No new pickup requests right now — you&apos;ll get a notification when one comes in.
+            No new pickup requests right now. You&apos;ll get a notification when one comes in.
           </div>
         ) : (
           openRequests.map((p) => (

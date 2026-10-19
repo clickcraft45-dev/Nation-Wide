@@ -69,7 +69,7 @@ export function OrderTrackingPanel({ shipments }: { shipments: ShipmentSummaryDt
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">
-            Nothing to track — this order has no shipments yet.
+            Nothing to track: this order has no shipments yet.
           </p>
         </CardContent>
       </Card>

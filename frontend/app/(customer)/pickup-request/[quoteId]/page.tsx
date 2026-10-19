@@ -44,9 +44,9 @@ import {
 } from "@/components/shipment/items-editor";
 
 const TIME_SLOTS = [
-  { value: "09:00-12:00", label: "9:00 AM – 12:00 PM" },
-  { value: "12:00-15:00", label: "12:00 PM – 3:00 PM" },
-  { value: "15:00-18:00", label: "3:00 PM – 6:00 PM" },
+  { value: "09:00-12:00", label: "9:00 AM - 12:00 PM" },
+  { value: "12:00-15:00", label: "12:00 PM - 3:00 PM" },
+  { value: "15:00-18:00", label: "3:00 PM - 6:00 PM" },
 ];
 
 function todayIso(): string {
@@ -271,7 +271,7 @@ export default function PickupRequestPage() {
       ) {
         // Caught on submit too, not just in the dropdown: a form left open through lunch would
         // otherwise still post the morning slot.
-        next.pickupTimeSlot = "That slot has closed — choose a later one.";
+        next.pickupTimeSlot = "That slot has closed. Choose a later one.";
       }
     }
     const nextRecipientErrors = addRecipient ? validateRecipient(recipient) : {};
@@ -399,7 +399,7 @@ export default function PickupRequestPage() {
         </h1>
         <p className="text-sm text-muted-foreground">
           {dropAtWarehouse
-            ? "Bring your parcel to our warehouse — our team will weigh it, take payment and ship it."
+            ? "Bring your parcel to our warehouse. Our team will weigh it, take payment and ship it."
             : "Our pickup partner will contact you shortly to collect your parcel."}
         </p>
         <Button size="lg" onClick={() => router.push(`/quotes/${quote.id}`)}>
@@ -491,7 +491,7 @@ export default function PickupRequestPage() {
                   <Label htmlFor="address-1">Street / Area</Label>
                   <AddressAutocomplete
                     id="address-1"
-                    placeholder="Filled from the map — or search / type it"
+                    placeholder="Filled from the map, or search / type it"
                     value={pickupAddressLine1}
                     onChange={setPickupAddressLine1}
                     onSelect={applyPicked}
@@ -580,7 +580,7 @@ export default function PickupRequestPage() {
                         return (
                           <option key={slot.value} value={slot.value} disabled={closed}>
                             {slot.label}
-                            {closed ? " — closed for today" : ""}
+                            {closed ? ": closed for today" : ""}
                           </option>
                         );
                       })}
@@ -618,7 +618,7 @@ export default function PickupRequestPage() {
               <span>
                 Add the recipient&apos;s address now
                 <span className="block text-xs text-muted-foreground">
-                  Optional — our pickup partner will take it down and confirm it with you at pickup.
+                  Optional: our pickup partner will take it down and confirm it with you at pickup.
                 </span>
               </span>
             </label>

@@ -25,12 +25,18 @@ export function MarketingFinalCta() {
           experience.
         </p>
         <div className="mt-2 flex flex-wrap items-center justify-center gap-3">
-          <Button variant="secondary" onClick={() => gate("/quote")}>
+          <Button
+            variant="secondary"
+            // Solid on the black band: the default glass fill reads as disabled here. `!` because
+            // .glass is unlayered CSS and outranks utilities.
+            className="bg-white! text-foreground hover:bg-zinc-100!"
+            onClick={() => gate("/quote")}
+          >
             Get a Quote
           </Button>
           <Link
             href="/#track"
-            className="inline-flex h-9 items-center justify-center rounded-md border border-white/25 bg-white/10 px-4 text-sm font-medium text-white backdrop-blur-md transition-colors hover:bg-white/20"
+            className="inline-flex h-9 items-center justify-center rounded-full border border-white/25 bg-white/10 px-4 text-sm font-medium text-white backdrop-blur-md transition-colors hover:bg-white/20"
           >
             Track Shipment
           </Link>

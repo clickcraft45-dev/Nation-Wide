@@ -145,7 +145,7 @@ export default function FeedbackPage({
                 type="button"
                 role="radio"
                 aria-checked={rating === value}
-                aria-label={`${value} ${value === 1 ? "star" : "stars"} — ${RATING_LABELS[value]}`}
+                aria-label={`${value} ${value === 1 ? "star" : "stars"}: ${RATING_LABELS[value]}`}
                 onClick={() => {
                   setRating(value);
                   setFormError(null);

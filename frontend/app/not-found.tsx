@@ -69,7 +69,7 @@ export default function NotFound() {
         </motion.h1>
 
         <motion.p className="mb-8 text-base text-muted-foreground md:text-lg" variants={item}>
-          Whoops! This page must be a ghost — it&apos;s not here.
+          Whoops! This page must be a ghost. It&apos;s not here.
         </motion.p>
 
         <motion.div variants={item} className="flex flex-col items-center gap-4">

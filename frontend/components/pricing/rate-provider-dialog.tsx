@@ -105,7 +105,7 @@ export function RateProviderDialog({
                 <div className="space-y-3 rounded-md border border-border p-3">
                   <p className="text-sm font-medium text-foreground">Provider Configuration</p>
                   <p className="text-xs text-muted-foreground">
-                    Applies to every quotation for {provider.name} — no need to re-enter these
+                    Applies to every quotation for {provider.name}: no need to re-enter these
                     per country or weight. Past quotes keep the values that were active when they
                     were generated.
                   </p>

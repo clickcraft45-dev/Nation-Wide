@@ -16,9 +16,9 @@ import { ErrorState } from "@/components/ui/page-state";
 import { TrackingStatusBadge } from "@/components/ui/status-badge";
 
 const SLOT_LABEL: Record<string, string> = {
-  "09:00-12:00": "9 AM – 12 PM",
-  "12:00-15:00": "12 – 3 PM",
-  "15:00-18:00": "3 – 6 PM",
+  "09:00-12:00": "9 AM - 12 PM",
+  "12:00-15:00": "12-3 PM",
+  "15:00-18:00": "3-6 PM",
 };
 
 const money = (value: number, currency = "INR") =>

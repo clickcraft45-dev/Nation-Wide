@@ -146,7 +146,7 @@ export function ManageCategoriesDialog({
             title={`Delete ${category.name}?`}
             description={
               category.spent > 0
-                ? "Categories in use can't be deleted — the server will refuse this."
+                ? "Categories in use can't be deleted: the server will refuse this."
                 : "Nothing is filed under it, so this is safe."
             }
             confirmLabel="Delete"

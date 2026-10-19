@@ -70,7 +70,7 @@ export function MarketingAbout() {
             For more than eight years NationWide Logistics has shipped documents, parcels and
             excess baggage out of Hyderabad and Secunderabad to over 240 countries. Families
             sending things to students abroad, businesses moving export consignments, people
-            posting what will not fit in a suitcase — we have handled all of it from our office in
+            posting what will not fit in a suitcase. We have handled all of it from our office in
             Begumpet.
           </p>
           <p className="mt-3 text-muted-foreground">

@@ -59,7 +59,7 @@ export function pickupStage(pickup: PickupRequestDto): { icon: LucideIcon; title
     return {
       icon: CheckCircle2,
       title: "Parcel weighed and priced",
-      body: `Verified at ${pickup.verifiedWeightKg ?? pickup.estimatedWeightKg}kg — ${amount} to pay.`,
+      body: `Verified at ${pickup.verifiedWeightKg ?? pickup.estimatedWeightKg}kg: ${amount} to pay.`,
     };
   }
   if (pickup.arrivedAt) {

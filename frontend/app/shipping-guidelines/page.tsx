@@ -29,7 +29,7 @@ export default function ShippingGuidelinesPage() {
         intro={
           <p>
             What we can carry, where, and what paperwork each destination needs. If your shipment
-            touches anything below, talk to us before booking — it is far cheaper to check than to
+            touches anything below, talk to us before booking. It is far cheaper to check than to
             have a parcel refused at origin or seized at destination.
           </p>
         }
@@ -44,7 +44,7 @@ export default function ShippingGuidelinesPage() {
 
         <Section id="not-accepted" title="Routes we cannot serve">
           <ul className="list-disc space-y-2 pl-5">
-            <li>Anything to <strong>Russia or Ukraine</strong> — no service on any network.</li>
+            <li>Anything to <strong>Russia or Ukraine</strong>: no service on any network.</li>
             <li><strong>Foodstuffs to Saudi Arabia.</strong></li>
             <li><strong>Rice to the USA and Canada.</strong> Other destinations are selective, so confirm first.</li>
             <li>Electronic and electrical items on networks that refuse them, including Aramex.</li>
@@ -54,12 +54,12 @@ export default function ShippingGuidelinesPage() {
         <Section id="restricted" title="Restricted, or carrying extra charges">
           <ul className="list-disc space-y-2 pl-5">
             <li>
-              <strong>Medicines</strong> — not accepted on our own network. Up to 500 g on DHL
+              <strong>Medicines</strong>: not accepted on our own network. Up to 500 g on DHL
               service only, with a proper medical bill and a doctor&apos;s prescription.
             </li>
             <li>
               <strong>Mehndi, electronics, electric motor parts, switchboards, lenses,
-              ayurvedic preparations</strong> — restricted, and extra charges apply.
+              ayurvedic preparations</strong>: restricted, and extra charges apply.
             </li>
             <li>
               <strong>Singapore</strong> controls CDs, books, medicines, milk products and
@@ -67,11 +67,11 @@ export default function ShippingGuidelinesPage() {
             </li>
             <li>
               <strong>China, Indonesia, Philippines, Vietnam, Thailand, Japan, Korea and
-              Taiwan</strong> — foodstuffs are accepted, but we cannot follow up on delays or
+              Taiwan</strong>: foodstuffs are accepted, but we cannot follow up on delays or
               inspections for them.
             </li>
             <li>
-              <strong>South Africa</strong> — random inspections, duties, taxes and penalties may
+              <strong>South Africa</strong>: random inspections, duties, taxes and penalties may
               be applied at destination.
             </li>
           </ul>
@@ -89,7 +89,7 @@ export default function ShippingGuidelinesPage() {
             </li>
             <li>
               <strong>Single pieces up to 50 kg</strong> are accepted on our own network with a
-              surcharge — except via DPD and via New York.
+              surcharge, except via DPD and via New York.
             </li>
             <li>
               <strong>Girth</strong> = length + (2 × width) + (2 × height). Over 330 cm needs
@@ -108,16 +108,16 @@ export default function ShippingGuidelinesPage() {
 
         <Section id="paperwork" title="Destination paperwork">
           <ul className="list-disc space-y-2 pl-5">
-            <li><strong>Brazil</strong> — a CNPJ number is compulsory for clearance.</li>
+            <li><strong>Brazil</strong>: a CNPJ number is compulsory for clearance.</li>
             <li>
-              <strong>Saudi Arabia, Kuwait, Bahrain, Syria</strong> — a Customer Registration (CR)
+              <strong>Saudi Arabia, Kuwait, Bahrain, Syria</strong>: a Customer Registration (CR)
               copy is required.
             </li>
             <li>
-              <strong>All sectors from Mumbai customs</strong> — an Aadhaar number and signature
+              <strong>All sectors from Mumbai customs</strong>: an Aadhaar number and signature
               are mandatory on the invoice.
             </li>
-            <li><strong>Aramex</strong> — two forms of ID are compulsory on every shipment.</li>
+            <li><strong>Aramex</strong>: two forms of ID are compulsory on every shipment.</li>
           </ul>
         </Section>
 
@@ -125,22 +125,22 @@ export default function ShippingGuidelinesPage() {
           <p>These attract a surcharge on top of the quoted rate:</p>
           <ul className="list-disc space-y-2 pl-5">
             <li>
-              <strong>United Kingdom</strong> — Belfast, Northern Ireland, Guernsey, the Channel
+              <strong>United Kingdom</strong>: Belfast, Northern Ireland, Guernsey, the Channel
               Islands and the Isle of Man.
             </li>
             <li>
-              <strong>Scotland</strong> — Edinburgh, Aberdeen and Glasgow are outside standard UK
+              <strong>Scotland</strong>: Edinburgh, Aberdeen and Glasgow are outside standard UK
               delivery and carry a per-box surcharge.
             </li>
             <li>
-              <strong>Spain</strong> — Canary Islands and Tenerife (38000–38900), Las Palmas
-              (35001–35600), Ceuta and Melilla.
+              <strong>Spain</strong>: Canary Islands and Tenerife (38000-38900), Las Palmas
+              (35001-35600), Ceuta and Melilla.
             </li>
             <li>
-              <strong>Malaysia</strong> — Sabah and Sarawak. Not accepted on our own network above
+              <strong>Malaysia</strong>: Sabah and Sarawak. Not accepted on our own network above
               postcode 87000.
             </li>
-            <li><strong>Dubai Free Zone</strong> — delivery charges are extra. Confirm before booking.</li>
+            <li><strong>Dubai Free Zone</strong>: delivery charges are extra. Confirm before booking.</li>
           </ul>
           <p>
             Check remote locations before booking on connections via Germany (UPS/DHL/FedEx),

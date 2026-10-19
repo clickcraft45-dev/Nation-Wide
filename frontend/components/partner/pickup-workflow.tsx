@@ -298,7 +298,7 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
       setVerifyError(
         err instanceof ApiError && err.status === 400
           ? errorMessage(err, "This parcel couldn't be verified.")
-          : "Unable to connect. Your verification was not saved — please try again.",
+          : "Unable to connect. Your verification was not saved. Please try again.",
       );
     } finally {
       setIsVerifying(false);
@@ -346,15 +346,15 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
       showToast({
         variant: "success",
         title: isDue
-          ? "Recorded as due — payment to follow"
+          ? "Recorded as due: payment to follow"
           : isPartial
-            ? `Collected ${formatMoney(partPaid, pickup.currency)} — remainder recorded as due`
+            ? `Collected ${formatMoney(partPaid, pickup.currency)}: remainder recorded as due`
             : "Payment collected",
       });
     } catch {
       showToast({
         variant: "error",
-        title: "Unable to connect. Your payment update was not confirmed — please try again.",
+        title: "Unable to connect. Your payment update was not confirmed. Please try again.",
       });
     } finally {
       setIsCollectingPayment(false);
@@ -377,11 +377,11 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
         },
       );
       setPickup(updated);
-      showToast({ variant: "success", title: "Pickup completed — order generated" });
+      showToast({ variant: "success", title: "Pickup completed: order generated" });
     } catch {
       showToast({
         variant: "error",
-        title: "Unable to connect. This pickup was not completed — please try again.",
+        title: "Unable to connect. This pickup was not completed. Please try again.",
       });
     } finally {
       setIsAccepting(false);
@@ -495,8 +495,8 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
                     ) : (
                       <p className="mt-1 text-xs text-warning">
                         {pickup.pickupMapsUrl
-                          ? "No map pin — navigating by the Google Maps link from the booking."
-                          : "No map pin — navigating by the typed address."}
+                          ? "No map pin: navigating by the Google Maps link from the booking."
+                          : "No map pin: navigating by the typed address."}
                       </p>
                     )}
                   </>
@@ -525,7 +525,7 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
                         pickup.recipient.city,
                         pickup.destCountry,
                       ].join(", ")}`
-                    : `${pickup.destCountry} — take the address down at pickup`}
+                    : `${pickup.destCountry}: take the address down at pickup`}
                 </p>
               </div>
               {pickup.items && pickup.items.length > 0 && (
@@ -650,8 +650,8 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
                       />
                       <p className="text-xs text-warning">
                         {noRateForThisParcel
-                          ? `No rate card covers ${chargeableKg} kg as ${shipmentLabel(verifiedShipmentType)} on this carrier. Agree a price with the customer and enter it — this is what they will be charged.`
-                          : "No rate card covers this route, so this parcel has no quoted price. Enter what the customer pays — this is the amount they will be charged."}
+                          ? `No rate card covers ${chargeableKg} kg as ${shipmentLabel(verifiedShipmentType)} on this carrier. Agree a price with the customer and enter it. This is what they will be charged.`
+                          : "No rate card covers this route, so this parcel has no quoted price. Enter what the customer pays. This is the amount they will be charged."}
                       </p>
                     </div>
                   ) : (
@@ -725,7 +725,7 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
                       checked={parcelPhysicallyChecked}
                       onChange={(e) => setParcelPhysicallyChecked(e.target.checked)}
                     />
-                    Parcel Verified — I have physically checked this parcel
+                    Parcel Verified: I have physically checked this parcel
                   </label>
 
                   {verifyError && <FieldError>{verifyError}</FieldError>}
@@ -737,7 +737,7 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
                   <div>
                     <p className="text-sm font-medium text-foreground">Contents</p>
                     <p className="text-xs text-muted-foreground">
-                      Check against what is actually in the box — carriers declare these to customs.
+                      Check against what is actually in the box. Carriers declare these to customs.
                     </p>
                   </div>
                   <ItemsEditor value={items} onChange={setItems} />
@@ -751,7 +751,7 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
                     title="Customer's Aadhaar card"
                     hint={
                       pickup.aadhaarOnFile
-                        ? "Already on file from an earlier pickup — replace it only if it has changed."
+                        ? "Already on file from an earlier pickup. Replace it only if it has changed."
                         : "Photograph the front of the card. It is kept for the customer's future pickups."
                     }
                     onFileLabel="Take Aadhaar photo"
@@ -778,8 +778,8 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
                     </p>
                     <p className="text-xs text-muted-foreground">
                       {pickup.recipient
-                        ? "Entered by the customer — check it with them and correct anything that's wrong."
-                        : "The customer didn't add one — take it down now."}
+                        ? "Entered by the customer. Check it with them and correct anything that's wrong."
+                        : "The customer didn't add one: take it down now."}
                     </p>
                   </div>
                   <RecipientFields
@@ -919,7 +919,7 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
                           ))}
                         </select>
                         <p className="text-xs text-muted-foreground">
-                          Ring an admin before taking a parcel without payment — their name goes
+                          Ring an admin before taking a parcel without payment. Their name goes
                           on the record.
                         </p>
                       </div>
@@ -1036,7 +1036,7 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
                 label="Payment Status"
                 value={
                   pickup.paymentDeferredAt
-                    ? `Due — approved by ${pickup.paymentDueApprovedByAdminName ?? "an admin"}`
+                    ? `Due: approved by ${pickup.paymentDueApprovedByAdminName ?? "an admin"}`
                     : "Collected"
                 }
               />

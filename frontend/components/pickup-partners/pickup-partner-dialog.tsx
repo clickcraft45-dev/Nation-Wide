@@ -30,7 +30,7 @@ export function PickupPartnerDialog({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!email.trim()) {
-      setError("An email address is required — it is where their sign-in details are sent.");
+      setError("An email address is required, it is where their sign-in details are sent.");
       return;
     }
     setError(null);

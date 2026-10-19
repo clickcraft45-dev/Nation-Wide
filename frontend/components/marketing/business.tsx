@@ -9,7 +9,7 @@ const BENEFITS = [
   {
     icon: Link2,
     title: "Your own portal",
-    body: "Your team signs in and books straight away — or we hand a despatch desk one standing link instead.",
+    body: "Your team signs in and books straight away, or we hand a despatch desk one standing link instead.",
   },
   {
     icon: Boxes,
@@ -44,7 +44,7 @@ export function MarketingBusiness() {
         <SectionHeading
           eyebrow="For businesses"
           title="Shipping regularly? Open a business account."
-          description="Exporters, e-commerce sellers and manufacturers book from their own portal — many shipments per pickup, with recipients and contents saved for next time."
+          description="Exporters, e-commerce sellers and manufacturers book from their own portal: many shipments per pickup, with recipients and contents saved for next time."
         />
 
         <div className="mt-12 grid gap-8 lg:grid-cols-[minmax(0,1fr)_20rem]">
@@ -69,7 +69,7 @@ export function MarketingBusiness() {
               <p className="text-base font-semibold text-foreground">Ask us to set one up</p>
               <p className="text-sm text-muted-foreground">
                 Tell us what you ship and how often. We open the account and email your team an
-                invitation — there is no form to fill in and nothing to wait on.
+                invitation: there is no form to fill in and nothing to wait on.
               </p>
               <div className="space-y-2">
                 <Link href="/contact" className={buttonVariants({ className: "w-full" })}>

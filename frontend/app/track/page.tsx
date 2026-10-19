@@ -6,7 +6,7 @@ import { TrackingLookupPanel } from "@/features/tracking/TrackingLookupPanel";
 export const metadata: Metadata = {
   title: "Track your shipment",
   description:
-    "Look up any NationWide Logistics shipment with your Order ID or carrier tracking number — " +
+    "Look up any NationWide Logistics shipment with your Order ID or carrier tracking number, " +
     "no sign-in needed.",
   alternates: { canonical: "/track" },
 };

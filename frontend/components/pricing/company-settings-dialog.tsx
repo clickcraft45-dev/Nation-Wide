@@ -515,7 +515,7 @@ export function CompanySettingsDialog({
               <div className="space-y-1.5">
                 <Label htmlFor="cs-terms">Terms & Conditions</Label>
                 <p className="text-xs text-muted-foreground">
-                  One term per line — printed as a numbered list on every tax invoice and rate card
+                  One term per line, printed as a numbered list on every tax invoice and rate card
                   made with this template.
                 </p>
                 <textarea

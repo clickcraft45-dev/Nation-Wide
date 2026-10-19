@@ -54,7 +54,7 @@ export function ProviderComparison<T extends QuotePreviewOptionDto>({
           role="alert"
           className="rounded-md border border-warning-border bg-warning-bg px-3 py-2 text-center text-sm text-warning"
         >
-          Prices may have updated since you last compared — please confirm your choice.
+          Prices may have updated since you last compared. Please confirm your choice.
         </div>
       )}
 

@@ -118,7 +118,7 @@ export function B2bLinksCard({
       await navigator.clipboard.writeText(url);
       showToast({ variant: "success", title: "Link copied" });
     } catch {
-      showToast({ variant: "error", title: "Couldn't copy — select the link and copy it manually." });
+      showToast({ variant: "error", title: "Couldn't copy: select the link and copy it manually." });
     }
   }
 
@@ -175,14 +175,14 @@ export function B2bLinksCard({
         </div>
 
         <p className="text-sm text-muted-foreground">
-          Or hand a despatch desk a standing link — booking with no login at all. Treat it like a
+          Or hand a despatch desk a standing link: booking with no login at all. Treat it like a
           password and revoke it if it leaks.
         </p>
 
         {created?.url && (
           <div className="space-y-2 rounded-lg border border-success-border bg-success-bg p-3">
             <p className="text-sm font-medium text-success">
-              Copy this link now — it cannot be shown again.
+              Copy this link now. It cannot be shown again.
             </p>
             <div className="flex gap-2">
               <Input readOnly value={created.url} onFocus={(e) => e.currentTarget.select()} />

@@ -147,7 +147,7 @@ function LoginPageInner() {
 
         <div className="relative z-10 space-y-6 text-white">
           <h1 className="text-3xl font-semibold leading-tight">
-            Ship, track, and manage — in one place.
+            Ship, track and manage in one place.
           </h1>
           <p className="max-w-md text-sm text-sidebar-foreground">
             One account for customers and operations teams alike. Sign in to track your

@@ -50,7 +50,7 @@ export function DestinationStep({
       <div className="space-y-3 text-left">
         <SearchInput
           // The chosen country shows in the box, so the selection is visible without scrolling.
-          placeholder={selected ? `${selected.name} (${selected.code}) — search to change` : "Search country…"}
+          placeholder={selected ? `${selected.name} (${selected.code}): search to change` : "Search country…"}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           aria-label="Search destination country"

@@ -114,7 +114,7 @@ export default function CommandCentrePage() {
           </p>
           <h1 className="mt-2 text-2xl font-semibold text-foreground">Command centre</h1>
           <p className="text-sm text-muted-foreground">
-            The last six months of the whole company — money, work and people.
+            The last six months of the whole company: money, work and people.
           </p>
         </div>
         <div className="flex gap-2">

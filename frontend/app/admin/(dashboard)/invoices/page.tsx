@@ -198,7 +198,7 @@ export default function AdminInvoicesPage() {
         variant: "success",
         title: `${result.invoice.invoiceNumber} issued for ${money(result.invoice.totalAmount)}`,
         description: result.skipped.length
-          ? `${result.invoice.lineCount} orders billed. ${result.skipped.length} skipped — already on another invoice, or unpriced.`
+          ? `${result.invoice.lineCount} orders billed. ${result.skipped.length} skipped: already on another invoice, or unpriced.`
           : `${result.invoice.lineCount} orders billed.`,
       });
       load();
@@ -286,7 +286,7 @@ export default function AdminInvoicesPage() {
     if (!customCustomerId) problems.customerId = "Pick a customer.";
     if (!grossAmount || grossAmount <= 0) {
       problems[hasLines ? "lines" : "grossAmount"] = hasLines
-        ? "Every row is empty — enter what each shipment is being charged."
+        ? "Every row is empty. Enter what each shipment is being charged."
         : "Enter the amount being billed.";
     }
     // A schedule describes itself, so the description is only compulsory on the single-line form.
@@ -550,7 +550,7 @@ export default function AdminInvoicesPage() {
           </Button>
           <p className="text-xs text-muted-foreground">
             Covers paid orders in the period that aren&apos;t already on an invoice. Every order is
-            invoiced automatically when it&apos;s paid — use this when a customer wants one bill
+            invoiced automatically when it&apos;s paid. Use this when a customer wants one bill
             for the month instead.
           </p>
         </CardContent>
@@ -570,7 +570,7 @@ export default function AdminInvoicesPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            Bill something that has no order behind it — a re-delivery fee, packaging, a
+            Bill something that has no order behind it: a re-delivery fee, packaging, a
             correction. It takes the next number in the same statutory series and produces the
             same document.
           </p>
@@ -644,7 +644,7 @@ export default function AdminInvoicesPage() {
             <input
               value={customDescription}
               onChange={(e) => setCustomDescription(e.target.value)}
-              placeholder="e.g. Re-delivery attempt — AWB NW-26-000123"
+              placeholder="e.g. Re-delivery attempt: AWB NW-26-000123"
               maxLength={300}
               list="billing-suggestions"
               className="glass-field h-10 w-full rounded-lg px-3 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -655,14 +655,14 @@ export default function AdminInvoicesPage() {
               {billingSuggestions.flatMap((row) => {
                 const awb = row.trackingNumber;
                 if (!awb) return [];
-                const where = row.destination ? ` — ${row.destination}` : "";
+                const where = row.destination ? `: ${row.destination}` : "";
                 return [
                   <option key={`${row.orderId}-awb`} value={`AWB ${awb}${where}`} />,
                   ...(row.contents
                     ? [
                         <option
                           key={`${row.orderId}-contents`}
-                          value={`AWB ${awb} — ${row.contents}`}
+                          value={`AWB ${awb}: ${row.contents}`}
                         />,
                       ]
                     : []),
@@ -674,7 +674,7 @@ export default function AdminInvoicesPage() {
             ) : (
               <span className="text-xs text-muted-foreground">
                 {customLines.length > 0
-                  ? "Optional — the schedule below is itemised on the invoice."
+                  ? "Optional: the schedule below is itemised on the invoice."
                   : "Printed as the invoice's line item."}
               </span>
             )}

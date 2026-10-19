@@ -2,15 +2,7 @@
 
 import { useRef } from "react";
 import { motion, useReducedMotion, useScroll, useSpring, useTransform } from "motion/react";
-import {
-  ArrowRight,
-  Building2,
-  ChevronDown,
-  MapPin,
-  Radar,
-  ShieldCheck,
-  Truck,
-} from "lucide-react";
+import { ArrowRight, Building2, Radar } from "lucide-react";
 import { LiquidButton } from "@/components/ui/liquid-glass-button";
 import { useAuthGate } from "@/lib/auth/use-auth-gate";
 import { TrackingLookupPanel } from "@/features/tracking/TrackingLookupPanel";
@@ -45,14 +37,8 @@ const HERO_PHOTOS = [
 const HEADLINE_WORDS = ["Worldwide.", "On Time.", "With Care.", "Door to Door."];
 
 // Each word gets its own entrance, so the headline assembles itself rather than sliding in as one
-// slab. Line breaks are part of the data — the copy is written to break exactly here.
-const HEADLINE_LINES = [["Your", "Shipments."], ["Our", "Network."]];
-
-const HIGHLIGHTS = [
-  { icon: MapPin, label: "Live tracking" },
-  { icon: Truck, label: "Door-to-door pickup" },
-  { icon: ShieldCheck, label: "Trusted carrier network" },
-];
+// slab. Two lines on desktop: the statement, then "Delivered" with the cycling word.
+const HEADLINE_WORDS_FIRST_LINE = ["Your", "Shipments.", "Our", "Network."];
 
 // Mobile-first, one centred column on white: tagline → headline → supporting line → tracking
 // (the dominant, sign-in-free action) → CTAs, stacked above the planet. The planet is
@@ -72,19 +58,22 @@ export function MarketingHero() {
     target: sectionRef,
     offset: ["start start", "end start"],
   });
-  const auroraY = useTransform(scrollYProgress, [0, 1], [0, 140]);
-  const auroraYSlow = useTransform(scrollYProgress, [0, 1], [0, 70]);
-  const contentY = useTransform(scrollYProgress, [0, 1], [0, 40]);
+  // Reduced motion flattens the ranges instead of dropping the style prop: useReducedMotion() is
+  // null on the server, so a conditional style rendered differently on each side and broke hydration.
+  const k = reduceMotion ? 0 : 1;
+  const auroraY = useTransform(scrollYProgress, [0, 1], [0, 140 * k]);
+  const auroraYSlow = useTransform(scrollYProgress, [0, 1], [0, 70 * k]);
+  const contentY = useTransform(scrollYProgress, [0, 1], [0, 40 * k]);
 
   // The planet swells and rises as the hero scrolls away — springs so it eases rather than
   // tracking the wheel one-to-one, which is what makes the move read as smooth. Kept modest:
   // a bigger rise pushed the black glass up over the headline and the tracking panel.
-  const planetScale = useSpring(useTransform(scrollYProgress, [0, 1], [1, 1.18]), {
+  const planetScale = useSpring(useTransform(scrollYProgress, [0, 1], [1, 1 + 0.18 * k]), {
     stiffness: 70,
     damping: 22,
     mass: 0.5,
   });
-  const planetY = useSpring(useTransform(scrollYProgress, [0, 1], [0, -80]), {
+  const planetY = useSpring(useTransform(scrollYProgress, [0, 1], [0, -80 * k]), {
     stiffness: 70,
     damping: 22,
     mass: 0.5,
@@ -127,7 +116,7 @@ export function MarketingHero() {
           sized so far apart (a 456px cap under 480px of padding) that the hero ran well past one
           screen and the dome could only be reached by scrolling. */}
       <motion.div
-        style={reduceMotion ? undefined : { scale: planetScale, y: planetY }}
+        style={{ scale: planetScale, y: planetY }}
         className="absolute inset-x-0 bottom-0 z-0 flex origin-bottom justify-center"
       >
         <div className="aspect-square w-[110vw] max-w-[1200px] translate-y-[76%]">
@@ -174,23 +163,25 @@ export function MarketingHero() {
             Delivering trust worldwide
           </p>
 
-          <h1 className="text-4xl font-semibold leading-[1.08] tracking-tight text-foreground sm:text-5xl lg:text-6xl">
-            {HEADLINE_LINES.map((line, lineIndex) => (
-              <span key={lineIndex} className="block">
-                {line.map((word, wordIndex) => (
-                  <span
-                    key={word}
-                    className="mr-[0.25em] inline-block animate-rise-in"
-                    style={{ animationDelay: `${(lineIndex * 2 + wordIndex) * 90}ms` }}
-                  >
-                    {word}
-                  </span>
-                ))}
+          <h1 className="text-4xl font-semibold leading-[1.1] tracking-tight text-foreground sm:text-5xl">
+            <span className="block">
+              {HEADLINE_WORDS_FIRST_LINE.map((word, wordIndex) => (
+                <span
+                  key={word}
+                  className="mr-[0.25em] inline-block animate-rise-in"
+                  style={{ animationDelay: `${wordIndex * 90}ms` }}
+                >
+                  {word}
+                </span>
+              ))}
+            </span>
+            <span className="block min-h-[1.15em]">
+              <span className="mr-[0.25em] inline-block animate-rise-in [animation-delay:360ms]">
+                Delivered
               </span>
-            ))}
-            <span className="block animate-rise-in [animation-delay:360ms]">Delivered</span>
-            <span className="block min-h-[1.15em] animate-rise-in bg-gradient-to-r from-foreground via-zinc-600 to-zinc-400 bg-clip-text text-transparent [animation-delay:440ms]">
-              <TypingText words={HEADLINE_WORDS} />
+              <span className="inline-block animate-rise-in bg-gradient-to-r from-foreground via-zinc-600 to-zinc-400 bg-clip-text text-transparent [animation-delay:440ms]">
+                <TypingText words={HEADLINE_WORDS} />
+              </span>
             </span>
           </h1>
 
@@ -252,38 +243,19 @@ export function MarketingHero() {
               one line above the fold that says so, and it lands on the request form. */}
           <a
             href="#business"
-            className="group inline-flex animate-slide-in-left items-center gap-1.5 text-sm text-muted-foreground [animation-delay:640ms] hover:text-foreground"
+            className="group inline-flex animate-slide-in-left flex-wrap items-center justify-center gap-x-1.5 gap-y-1 text-sm text-muted-foreground [animation-delay:640ms] hover:text-foreground"
           >
             <Building2 className="h-4 w-4 text-primary" aria-hidden />
-            Shipping for a business?
-            <span className="font-medium text-foreground underline underline-offset-4">
-              Request an account
-            </span>
-            <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" aria-hidden />
-          </a>
-
-          <div className="flex animate-slide-in-left flex-wrap justify-center gap-2 pt-1 [animation-delay:680ms]">
-            {HIGHLIGHTS.map((item) => (
-              <span
-                key={item.label}
-                className="glass-panel inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs text-foreground/75"
-              >
-                <item.icon className="h-3.5 w-3.5 text-primary" aria-hidden />
-                {item.label}
+            <span className="whitespace-nowrap">Shipping for a business?</span>
+            <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+              <span className="font-medium text-foreground underline underline-offset-4">
+                Request an account
               </span>
-            ))}
-          </div>
+              <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" aria-hidden />
+            </span>
+          </a>
         </div>
       </motion.div>
-
-      <a
-        href="#services"
-        aria-label="Scroll to services"
-        className="absolute inset-x-0 bottom-5 z-10 mx-auto hidden w-fit flex-col items-center gap-1 text-[11px] uppercase tracking-[0.2em] text-white/60 transition-colors hover:text-white lg:flex"
-      >
-        Scroll
-        <ChevronDown className="h-4 w-4 animate-scroll-cue" aria-hidden />
-      </a>
     </section>
   );
 }

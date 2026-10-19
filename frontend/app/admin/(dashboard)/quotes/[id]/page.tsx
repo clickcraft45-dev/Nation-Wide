@@ -21,7 +21,7 @@ function AddressBlock({
     // The self-service flow collects the pickup address later, on the PickupRequest, not here.
     return (
       <p className="text-sm text-muted-foreground">
-        Not collected yet — pickup address is captured when the customer submits their pickup
+        Not collected yet: pickup address is captured when the customer submits their pickup
         request.
       </p>
     );

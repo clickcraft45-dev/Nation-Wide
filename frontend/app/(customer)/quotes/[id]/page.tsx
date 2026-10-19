@@ -76,7 +76,7 @@ export default function CustomerQuoteDetailPage() {
         router.push(`/pickup-request/${quote.id}`);
         return;
       }
-      showToast({ variant: "success", title: "Provider selected — your order has been created" });
+      showToast({ variant: "success", title: "Provider selected: your order has been created" });
       load();
     } catch {
       showToast({
@@ -97,7 +97,7 @@ export default function CustomerQuoteDetailPage() {
         router.push(`/pickup-request/${quote.id}`);
         return;
       }
-      showToast({ variant: "success", title: "Quote accepted — your order has been created" });
+      showToast({ variant: "success", title: "Quote accepted: your order has been created" });
       load();
     } catch {
       showToast({
@@ -254,7 +254,7 @@ export default function CustomerQuoteDetailPage() {
                     nothing to pick and the parcel gets priced at the door instead. */}
                 <p className="text-sm text-muted-foreground">
                   {quote.selectedOption
-                    ? "You’ve chosen a provider — now tell us where to collect your parcel."
+                    ? "You’ve chosen a provider. Now tell us where to collect your parcel."
                     : "This route isn’t on our instant rate card, so we’ll price it at pickup. Tell us where to collect, and our partner will weigh it at your door."}
                 </p>
                 <Button size="sm" onClick={() => router.push(`/pickup-request/${quote.id}`)}>

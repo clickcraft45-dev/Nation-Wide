@@ -110,7 +110,7 @@ export function SpreadsheetActions({
       );
       showToast({
         variant: "success",
-        title: `${label} imported — ${plan.created} added, ${plan.updated} updated`,
+        title: `${label} imported: ${plan.created} added, ${plan.updated} updated`,
       });
       setPending(null);
       onImported();
@@ -157,7 +157,7 @@ export function SpreadsheetActions({
 
       <Dialog open={pending !== null} onOpenChange={(open) => !open && setPending(null)}>
         <DialogContent
-          title={`Review this import — ${label}`}
+          title={`Review this import: ${label}`}
           description={pending ? `${pending.file.name} · nothing has been saved yet.` : undefined}
           className="max-w-3xl"
         >

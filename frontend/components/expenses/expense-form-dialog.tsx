@@ -168,7 +168,7 @@ export function ExpenseFormDialog({
                       ? "Pick a category first"
                       : subcategories.length === 0
                         ? "None under this category"
-                        : "None — file under the category"}
+                        : "None: file under the category"}
                   </option>
                   {subcategories.map((sub) => (
                     <option key={sub.id} value={sub.id}>
@@ -258,7 +258,7 @@ export function ExpenseFormDialog({
                   className="inline-flex w-full items-center gap-2 rounded-lg border border-dashed border-border px-3 py-2 text-sm text-muted-foreground transition-colors hover:border-primary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <Paperclip className="h-4 w-4" aria-hidden />
-                  Attach the bill — photo or PDF
+                  Attach the bill: photo or PDF
                 </button>
               )}
               {expense?.hasReceipt && !receiptFile && (

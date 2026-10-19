@@ -265,7 +265,7 @@ export default function AdminWhatsAppPage() {
                     {templates.map((t) => (
                       <option key={t.name} value={t.name} disabled={t.requiresDocument}>
                         {t.name}
-                        {t.requiresDocument ? " — sent automatically with its PDF" : ""}
+                        {t.requiresDocument ? ": sent automatically with its PDF" : ""}
                       </option>
                     ))}
                   </NativeSelect>
@@ -396,8 +396,8 @@ export default function AdminWhatsAppPage() {
             {/* The one rule that decides whether this arrives, stated before the admin types. */}
             <p className="rounded-xl border border-warning-border bg-warning-bg px-4 py-3 text-sm text-warning">
               Delivered only if this customer has messaged your WhatsApp number in the last 24
-              hours. Otherwise WhatsApp refuses it and it shows as failed in the notification log —
-              use a template to reach them instead.
+              hours. Otherwise WhatsApp refuses it and it shows as failed in the notification log.
+              Use a template to reach them instead.
             </p>
 
             <div className="space-y-1.5">

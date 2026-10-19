@@ -68,7 +68,7 @@ export default function WarehouseDropoffsPage() {
         <h1 className="text-xl font-semibold text-foreground">Warehouse Drop-offs</h1>
         <p className="text-sm text-muted-foreground">
           Parcels customers bring to the warehouse. Receive, weigh, take payment and complete them here
-          {!isLoading && waiting > 0 ? ` — ${waiting} waiting.` : "."}
+          {!isLoading && waiting > 0 ? `: ${waiting} waiting.` : "."}
         </p>
       </div>
 

@@ -35,7 +35,7 @@ const FAQS = [
   {
     question: "Do I need an account to track a shipment?",
     answer:
-      "No. Tracking is open to everyone — enter your Order ID or Tracking ID in the panel at the top of this page and you'll see the shipment's full status history. An account is only needed to book shipments, schedule pickups and see your order history.",
+      "No. Tracking is open to everyone. Enter your Order ID or Tracking ID in the panel at the top of this page and you'll see the shipment's full status history. An account is only needed to book shipments, schedule pickups and see your order history.",
   },
   {
     question: "How does pickup work?",
@@ -45,7 +45,7 @@ const FAQS = [
   {
     question: "What can I send?",
     answer:
-      "Documents and parcels, subject to what the destination country and the carrier permit. Restricted and prohibited items vary by route, so check our Shipping Guidelines before booking — a parcel that fails a carrier's screening can be returned or held.",
+      "Documents and parcels, subject to what the destination country and the carrier permit. Restricted and prohibited items vary by route, so check our Shipping Guidelines before booking. A parcel that fails a carrier's screening can be returned or held.",
   },
   {
     question: "How is shipping cost calculated?",
@@ -53,14 +53,14 @@ const FAQS = [
       "By destination zone and chargeable weight. Chargeable weight is the greater of the parcel's actual weight and its volumetric weight (calculated from its dimensions), which is why we ask for both. Applicable fuel and surcharges are shown in the quote breakdown rather than added later.",
   },
   {
-    question: "My tracking hasn't updated — what should I do?",
+    question: "My tracking hasn't updated. What should I do?",
     answer:
       "Tracking updates when the carrier scans the parcel, so gaps are normal in transit, particularly around customs clearance and international handovers. If it's been static longer than you'd expect for the route, contact us with your Order ID and we'll chase the carrier directly.",
   },
   {
     question: "Do you ship for businesses?",
     answer:
-      "Yes. If you ship regularly or in volume, get in touch rather than booking one-off quotes — we'll set you up with an account suited to recurring shipments.",
+      "Yes. If you ship regularly or in volume, get in touch rather than booking one-off quotes. We'll set you up with an account suited to recurring shipments.",
   },
 ];
 
@@ -110,7 +110,7 @@ export function MarketingFaqs() {
         <div className="glass-panel mt-10 flex flex-col items-center gap-4 rounded-2xl px-6 py-8 text-center">
           <p className="text-base font-medium text-foreground">Still have a question?</p>
           <p className="max-w-md text-sm text-muted-foreground">
-            Send us the details and your Order ID if you have one — we&apos;ll come back to you.
+            Send us the details and your Order ID if you have one. We&apos;ll come back to you.
           </p>
           <LiquidButton asChild variant="primary" size="default" className="mt-1">
             <a href={`mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent("Question about shipping")}`}>

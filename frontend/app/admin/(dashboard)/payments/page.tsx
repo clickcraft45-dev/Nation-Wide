@@ -113,7 +113,7 @@ export default function AdminPaymentsPage() {
       <div>
         <h1 className="text-xl font-semibold text-foreground">Payments</h1>
         <p className="text-sm text-muted-foreground">
-          Payment status per order. No online payment gateway yet — mark payments received
+          Payment status per order. No online payment gateway yet. Mark payments received
           manually.
         </p>
       </div>

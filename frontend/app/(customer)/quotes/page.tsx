@@ -66,7 +66,7 @@ export default function CustomerQuotesPage() {
     setAcceptingId(id);
     try {
       await apiClient.post(`/quotes/${id}/accept`, {});
-      showToast({ variant: "success", title: "Quote accepted — your order has been created" });
+      showToast({ variant: "success", title: "Quote accepted: your order has been created" });
       load();
     } catch {
       showToast({ variant: "error", title: "We couldn't process your request right now. Please try again." });

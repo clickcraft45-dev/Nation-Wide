@@ -92,7 +92,7 @@ export function ZoneCountriesDialog({
     <Dialog open={open} onOpenChange={setOpen}>
       <span onClick={() => setOpen(true)}>{trigger}</span>
       {open && (
-        <DialogContent title={`${zone.name} — countries`} className="max-w-lg">
+        <DialogContent title={`${zone.name}: countries`} className="max-w-lg">
           <div className="space-y-4">
             <div>
               <p className="mb-1.5 text-xs font-medium text-muted-foreground">

@@ -37,9 +37,6 @@ export function MarketingFooter() {
             <Link href="/" className="inline-flex" aria-label="NationWide Logistics home">
               <Logo variant="reverse" size="sm" />
             </Link>
-            <p className="mt-3 text-xs font-medium uppercase tracking-[0.22em] text-white/45">
-              Delivering trust worldwide
-            </p>
             <p className="mt-4 max-w-sm text-sm leading-relaxed text-white/55">
               Reliable domestic and international shipping, with tracking built in from day one.
             </p>

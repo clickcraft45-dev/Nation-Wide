@@ -61,7 +61,7 @@ export function MapPinField({
       });
       const best = results[0];
       if (!best) {
-        setSearchError("No place found for that search — try a nearby landmark.");
+        setSearchError("No place found for that search. Try a nearby landmark.");
         return;
       }
       const location = best.geometry.location;
@@ -77,7 +77,7 @@ export function MapPinField({
       );
       onChange({ ...parsed, latitude: location.lat(), longitude: location.lng() });
     } catch {
-      setSearchError("Couldn't search just now — move the map by hand instead.");
+      setSearchError("Couldn't search just now. Move the map by hand instead.");
     }
   }
 

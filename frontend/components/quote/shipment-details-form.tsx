@@ -33,7 +33,7 @@ import {
 // Configurable — fill in the real warehouse address/hours when available (same placeholder
 // pattern used for the marketing footer's contact info).
 const WAREHOUSE_ADDRESS = "NationWide Warehouse, Plot 12, Industrial Area, Hyderabad, 500032";
-const WAREHOUSE_HOURS = "Mon–Sat, 9:00 AM – 6:00 PM";
+const WAREHOUSE_HOURS = "Mon to Sat, 9:00 AM - 6:00 PM";
 
 const SHIPMENT_TYPE_LABELS: Record<ShipmentTypeCode, string> = {
   DOCUMENT: "Document",
@@ -43,9 +43,9 @@ const SHIPMENT_TYPE_LABELS: Record<ShipmentTypeCode, string> = {
 };
 
 const TIME_SLOTS = [
-  { value: "09:00-12:00", label: "9:00 AM – 12:00 PM" },
-  { value: "12:00-15:00", label: "12:00 PM – 3:00 PM" },
-  { value: "15:00-18:00", label: "3:00 PM – 6:00 PM" },
+  { value: "09:00-12:00", label: "9:00 AM - 12:00 PM" },
+  { value: "12:00-15:00", label: "12:00 PM - 3:00 PM" },
+  { value: "15:00-18:00", label: "3:00 PM - 6:00 PM" },
 ];
 
 interface AddressForm {
@@ -391,7 +391,7 @@ export function ShipmentDetailsForm({
               <span>
                 Add the recipient&apos;s delivery address now
                 <span className="block text-xs text-muted-foreground">
-                  Optional — our pickup partner will take it down and confirm it with you at pickup.
+                  Optional: our pickup partner will take it down and confirm it with you at pickup.
                 </span>
               </span>
             </label>

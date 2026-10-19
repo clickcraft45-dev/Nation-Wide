@@ -170,7 +170,7 @@ export default function AdminExpensesPage() {
         <div>
           <h1 className="text-xl font-semibold text-foreground">Expenses</h1>
           <p className="text-sm text-muted-foreground">
-            What the company spent — salaries, rent, fuel, packaging and the rest.
+            What the company spent: salaries, rent, fuel, packaging and the rest.
           </p>
         </div>
         <div className="flex gap-2">

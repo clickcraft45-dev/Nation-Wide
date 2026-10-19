@@ -181,7 +181,7 @@ export default function BrandKitPage() {
         <p className="mt-4 max-w-2xl text-muted-foreground">
           Rendered from the live <code className="font-mono text-sm">Logo</code> component and
           the design tokens in <code className="font-mono text-sm">globals.css</code>. Change
-          either and this page changes with it — nothing here is a screenshot.
+          either and this page changes with it. Nothing here is a screenshot.
         </p>
       </header>
 
@@ -216,7 +216,7 @@ export default function BrandKitPage() {
         <Section
           index="02"
           title="Sizes and clear space"
-          blurb="Three sizes only — sm 28px, md 36px, lg 48px. Keep clear space of at least the height of the mark's arrowhead on every side; the tinted band below shows that margin. The floor is 16px: the brief requires the mark to stay legible there, which is why the arrowhead is the only part carrying colour."
+          blurb="Three sizes only: sm 28px, md 36px, lg 48px. Keep clear space of at least the height of the mark's arrowhead on every side; the tinted band below shows that margin. The floor is 16px: the brief requires the mark to stay legible there, which is why the arrowhead is the only part carrying colour."
         >
           <div className="grid gap-6 sm:grid-cols-3">
             <Tile label="size=&quot;sm&quot;" note="28px mark">
@@ -269,7 +269,7 @@ export default function BrandKitPage() {
         <Section
           index="04"
           title="Colour"
-          blurb="Brand red is for identity — the mark, brand accents, brand surfaces. It never carries operational meaning. If red on screen is telling the reader that something failed, it must be --danger, and the two must never appear in the same component."
+          blurb="Brand red is for identity: the mark, brand accents, brand surfaces. It never carries operational meaning. If red on screen is telling the reader that something failed, it must be --danger, and the two must never appear in the same component."
         >
           <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
             Brand
@@ -319,7 +319,7 @@ export default function BrandKitPage() {
         <Section
           index="05"
           title="Typography"
-          blurb="Poppins carries the brand voice. Geist Mono is not part of the type scale — it is a legibility choice, reserved for codes a human has to read back aloud or compare character by character: tracking numbers, AWBs, order and invoice ids."
+          blurb="Poppins carries the brand voice. Geist Mono is not part of the type scale. It is a legibility choice, reserved for codes a human has to read back aloud or compare character by character: tracking numbers, AWBs, order and invoice ids."
         >
           <div className="space-y-6 rounded-2xl border border-border bg-card p-8">
             <div>
@@ -348,7 +348,7 @@ export default function BrandKitPage() {
             </div>
             <div>
               <p className="mb-2 font-mono text-xs text-muted-foreground">
-                Code · font-mono — identifiers only
+                Code · font-mono: identifiers only
               </p>
               <p className="font-mono text-base">NW-2026-0004182 · ₹12,480.00</p>
             </div>
@@ -358,7 +358,7 @@ export default function BrandKitPage() {
         <Section
           index="06"
           title="Assets"
-          blurb="Grouped by where each file is used rather than alphabetically, because that is the question people actually arrive with. Every path is a live link — a rename that is not reflected here 404s instead of quietly going stale."
+          blurb="Grouped by where each file is used rather than alphabetically, because that is the question people actually arrive with. Every path is a live link: a rename that is not reflected here 404s instead of quietly going stale."
         >
           <div className="space-y-8">
             {ASSETS.map((group) => (

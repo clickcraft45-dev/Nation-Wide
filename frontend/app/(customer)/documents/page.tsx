@@ -123,7 +123,7 @@ export default function CustomerDocumentsPage() {
         showToast({
           variant: "success",
           title: "Downloaded instead",
-          description: "This browser can't share files directly — attach the downloaded PDF.",
+          description: "This browser can't share files directly. Attach the downloaded PDF.",
         });
       }
     } catch (err) {

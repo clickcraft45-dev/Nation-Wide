@@ -218,7 +218,7 @@ export function InstallPrompt() {
                 </span>
                 .
               </li>
-              <li>3. Tap Add — the NW icon appears on your Home Screen.</li>
+              <li>3. Tap Add: the NW icon appears on your Home Screen.</li>
             </ol>
           )}
           {mode === "menu" && (

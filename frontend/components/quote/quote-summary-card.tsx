@@ -62,7 +62,7 @@ function noteFor(quote: QuoteDto): Note | null {
         icon: Truck,
         text: `${quote.rateQuoteOptions.length} carrier${
           quote.rateQuoteOptions.length === 1 ? "" : "s"
-        } available — compare and pick one to continue.`,
+        } available: compare and pick one to continue.`,
       };
     case "PENDING_PICKUP_REQUEST":
       return quote.quotedAmount != null
@@ -74,7 +74,7 @@ function noteFor(quote: QuoteDto): Note | null {
         : {
             tone: "info",
             icon: Truck,
-            text: "This route isn't on our instant rate card, so we'll price it at pickup — book a slot and our partner will weigh it at your door.",
+            text: "This route isn't on our instant rate card, so we'll price it at pickup. Book a slot and our partner will weigh it at your door.",
           };
     case "PICKUP_REQUESTED":
       // Normally replaced by the live progress bar; this only shows while that is loading.

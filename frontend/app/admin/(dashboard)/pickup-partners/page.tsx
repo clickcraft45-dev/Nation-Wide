@@ -128,7 +128,7 @@ export default function AdminPickupPartnersPage() {
                         the record of who handled a customer's parcel and cash. */}
                     <ConfirmDialog
                       title={`Delete ${p.name ?? p.email}?`}
-                      description="Permanent, and only possible while they have no pickups recorded. Otherwise deactivate them — that ends every session and blocks sign-in while keeping the trail."
+                      description="Permanent, and only possible while they have no pickups recorded. Otherwise deactivate them. That ends every session and blocks sign-in while keeping the trail."
                       confirmLabel="Delete partner"
                       variant="danger"
                       onConfirm={() => remove(p)}

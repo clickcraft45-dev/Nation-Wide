@@ -212,7 +212,7 @@ export function OrderPaymentCard({
                             ? "by road from the warehouse"
                             : "straight-line from the warehouse (road network unreachable)"
                         }`
-                      : " — no pickup coordinates, so no distance is charged"}
+                      : ": no pickup coordinates, so no distance is charged"}
                   </p>
                 </div>
               ) : (

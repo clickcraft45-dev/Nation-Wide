@@ -1,16 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { NativeSelect } from "@/components/ui/select";
 import { cn } from "@/lib/utils/cn";
 import { Input } from "@/components/ui/input";
-import {
-  FALLBACK_DIAL_COUNTRIES,
-  fetchDialCountries,
-  fromE164,
-  toE164,
-  type DialCountry,
-} from "@/lib/dial-codes";
+import { DIAL_COUNTRIES as countries, fromE164, toE164 } from "@/lib/dial-codes";
 
 /**
  * A phone field with its country in front of it.
@@ -19,9 +13,6 @@ import {
  * validator requires — so callers keep storing exactly the string they stored before and no
  * server-side change is needed. Splitting the country out is purely how it is entered: asking
  * someone to type "+91" themselves is the single most common way this field got rejected.
- *
- * The country list loads from the network once per mount, falling back to a bundled list. See
- * lib/dial-codes.ts for why the fallback exists.
  */
 export function PhoneInput({
   id,
@@ -41,27 +32,15 @@ export function PhoneInput({
   autoComplete?: string;
   className?: string;
 }) {
-  const [countries, setCountries] = useState<DialCountry[]>(FALLBACK_DIAL_COUNTRIES);
   // Only the country the user picked while the number was still empty. Once there are digits,
   // the country is read back out of `value` itself — see below.
   const [pickedCountry, setPickedCountry] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    // One-shot lookup, not a subscription. fetchDialCountries never rejects.
-    void fetchDialCountries().then((list) => {
-      if (!cancelled) setCountries(list);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   // Both displayed fields are derived from `value` on every render rather than mirrored into
   // state. Mirroring needs an effect to re-sync whenever a parent supplies a different number
   // (an edit dialog loading a record, a form reset), and that effect renders once with the stale
   // number before correcting itself. Deriving has no stale frame and no effect to keep honest.
-  const parsed = useMemo(() => fromE164(value, countries), [value, countries]);
+  const parsed = useMemo(() => fromE164(value, countries), [value]);
   // The explicit pick wins while it still agrees with the number, so choosing "+1 US" does not
   // flip to CA on the first keystroke — several countries share a dial code and parsing alone
   // cannot tell them apart.

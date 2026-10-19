@@ -64,7 +64,7 @@ export function useClaimPickup() {
     setIsClaiming(true);
     try {
       const updated = await apiClient.patch<PickupRequestDto>(`/partner/pickup-requests/${id}/claim`, {});
-      showToast({ variant: "success", title: "Pickup accepted — the customer has been notified" });
+      showToast({ variant: "success", title: "Pickup accepted: the customer has been notified" });
       return updated;
     } catch (err) {
       showToast({ variant: "error", title: errorMessage(err, "Couldn't accept this pickup.") });
@@ -144,7 +144,7 @@ export function PickupCard({ pickup, onClaimFailed }: { pickup: PickupRequestDto
       {pending && (
         <p className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-warning-bg px-2.5 py-1 text-xs font-medium text-warning">
           <Clock className="h-3.5 w-3.5" aria-hidden />
-          {pending} — tap to resume
+          {pending}: tap to resume
         </p>
       )}
 

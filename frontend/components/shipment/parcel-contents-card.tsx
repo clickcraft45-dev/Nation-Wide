@@ -117,7 +117,7 @@ export function ParcelContentsCard({
               </table>
             </div>
           ) : (
-            <p className="font-medium text-foreground">Not declared yet — the partner records it at pickup.</p>
+            <p className="font-medium text-foreground">Not declared yet: the partner records it at pickup.</p>
           )}
         </div>
 

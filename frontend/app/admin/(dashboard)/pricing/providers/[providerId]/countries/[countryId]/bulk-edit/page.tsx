@@ -124,7 +124,7 @@ export default function BulkEditPage() {
         <h2 className="text-lg font-semibold text-foreground">Bulk Edit Rates</h2>
         <p className="text-sm text-muted-foreground">
           Update every weight category for this country and shipment type at once. Weight ranges
-          can&apos;t be changed here — edit a single rate to change its range.
+          can&apos;t be changed here. Edit a single rate to change its range.
         </p>
       </div>
 

@@ -78,12 +78,14 @@ export default function AdminNewQuotePage() {
     apiClient
       .get<CustomerDto[]>("/customers")
       .then(setCustomers)
+      .catch(() => showToast({ variant: "error", title: "Could not load customers", description: "Refresh the page to try again." }))
       .finally(() => setCustomersLoading(false));
     apiClient
       .get<CountryDto[]>("/countries")
       .then(setCountries)
+      .catch(() => showToast({ variant: "error", title: "Could not load countries", description: "Refresh the page to try again." }))
       .finally(() => setCountriesLoading(false));
-  }, []);
+  }, [showToast]);
 
   const filteredCustomers = useMemo(() => {
     const q = customerSearch.trim().toLowerCase();
@@ -182,7 +184,7 @@ export default function AdminNewQuotePage() {
         showToast({
           variant: "success",
           title: "Request created",
-          description: "This request needs manual pricing — you can quote it now from Quote Requests.",
+          description: "This request needs manual pricing. You can quote it now from Quote Requests.",
         });
         router.push(`/admin/quotes/${quote.id}`);
         return;
@@ -205,7 +207,7 @@ export default function AdminNewQuotePage() {
         } catch {
           showToast({
             variant: "error",
-            title: "Couldn't confirm the selection automatically — please select again.",
+            title: "Couldn't confirm the selection automatically. Please select again.",
           });
         }
         router.push(`/admin/quotes/${quote.id}`);
@@ -380,7 +382,7 @@ export default function AdminNewQuotePage() {
             onClick={handleChangeCustomer}
             className="text-xs text-muted-foreground hover:text-foreground hover:underline"
           >
-            Quoting for {customer.name} — change customer
+            Quoting for {customer.name}: change customer
           </button>
         </div>
       )}

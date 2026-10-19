@@ -91,7 +91,7 @@ export function CancelOrderButton({
                   </p>
                   <p className="text-xs text-muted-foreground">
                     {quote.distanceSource === "straight-line"
-                      ? "Measured in a straight line — we could not reach the road network just now."
+                      ? "Measured in a straight line. We could not reach the road network just now."
                       : ""}
                   </p>
                 </div>

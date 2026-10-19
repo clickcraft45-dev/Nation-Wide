@@ -113,7 +113,7 @@ export function MarginBandsDialog({
       <span onClick={() => setOpen(true)}>{trigger}</span>
       {open && (
         <DialogContent
-          title={`Margin bands — ${provider.name}`}
+          title={`Margin bands: ${provider.name}`}
           description="A flat amount plus a per-kg rate on the weight above the band's own floor. Leave the last band's To blank for everything above it."
         >
           <div className="space-y-4">

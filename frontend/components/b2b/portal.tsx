@@ -45,9 +45,9 @@ import {
 } from "@/components/shipment/shipment-card";
 
 const TIME_SLOTS: { value: PickupTimeSlot; label: string }[] = [
-  { value: "09:00-12:00", label: "9 AM – 12 PM" },
-  { value: "12:00-15:00", label: "12 – 3 PM" },
-  { value: "15:00-18:00", label: "3 – 6 PM" },
+  { value: "09:00-12:00", label: "9 AM - 12 PM" },
+  { value: "12:00-15:00", label: "12-3 PM" },
+  { value: "15:00-18:00", label: "3-6 PM" },
 ];
 
 const todayIso = () => new Date().toISOString().slice(0, 10);

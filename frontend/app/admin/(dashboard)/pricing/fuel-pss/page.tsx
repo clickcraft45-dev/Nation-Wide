@@ -44,7 +44,7 @@ export default function FuelAndPssPage() {
       <BackLink href="/admin/pricing/dashboard">Back to pricing</BackLink>
       <p className="text-sm text-muted-foreground">
         Fuel Charge % applies to Base Rate only; PSS is a flat rate per kg. Margin bands set the
-        NationWide cut by weight — a rate that carries its own margin keeps it. All three apply
+        NationWide cut by weight. A rate that carries its own margin keeps it. All three apply
         automatically to every quote for that provider.
       </p>
 

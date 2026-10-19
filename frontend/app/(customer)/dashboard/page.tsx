@@ -9,7 +9,7 @@ import { useAuth } from "@/state/auth-context";
 import { apiClient } from "@/lib/api-client";
 import { CONTACT_EMAIL } from "@/lib/constants/contact";
 import { Skeleton } from "@/components/ui/skeleton";
-import { EmptyState } from "@/components/ui/page-state";
+import { EmptyState, ErrorState } from "@/components/ui/page-state";
 import { TrackingStatusBadge } from "@/components/ui/status-badge";
 import { TrackingSearchForm } from "@/features/tracking/TrackingSearchForm";
 
@@ -40,12 +40,22 @@ export default function CustomerDashboardPage() {
   const router = useRouter();
   const [orders, setOrders] = useState<OrderDto[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const load = () => {
+    setIsLoading(true);
+    setError(null);
     apiClient
       .get<OrderDto[]>("/orders/me")
       .then(setOrders)
+      .catch(() => setError("Failed to load your shipments."))
       .finally(() => setIsLoading(false));
+  };
+
+  useEffect(() => {
+    // Fetching on mount is a one-shot lookup, not a subscription to external state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    load();
   }, []);
 
   return (
@@ -108,7 +118,9 @@ export default function CustomerDashboardPage() {
             View All
           </Link>
         </div>
-        {isLoading ? (
+        {error ? (
+          <ErrorState message={error} onRetry={load} />
+        ) : isLoading ? (
           <Skeleton className="h-32 w-full" />
         ) : orders.length === 0 ? (
           <EmptyState icon={<Package className="h-8 w-8" aria-hidden />} title="No orders yet" />

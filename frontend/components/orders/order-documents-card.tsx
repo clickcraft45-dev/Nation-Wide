@@ -70,7 +70,7 @@ export function OrderDocumentsCard({
       <CardContent className="space-y-3 text-sm">
         {invoices.length === 0 && receipts.length === 0 && (
           <p className="text-muted-foreground">
-            Nothing issued for this order yet — an invoice and receipt are raised when the payment
+            Nothing issued for this order yet. An invoice and receipt are raised when the payment
             is recorded.
           </p>
         )}

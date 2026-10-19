@@ -39,7 +39,7 @@ export function RefundDialog({
           title="Record a refund"
           description={`Order ${order.id.slice(0, 8)}${
             order.paidAmount != null
-              ? ` — ₹${order.paidAmount.toLocaleString("en-IN")} was paid`
+              ? `: ₹${order.paidAmount.toLocaleString("en-IN")} was paid`
               : ""
           }`}
         >

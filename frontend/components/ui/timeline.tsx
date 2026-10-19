@@ -59,7 +59,7 @@ export function Timeline({ events, className }: { events: TimelineEvent[]; class
               </p>
               <p className="mt-0.5 text-xs text-muted-foreground">
                 {event.timestamp}
-                {event.location ? <> — {event.location}</> : null}
+                {event.location ? <>: {event.location}</> : null}
               </p>
               {event.detail && (
                 <p className="mt-0.5 font-mono text-xs text-muted-foreground">{event.detail}</p>

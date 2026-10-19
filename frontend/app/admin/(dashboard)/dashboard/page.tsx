@@ -378,7 +378,7 @@ export default function AdminDashboardHomePage() {
                   {ordersTrend.reduce((sum, p) => sum + Number(p.orders) + Number(p.delivered), 0)}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  Orders placed, {formatIsoLong(from)} – {formatIsoLong(to)}
+                  Orders placed, {formatIsoLong(from)} to {formatIsoLong(to)}
                 </p>
               </div>
             </CardHeader>

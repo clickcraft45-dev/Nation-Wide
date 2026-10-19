@@ -205,7 +205,7 @@ export default function AdminB2bLinksPage() {
                   {!link.revokedAt && (
                     <ConfirmDialog
                       title={`Revoke "${link.label}"?`}
-                      description={`${link.customerName} can no longer order through this link. It cannot be un-revoked — issue a new one instead.`}
+                      description={`${link.customerName} can no longer order through this link. It cannot be un-revoked. Issue a new one instead.`}
                       confirmLabel="Revoke"
                       variant="danger"
                       onConfirm={() => revoke(link)}
@@ -363,7 +363,7 @@ function GenerateLinkDialog({ onCreated }: { onCreated: () => void }) {
           title={created ? "Link generated" : "Generate a B2B link"}
           description={
             created
-              ? "Copy it now — it is stored as a hash and cannot be shown again."
+              ? "Copy it now: it is stored as a hash and cannot be shown again."
               : "Pick the business and say what the link is for."
           }
         >
@@ -384,7 +384,7 @@ function GenerateLinkDialog({ onCreated }: { onCreated: () => void }) {
               <p className="text-xs text-muted-foreground">
                 {created.emailedTo
                   ? `Emailed to ${created.emailedTo}. `
-                  : "No email on file for this business, so nothing was sent — copy it across yourself. "}
+                  : "No email on file for this business, so nothing was sent. Copy it across yourself. "}
                 Anyone with this URL can request pickups billed to {customer?.name}. Revoke it from
                 the list if it goes astray.
               </p>
@@ -505,7 +505,7 @@ function GenerateLinkDialog({ onCreated }: { onCreated: () => void }) {
                   />
                 </div>
                 <p className="text-xs text-muted-foreground sm:col-span-2">
-                  Several links per business is fine — one team&apos;s can be revoked without
+                  Several links per business is fine. One team&apos;s can be revoked without
                   cutting off the rest, which is easier when you know who holds which.
                 </p>
               </div>

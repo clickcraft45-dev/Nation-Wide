@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FALLBACK_DIAL_COUNTRIES, fromE164, toE164 } from "./dial-codes";
+import { DIAL_COUNTRIES, fromE164, toE164 } from "./dial-codes";
 
 describe("toE164", () => {
   it("joins the dial code to the national digits", () => {
@@ -18,7 +18,7 @@ describe("toE164", () => {
 
 describe("fromE164", () => {
   it("splits a stored number back into country and national parts", () => {
-    expect(fromE164("+919876543210", FALLBACK_DIAL_COUNTRIES)).toEqual({
+    expect(fromE164("+919876543210", DIAL_COUNTRIES)).toEqual({
       countryCode: "IN",
       nationalNumber: "9876543210",
     });
@@ -26,17 +26,17 @@ describe("fromE164", () => {
 
   it("prefers the longest matching dial code", () => {
     // +971 must not be matched as +9 or +97 by an earlier entry in the list.
-    expect(fromE164("+971501234567", FALLBACK_DIAL_COUNTRIES).countryCode).toBe("AE");
+    expect(fromE164("+971501234567", DIAL_COUNTRIES).countryCode).toBe("AE");
   });
 
   it("keeps an unrecognised number visible instead of blanking it", () => {
-    expect(fromE164("+99912345", FALLBACK_DIAL_COUNTRIES)).toEqual({
+    expect(fromE164("+99912345", DIAL_COUNTRIES)).toEqual({
       countryCode: "IN",
       nationalNumber: "99912345",
     });
   });
 
   it("handles a legacy value stored without a plus", () => {
-    expect(fromE164("9876543210", FALLBACK_DIAL_COUNTRIES).nationalNumber).toBe("9876543210");
+    expect(fromE164("9876543210", DIAL_COUNTRIES).nationalNumber).toBe("9876543210");
   });
 });

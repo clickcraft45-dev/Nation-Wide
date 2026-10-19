@@ -6,6 +6,7 @@ import type { OrderDto, CustomerDto, ShippingProviderDto } from "@nationwide/sha
 import { apiClient } from "@/lib/api-client";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ErrorState } from "@/components/ui/page-state";
 import { Label } from "@/components/ui/input";
 import { DateField } from "@/components/ui/date-field";
 import { Calendar, addDaysIso, fromIso, formatIsoLong, todayIso } from "@/components/ui/calendar";
@@ -34,13 +35,16 @@ export default function AdminReportsPage() {
   const [customers, setCustomers] = useState<CustomerDto[]>([]);
   const [providers, setProviders] = useState<ShippingProviderDto[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [from, setFrom] = useState(() => addDaysIso(todayIso(), -6));
   const [to, setTo] = useState(todayIso);
   const [day, setDay] = useState(todayIso);
 
   // Orders are fetched unfiltered on purpose: the calendar below plots volume for every day on
   // record, not just the report range, and the day picker can land outside it.
-  useEffect(() => {
+  const load = () => {
+    setIsLoading(true);
+    setError(null);
     Promise.all([
       apiClient.get<OrderDto[]>("/orders"),
       apiClient.get<ShippingProviderDto[]>("/shipping-providers"),
@@ -49,7 +53,14 @@ export default function AdminReportsPage() {
         setOrders(o);
         setProviders(p);
       })
+      .catch(() => setError("Failed to load report data."))
       .finally(() => setIsLoading(false));
+  };
+
+  useEffect(() => {
+    // Fetching on mount is a one-shot lookup, not a subscription to external state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    load();
   }, []);
 
   // Customers, by contrast, are only ever counted within the range — so the range is a query,
@@ -140,7 +151,7 @@ export default function AdminReportsPage() {
     .reduce((sum, o) => sum + (o.paidAmount ?? 0), 0);
   const dayDelivered = dayOrders.filter((o) => o.shipments[0]?.currentStatus === "DELIVERED").length;
 
-  const rangeLabel = `${formatIsoLong(from)} — ${formatIsoLong(to)}`;
+  const rangeLabel = `${formatIsoLong(from)} to ${formatIsoLong(to)}`;
 
   return (
     <div className="space-y-6">
@@ -182,6 +193,8 @@ export default function AdminReportsPage() {
           </div>
         </div>
       </div>
+
+      {error && <ErrorState message={error} onRetry={load} />}
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard icon={CalendarDays} label="Orders in Range" value={rangeOrders.length} isLoading={isLoading} />

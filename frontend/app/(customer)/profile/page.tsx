@@ -119,7 +119,7 @@ export default function CustomerProfilePage() {
             </CardHeader>
             <CardContent className="space-y-3">
               <p className="text-sm text-muted-foreground">
-                Put NationWide on your Home Screen to book pickups and track shipments in one tap —
+                Put NationWide on your Home Screen to book pickups and track shipments in one tap,
                 on iPhone, Android or desktop.
               </p>
               <InstallAppButton className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />

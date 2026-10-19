@@ -113,7 +113,7 @@ export default function PartnerMapPage() {
 
       {unlocated > 0 && (
         <p className="text-xs text-muted-foreground">
-          {unlocated} active pickup(s) have no map pin, so they can&apos;t show here — find them
+          {unlocated} active pickup(s) have no map pin, so they can&apos;t show here. Find them
           under{" "}
           <Link href="/partner/requests" className="font-medium text-primary hover:underline">
             Requests

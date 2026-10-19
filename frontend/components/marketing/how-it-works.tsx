@@ -90,7 +90,7 @@ export function MarketingHowItWorks() {
       <div className="mx-auto max-w-6xl px-6">
         <SectionHeading
           title="Shipping made simple"
-          description="From quote to delivery — here's the complete journey."
+          description="From quote to delivery, here's the complete journey."
         />
 
         {/* The network at a glance, before the step-by-step below spells the same journey out. */}

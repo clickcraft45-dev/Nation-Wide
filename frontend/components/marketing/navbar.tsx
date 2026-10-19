@@ -59,18 +59,18 @@ export function MarketingNavbar() {
         )}
       >
         <div className="mx-auto flex h-16 max-w-6xl items-center gap-6 px-6">
-          <Link href="/" className="flex items-center gap-2">
+          <Link href="/" className="flex shrink-0 items-center gap-2">
             <Logo variant="horizontal" size="sm" />
           </Link>
 
-          <nav aria-label="Main" className="hidden flex-1 items-center gap-1 lg:flex">
+          <nav aria-label="Main" className="hidden flex-1 items-center gap-1 xl:flex">
             {NAV_LINKS.map((link) => (
               <Link
                 key={link.href}
                 href={link.href}
                 aria-current={pathname === link.href ? "page" : undefined}
                 className={cn(
-                  "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                  "whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
                   pathname === link.href
                     ? "bg-muted text-foreground"
                     : "text-muted-foreground hover:bg-muted hover:text-foreground",
@@ -81,7 +81,7 @@ export function MarketingNavbar() {
             ))}
           </nav>
 
-          <div className="ml-auto hidden items-center gap-3 lg:flex">
+          <div className="ml-auto hidden items-center gap-3 xl:flex">
             <Button variant="secondary" size="sm" onClick={() => gate("/quote")}>
               Get a Quote
             </Button>
@@ -100,14 +100,14 @@ export function MarketingNavbar() {
             onClick={() => setMobileOpen((v) => !v)}
             aria-label={mobileOpen ? "Close menu" : "Open menu"}
             aria-expanded={mobileOpen}
-            className="-mr-2.5 ml-auto flex h-11 w-11 items-center justify-center text-foreground lg:hidden"
+            className="-mr-2.5 ml-auto flex h-11 w-11 items-center justify-center text-foreground xl:hidden"
           >
             {mobileOpen ? <X className="h-5 w-5" aria-hidden /> : <Menu className="h-5 w-5" aria-hidden />}
           </button>
         </div>
 
         {mobileOpen && (
-          <div className="border-t border-border bg-card/95 px-6 py-4 backdrop-blur-xl lg:hidden">
+          <div className="border-t border-border bg-card/95 px-6 py-4 backdrop-blur-xl xl:hidden">
             <nav className="flex flex-col gap-1">
               {NAV_LINKS.map((link) => (
                 <Link

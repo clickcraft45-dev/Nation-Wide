@@ -90,7 +90,7 @@ export function MarketingServices() {
         <SectionHeading
           eyebrow="What we do"
           title="Logistics solutions built around your shipment"
-          description="Whatever you're sending, wherever it's going — we've got a service built for it."
+          description="Whatever you're sending, wherever it's going: we've got a service built for it."
         />
 
         {/* One column on a phone, each card rising in as it scrolls into view — one by one. It used to

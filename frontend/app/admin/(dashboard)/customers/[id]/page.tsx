@@ -157,7 +157,7 @@ export default function AdminCustomerProfilePage() {
               />
               <ConfirmDialog
                 title={`Delete ${customer.name}?`}
-                description="Permanent, and only possible while they have no orders or documents at all — the server refuses otherwise and tells you to deactivate instead."
+                description="Permanent, and only possible while they have no orders or documents at all. The server refuses otherwise and tells you to deactivate instead."
                 confirmLabel="Delete customer"
                 variant="danger"
                 onConfirm={remove}
@@ -250,7 +250,7 @@ export default function AdminCustomerProfilePage() {
                     >
                       <span>
                         {order.id.slice(0, 8)}
-                        {order.paidAmount != null ? ` — ₹${order.paidAmount.toLocaleString("en-IN")}` : ""}
+                        {order.paidAmount != null ? `: ₹${order.paidAmount.toLocaleString("en-IN")}` : ""}
                       </span>
                       <PaymentStatusBadge status={order.paymentStatus} />
                     </div>

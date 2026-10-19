@@ -67,8 +67,9 @@ export default function GetQuotePage() {
     apiClient
       .get<CountryDto[]>("/countries")
       .then(setCountries)
+      .catch(() => showToast({ variant: "error", title: "Could not load countries", description: "Refresh the page to try again." }))
       .finally(() => setCountriesLoading(false));
-  }, []);
+  }, [showToast]);
 
   function handleDestinationContinue(country: CountryDto) {
     // Only a different country invalidates what was entered after it.
@@ -188,11 +189,11 @@ export default function GetQuotePage() {
             router.push(`/pickup-request/${quote.id}`);
             return;
           }
-          showToast({ variant: "success", title: "Quote confirmed — your shipment request has been submitted" });
+          showToast({ variant: "success", title: "Quote confirmed: your shipment request has been submitted" });
         } catch {
           showToast({
             variant: "error",
-            title: "We couldn't confirm your selection automatically — please select again.",
+            title: "We couldn't confirm your selection automatically. Please select again.",
           });
         }
         router.push(`/quotes/${quote.id}`);
@@ -223,7 +224,7 @@ export default function GetQuotePage() {
         router.push(`/pickup-request/${createdQuoteId}`);
         return;
       }
-      showToast({ variant: "success", title: "Quote confirmed — your shipment request has been submitted" });
+      showToast({ variant: "success", title: "Quote confirmed: your shipment request has been submitted" });
       router.push(`/quotes/${createdQuoteId}`);
     } catch {
       showToast({

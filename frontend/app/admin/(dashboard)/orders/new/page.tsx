@@ -43,9 +43,9 @@ import {
 } from "@/components/shipment/shipment-card";
 
 const TIME_SLOTS: { value: PickupTimeSlot; label: string }[] = [
-  { value: "09:00-12:00", label: "9:00 AM – 12:00 PM" },
-  { value: "12:00-15:00", label: "12:00 PM – 3:00 PM" },
-  { value: "15:00-18:00", label: "3:00 PM – 6:00 PM" },
+  { value: "09:00-12:00", label: "9:00 AM - 12:00 PM" },
+  { value: "12:00-15:00", label: "12:00 PM - 3:00 PM" },
+  { value: "15:00-18:00", label: "3:00 PM - 6:00 PM" },
 ];
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
@@ -124,9 +124,13 @@ export default function AdminNewOrderPage() {
     apiClient
       .get<CustomerDto[]>("/customers")
       .then(setCustomers)
+      .catch(() => showToast({ variant: "error", title: "Could not load customers", description: "Refresh the page to try again." }))
       .finally(() => setCustomersLoading(false));
-    apiClient.get<CountryDto[]>("/countries").then((all) => setCountries(all.filter((c) => c.isActive)));
-  }, []);
+    apiClient
+      .get<CountryDto[]>("/countries")
+      .then((all) => setCountries(all.filter((c) => c.isActive)))
+      .catch(() => showToast({ variant: "error", title: "Could not load countries", description: "Refresh the page to try again." }));
+  }, [showToast]);
 
   const filteredCustomers = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -217,7 +221,7 @@ export default function AdminNewOrderPage() {
         setPickupLocation({ lat: res.latitude, lng: res.longitude });
         setLinkNote(`Pin set from the link: ${res.latitude.toFixed(6)}, ${res.longitude.toFixed(6)}`);
       } else {
-        setLinkNote("No coordinates in this link — the partner will open the link itself to navigate.");
+        setLinkNote("No coordinates in this link. The partner will open the link itself to navigate.");
       }
     } catch {
       setLinkNote("Couldn't read that link right now. It will still be saved for the partner.");
@@ -495,8 +499,8 @@ export default function AdminNewOrderPage() {
                     {r.status === "BOOKED"
                       ? `${r.carrier ?? "Manually priced"} · ${r.currency} ${Math.round(
                           r.price ?? 0,
-                        ).toLocaleString("en-IN")} — assigned to the partner.`
-                      : "No rate covers this route and no price was given — price it from Quote Requests."}
+                        ).toLocaleString("en-IN")}: assigned to the partner.`
+                      : "No rate covers this route and no price was given. Price it from Quote Requests."}
                   </p>
                 </div>
                 {r.pickupRequestId && (

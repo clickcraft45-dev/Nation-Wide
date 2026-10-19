@@ -6,7 +6,7 @@ import { ImageResponse } from "next/og";
 //
 // Satori (what next/og renders with) supports a flexbox subset of CSS and inline styles only —
 // no Tailwind classes, no CSS variables — hence the literal brand hexes below.
-export const alt = "NationWide Logistics — Delivering trust worldwide";
+export const alt = "NationWide Logistics: Delivering trust worldwide";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 

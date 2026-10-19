@@ -63,7 +63,7 @@ const TABS: {
     key: "new",
     label: "New Requests",
     statuses: ["SUBMITTED", "NEEDS_MANUAL_REVIEW", "RATED"],
-    hint: "Requests waiting on a price — review and send a quotation.",
+    hint: "Requests waiting on a price. Review and send a quotation.",
     filterLabel: "Filter new requests",
     filters: [
       { value: "", label: "All new requests" },
@@ -82,7 +82,7 @@ const TABS: {
     key: "sent",
     label: "Quotation Sent",
     statuses: ["QUOTED"],
-    hint: "Priced and sent — waiting for the customer to accept or decline.",
+    hint: "Priced and sent: waiting for the customer to accept or decline.",
     filterLabel: "Filter sent quotations",
     filters: [
       { value: "", label: "Any time" },
@@ -112,7 +112,7 @@ const TABS: {
     key: "orders",
     label: "Orders",
     statuses: ["ACCEPTED"],
-    hint: "Pickup done — these are real orders now.",
+    hint: "Pickup done: these are real orders now.",
     filterLabel: "Filter orders",
     filters: [
       { value: "", label: "All time" },
@@ -200,7 +200,7 @@ export default function AdminQuotesPage() {
         currency,
         internalNotes: notes || undefined,
       });
-      showToast({ variant: "success", title: "Quotation sent — moved to Quotation Sent" });
+      showToast({ variant: "success", title: "Quotation sent: moved to Quotation Sent" });
       load();
     } catch {
       showToast({ variant: "error", title: "Couldn't save the quote. Please try again." });
@@ -210,7 +210,7 @@ export default function AdminQuotesPage() {
   async function handleReject(id: string, reason: string) {
     try {
       await apiClient.post(`/admin/quotes/${id}/reject`, { reason });
-      showToast({ variant: "success", title: "Quote rejected — moved to Declined" });
+      showToast({ variant: "success", title: "Quote rejected: moved to Declined" });
       load();
     } catch {
       showToast({ variant: "error", title: "Couldn't reject the quote. Please try again." });

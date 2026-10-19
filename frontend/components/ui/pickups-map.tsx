@@ -231,7 +231,7 @@ export function PickupsMap({
       )}
       {trackMe && locationDenied && (
         <p className="absolute left-3 top-3 rounded-md bg-card/95 px-2 py-1 text-xs text-muted-foreground shadow">
-          Location is off — turn it on to see yourself on the map.
+          Location is off: turn it on to see yourself on the map.
         </p>
       )}
     </div>

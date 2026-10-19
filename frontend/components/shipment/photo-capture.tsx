@@ -36,7 +36,7 @@ export function PhotoCapture({
     e.target.value = ""; // picking the same file again must still fire
     if (!file) return;
     if (file.size > 10 * 1024 * 1024) {
-      setError("That photo is over 10 MB — retake it at a lower resolution.");
+      setError("That photo is over 10 MB, retake it at a lower resolution.");
       return;
     }
     setError(null);
