@@ -64,7 +64,7 @@ describe('Quotes (e2e)', () => {
   async function signToken(
     sub: string,
     email: string,
-    role: 'CUSTOMER' | 'ADMIN' | 'ADMIN',
+    role: 'CUSTOMER' | 'ADMIN',
   ) {
     return jwtService.signAsync(
       { sub, email, role },

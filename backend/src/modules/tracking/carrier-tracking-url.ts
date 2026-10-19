@@ -9,7 +9,8 @@ const TRACKING_PAGES: Record<string, (awb: string) => string> = {
   FEDEX: (awb) => `https://www.fedex.com/fedextrack/?trknbr=${awb}`,
   UPS: (awb) => `https://www.ups.com/track?loc=en_IN&tracknum=${awb}`,
   DPD: (awb) => `https://www.dpd.co.uk/apps/tracking/?reference=${awb}`,
-  ARAMEX: (awb) => `https://www.aramex.com/us/en/track/results?ShipmentNumber=${awb}`,
+  ARAMEX: (awb) =>
+    `https://www.aramex.com/us/en/track/results?ShipmentNumber=${awb}`,
 };
 
 /** null for a carrier with no public tracking page — resellers like ICL have none. */

@@ -178,7 +178,9 @@ describe('InvoicesService', () => {
       prisma.invoice.findUnique.mockResolvedValue({
         ...issued,
         pdfPath: null,
-        customLines: [{ awbNumber: '6003402616', amount: 1103.76, fsc: 396.65 }],
+        customLines: [
+          { awbNumber: '6003402616', amount: 1103.76, fsc: 396.65 },
+        ],
       });
 
       await service.readPdf('inv-1');
@@ -186,7 +188,9 @@ describe('InvoicesService', () => {
       expect(invoicePdf.render).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({
-          customLines: [{ awbNumber: '6003402616', amount: 1103.76, fsc: 396.65 }],
+          customLines: [
+            { awbNumber: '6003402616', amount: 1103.76, fsc: 396.65 },
+          ],
         }),
         expect.anything(),
       );

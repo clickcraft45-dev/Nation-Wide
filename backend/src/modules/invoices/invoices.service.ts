@@ -107,8 +107,11 @@ export class InvoicesService {
     actorId: string,
     orderIds?: string[],
   ): Promise<{ invoice: Invoice; skipped: { orderId: string }[] }> {
-    const { customer, billable: candidates, skipped } =
-      await this.collectConsolidatable(customerId, from, to);
+    const {
+      customer,
+      billable: candidates,
+      skipped,
+    } = await this.collectConsolidatable(customerId, from, to);
     const settings = await this.requireCompleteSettings();
 
     // An explicit selection bills only the rows the admin ticked in the preview. Without one the
@@ -322,7 +325,13 @@ export class InvoicesService {
     from: Date,
     to: Date,
   ): Promise<{
-    customer: { id: string; name: string; phone: string; gstin: string | null; address: string | null };
+    customer: {
+      id: string;
+      name: string;
+      phone: string;
+      gstin: string | null;
+      address: string | null;
+    };
     billable: {
       order: OrderForInvoice;
       breakdown: NonNullable<ReturnType<typeof resolveChargedBreakdown>>;
@@ -351,8 +360,11 @@ export class InvoicesService {
       ...ORDER_FOR_INVOICE,
     });
 
-    const skipped: { orderId: string; order: OrderForInvoice; reason: string }[] =
-      [];
+    const skipped: {
+      orderId: string;
+      order: OrderForInvoice;
+      reason: string;
+    }[] = [];
     const billable: {
       order: OrderForInvoice;
       breakdown: NonNullable<ReturnType<typeof resolveChargedBreakdown>>;
@@ -721,10 +733,7 @@ export class InvoicesService {
     );
 
     // Never more than the bill itself — a generous coupon reduces the total to zero, never below.
-    const discount = Math.min(
-      order.discountAmount ?? 0,
-      breakdown.totalAmount,
-    );
+    const discount = Math.min(order.discountAmount ?? 0, breakdown.totalAmount);
 
     const invoiceDate = new Date();
     const financialYear = indianFinancialYear(invoiceDate);

@@ -93,7 +93,9 @@ export class CouponsService {
     });
     if (!coupon) throw new NotFoundException(`Unknown coupon code: ${code}`);
     if (!coupon.isActive) {
-      throw new BadRequestException(`Coupon ${coupon.code} is no longer active`);
+      throw new BadRequestException(
+        `Coupon ${coupon.code} is no longer active`,
+      );
     }
     if (coupon.expiresAt && coupon.expiresAt.getTime() < Date.now()) {
       throw new BadRequestException(`Coupon ${coupon.code} has expired`);

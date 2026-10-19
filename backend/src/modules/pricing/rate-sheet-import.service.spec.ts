@@ -85,8 +85,12 @@ describe('a provider picked by the admin', () => {
   });
 
   it('lets the toggle choose between the normal and the all-in sheet', () => {
-    expect(new Set(pick('SELF', false).tables.map((t) => t.sheet))).toEqual(new Set(['Plus GST']));
-    expect(new Set(pick('SELF', true).tables.map((t) => t.sheet))).toEqual(new Set(['AllIn']));
+    expect(new Set(pick('SELF', false).tables.map((t) => t.sheet))).toEqual(
+      new Set(['Plus GST']),
+    );
+    expect(new Set(pick('SELF', true).tables.map((t) => t.sheet))).toEqual(
+      new Set(['AllIn']),
+    );
   });
 
   it('says so when it has to guess which table is the provider', () => {
@@ -94,8 +98,14 @@ describe('a provider picked by the admin', () => {
   });
 
   it('compares the sheet with the live rates cell by cell', () => {
-    const plan = buildPlan(pick('UPS', false).tables, new CountryMatcher(COUNTRIES));
-    const zone1 = plan.providers.get('UPS')!.zones.get('zone 1')!.cards.get('PACKAGE')!;
+    const plan = buildPlan(
+      pick('UPS', false).tables,
+      new CountryMatcher(COUNTRIES),
+    );
+    const zone1 = plan.providers
+      .get('UPS')!
+      .zones.get('zone 1')!
+      .cards.get('PACKAGE')!;
     const first = zone1[0];
     const view = sheetView(
       { id: 'p', code: 'UPS', name: 'UPS' },
@@ -105,15 +115,32 @@ describe('a provider picked by the admin', () => {
           taxInclusive: false,
           zone: { name: 'Zone 1' },
           weightSlabs: [
-            { weightFromKg: first.weightFromKg, weightToKg: first.weightToKg, baseRate: first.rate - 1, rateType: first.rateType },
-            { weightFromKg: 900, weightToKg: 950, baseRate: 5, rateType: 'FLAT' },
+            {
+              weightFromKg: first.weightFromKg,
+              weightToKg: first.weightToKg,
+              baseRate: first.rate - 1,
+              rateType: first.rateType,
+            },
+            {
+              weightFromKg: 900,
+              weightToKg: 950,
+              baseRate: 5,
+              rateType: 'FLAT',
+            },
           ],
         },
         {
           shipmentType: 'PACKAGE',
           taxInclusive: false,
           zone: { name: 'Old zone' },
-          weightSlabs: [{ weightFromKg: 0, weightToKg: 0.5, baseRate: 700, rateType: 'FLAT' }],
+          weightSlabs: [
+            {
+              weightFromKg: 0,
+              weightToKg: 0.5,
+              baseRate: 700,
+              rateType: 'FLAT',
+            },
+          ],
         },
       ],
       { plan, allIn: false },
@@ -122,13 +149,31 @@ describe('a provider picked by the admin', () => {
     );
     const grid = view.grids.find((g) => g.shipmentType === 'PACKAGE')!;
     const col = grid.columns.indexOf('Zone 1');
-    const row = grid.rows.find((r) => r.fromKg === first.weightFromKg && r.toKg === first.weightToKg)!;
-    expect(row.cells[col]).toEqual({ old: first.rate - 1, new: first.rate, perKg: false, changed: true });
+    const row = grid.rows.find(
+      (r) => r.fromKg === first.weightFromKg && r.toKg === first.weightToKg,
+    )!;
+    expect(row.cells[col]).toEqual({
+      old: first.rate - 1,
+      new: first.rate,
+      perKg: false,
+      changed: true,
+    });
     // A band the new sheet no longer has goes; a zone it never mentions is kept as it is.
-    expect(grid.rows.find((r) => r.fromKg === 900)!.cells[col]).toMatchObject({ old: 5, new: null });
+    expect(grid.rows.find((r) => r.fromKg === 900)!.cells[col]).toMatchObject({
+      old: 5,
+      new: null,
+    });
     const kept = grid.columns.indexOf('Old zone');
-    expect(grid.rows[0].cells[kept]).toMatchObject({ old: 700, new: 700, changed: false });
-    expect(view.summary).toMatchObject({ changed: 1, removed: 1, unchanged: 1 });
+    expect(grid.rows[0].cells[kept]).toMatchObject({
+      old: 700,
+      new: 700,
+      changed: false,
+    });
+    expect(view.summary).toMatchObject({
+      changed: 1,
+      removed: 1,
+      unchanged: 1,
+    });
   });
 });
 
@@ -136,7 +181,10 @@ describe('a provider exported and uploaded back', () => {
   // Live rates as the import would have written them, exported, read back, re-planned.
   const roundTrip = (code: string) => {
     const matcher = new CountryMatcher(COUNTRIES);
-    const before = buildPlan(pickTables(tables, { code, name: code }, false).tables, matcher);
+    const before = buildPlan(
+      pickTables(tables, { code, name: code }, false).tables,
+      matcher,
+    );
     const provider = { id: 'p', code, name: code };
     const live = [...before.providers.get(code)!.zones.values()].flatMap((z) =>
       [...z.cards].map(([shipmentType, bands]) => ({
@@ -152,10 +200,16 @@ describe('a provider exported and uploaded back', () => {
       })),
     );
     const links = [...before.providers.get(code)!.zones.values()].flatMap((z) =>
-      [...z.countries.values()].map((c) => ({ country: c.name, code: c.code, zone: z.name })),
+      [...z.countries.values()].map((c) => ({
+        country: c.name,
+        code: c.code,
+        zone: z.name,
+      })),
     );
     const view = sheetView(provider, live, null, [], []);
-    const file = buildWorkbook([{ name: code, rows: exportRows(code, view.grids, links) }]);
+    const file = buildWorkbook([
+      { name: code, rows: exportRows(code, view.grids, links) },
+    ]);
     const back = listSheets(file).flatMap((sheet) =>
       detectRateTables(sheet, readSheetFromBuffer(file, sheet)),
     );
@@ -166,7 +220,10 @@ describe('a provider exported and uploaded back', () => {
   const cards = (plan: ReturnType<typeof buildPlan>, code: string) =>
     Object.fromEntries(
       [...plan.providers.get(code)!.zones.values()].flatMap((z) =>
-        [...z.cards].map(([t, bands]) => [`${z.name.toLowerCase()}|${t}`, bands]),
+        [...z.cards].map(([t, bands]) => [
+          `${z.name.toLowerCase()}|${t}`,
+          bands,
+        ]),
       ),
     );
   const zonesOf = (plan: ReturnType<typeof buildPlan>, code: string) =>
@@ -176,10 +233,13 @@ describe('a provider exported and uploaded back', () => {
       ),
     );
 
-  it.each(['UPS', 'DHL', 'SELF'])('%s comes back with the same bands and countries', (code) => {
-    const { before, after, warnings } = roundTrip(code);
-    expect(warnings).toEqual([]);
-    expect(cards(after, code)).toEqual(cards(before, code));
-    expect(zonesOf(after, code)).toEqual(zonesOf(before, code));
-  });
+  it.each(['UPS', 'DHL', 'SELF'])(
+    '%s comes back with the same bands and countries',
+    (code) => {
+      const { before, after, warnings } = roundTrip(code);
+      expect(warnings).toEqual([]);
+      expect(cards(after, code)).toEqual(cards(before, code));
+      expect(zonesOf(after, code)).toEqual(zonesOf(before, code));
+    },
+  );
 });

@@ -167,7 +167,11 @@ describe('PickupRequestsService', () => {
     };
     config = { get: jest.fn().mockReturnValue(undefined) };
     coupons = {
-      validate: jest.fn().mockResolvedValue({ id: 'coupon-1', code: 'SAVE100', discountAmount: 100 }),
+      validate: jest.fn().mockResolvedValue({
+        id: 'coupon-1',
+        code: 'SAVE100',
+        discountAmount: 100,
+      }),
       redeem: jest.fn().mockResolvedValue({ id: 'coupon-1', code: 'SAVE100' }),
     };
     service = new PickupRequestsService(
@@ -972,7 +976,10 @@ describe('PickupRequestsService', () => {
 
       expect(prisma.pickupRequest.update).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ verifiedWeightKg: 9, verifiedPrice: 14000 }),
+          data: expect.objectContaining({
+            verifiedWeightKg: 9,
+            verifiedPrice: 14000,
+          }),
         }),
       );
     });
@@ -1291,7 +1298,7 @@ describe('PickupRequestsService', () => {
           deferred: true,
           dueApprovedByAdminId: 'admin-1',
           dueNote: 'Regular customer, pays on Monday',
-        } as never,
+        },
         'partner-1',
       );
 
@@ -1319,7 +1326,7 @@ describe('PickupRequestsService', () => {
       await expect(
         service.collectPayment(
           'pr-1',
-          { deferred: true, dueApprovedByAdminId: 'admin-gone' } as never,
+          { deferred: true, dueApprovedByAdminId: 'admin-gone' },
           'partner-1',
         ),
       ).rejects.toThrow(BadRequestException);

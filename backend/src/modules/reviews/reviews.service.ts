@@ -141,7 +141,7 @@ export class ReviewsService {
       orderBy: { submittedAt: 'desc' },
       take: limit,
       include: { customer: { select: { name: true } } },
-    }) as unknown as Promise<Review[]>;
+    });
   }
 
   /** Admin moderation queue: everything submitted, approved or not. */
@@ -153,7 +153,7 @@ export class ReviewsService {
         customer: { select: { name: true } },
         shipment: { select: { internalTrackingNumber: true } },
       },
-    }) as unknown as Promise<Review[]>;
+    });
   }
 
   async setApproved(

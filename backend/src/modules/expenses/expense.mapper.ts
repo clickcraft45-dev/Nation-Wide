@@ -1,5 +1,5 @@
 import type { Expense } from '@prisma/client';
-import type { ExpenseDto, PaymentMethodCode } from '@nationwide/shared-types';
+import type { ExpenseDto } from '@nationwide/shared-types';
 
 type ExpenseWithRelations = Expense & {
   recordedBy?: { id: string; email: string; name?: string | null } | null;
@@ -24,7 +24,7 @@ export function toExpenseDto(expense: ExpenseWithRelations): ExpenseDto {
     categoryName: categoryLabel(expense.category),
     amount: expense.amount,
     currency: expense.currency,
-    paymentMethod: expense.paymentMethod as PaymentMethodCode,
+    paymentMethod: expense.paymentMethod,
     paidTo: expense.paidTo,
     description: expense.description,
     referenceNo: expense.referenceNo,

@@ -503,7 +503,10 @@ export class PickupRequestsService {
     });
     // name is nullable on AdminUser; an admin with none is still someone a partner has to be
     // able to point at, so they are listed by the address they sign in with.
-    return admins.map((admin) => ({ id: admin.id, name: admin.name ?? admin.email }));
+    return admins.map((admin) => ({
+      id: admin.id,
+      name: admin.name ?? admin.email,
+    }));
   }
 
   // Every active partner sees an unclaimed request until one takes it (see claim).
@@ -1059,7 +1062,12 @@ export class PickupRequestsService {
         recalculatedPrice === null ? null : recalculatedPrice - estimatedPrice,
       currency: pickupRequest.currency,
       changes: recalculated
-        ? explainPriceChange(pickupRequest, recalculated, dto.weightKg, dto.shipmentType)
+        ? explainPriceChange(
+            pickupRequest,
+            recalculated,
+            dto.weightKg,
+            dto.shipmentType,
+          )
         : [],
     };
   }
@@ -1520,34 +1528,35 @@ export class PickupRequestsService {
           couponId: pickupRequest.couponId,
           discountAmount: pickupRequest.discountAmount,
           ...(pickupRequest.paymentDeferredAt
-          ? {
-              paymentStatus: 'PENDING' as const,
-              dueAmount: finalPrice,
-              dueApprovedByAdminId: pickupRequest.paymentDueApprovedByAdminId,
-              paymentMarkedByAdminId: partnerId,
-            }
-          : pickupRequest.paymentDueApprovedByAdminId
             ? {
-                // Part-paid at the door: money was taken AND a remainder is owed, so the order
-                // carries both. Not PAID — the balance is still outstanding and has to show up
-                // in the customer's dues and on the office's books.
                 paymentStatus: 'PENDING' as const,
-                paymentMethod: pickupRequest.paymentMethod,
-                paidAmount: pickupRequest.collectedAmount,
-                paidAt: pickupRequest.paymentCollectedAt,
-                dueAmount: round2(
-                  finalPrice - (pickupRequest.collectedAmount ?? 0),
-                ),
+                dueAmount: finalPrice,
                 dueApprovedByAdminId: pickupRequest.paymentDueApprovedByAdminId,
                 paymentMarkedByAdminId: partnerId,
               }
-            : {
-                paymentStatus: 'PAID' as const,
-                paymentMethod: pickupRequest.paymentMethod,
-                paidAmount: pickupRequest.collectedAmount ?? finalPrice,
-                paidAt: pickupRequest.paymentCollectedAt,
-                paymentMarkedByAdminId: partnerId,
-              }),
+            : pickupRequest.paymentDueApprovedByAdminId
+              ? {
+                  // Part-paid at the door: money was taken AND a remainder is owed, so the order
+                  // carries both. Not PAID — the balance is still outstanding and has to show up
+                  // in the customer's dues and on the office's books.
+                  paymentStatus: 'PENDING' as const,
+                  paymentMethod: pickupRequest.paymentMethod,
+                  paidAmount: pickupRequest.collectedAmount,
+                  paidAt: pickupRequest.paymentCollectedAt,
+                  dueAmount: round2(
+                    finalPrice - (pickupRequest.collectedAmount ?? 0),
+                  ),
+                  dueApprovedByAdminId:
+                    pickupRequest.paymentDueApprovedByAdminId,
+                  paymentMarkedByAdminId: partnerId,
+                }
+              : {
+                  paymentStatus: 'PAID' as const,
+                  paymentMethod: pickupRequest.paymentMethod,
+                  paidAmount: pickupRequest.collectedAmount ?? finalPrice,
+                  paidAt: pickupRequest.paymentCollectedAt,
+                  paymentMarkedByAdminId: partnerId,
+                }),
         },
       }),
       this.prisma.quote.update({

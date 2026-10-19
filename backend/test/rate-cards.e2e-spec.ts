@@ -34,11 +34,7 @@ describe('Rate Cards (e2e)', () => {
   let countryId: string;
   let zoneId: string;
 
-  async function signToken(
-    sub: string,
-    email: string,
-    role: 'ADMIN' | 'ADMIN',
-  ) {
+  async function signToken(sub: string, email: string, role: 'ADMIN') {
     return jwtService.signAsync(
       { sub, email, role },
       {

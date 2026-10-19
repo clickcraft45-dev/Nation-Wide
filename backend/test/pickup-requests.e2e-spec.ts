@@ -65,7 +65,7 @@ describe('Pickup Requests (e2e)', () => {
   async function signToken(
     sub: string,
     email: string,
-    role: 'CUSTOMER' | 'ADMIN' | 'ADMIN' | 'PICKUP_PARTNER',
+    role: 'CUSTOMER' | 'ADMIN' | 'PICKUP_PARTNER',
   ) {
     return jwtService.signAsync(
       { sub, email, role },

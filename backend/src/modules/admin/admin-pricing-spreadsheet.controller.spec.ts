@@ -24,7 +24,9 @@ describe('AdminPricingSpreadsheetController downloads', () => {
       exportCountries: jest.fn().mockResolvedValue(workbook),
     };
     rateSheets = {
-      export: jest.fn().mockResolvedValue({ name: 'ups-rates', file: workbook }),
+      export: jest
+        .fn()
+        .mockResolvedValue({ name: 'ups-rates', file: workbook }),
     };
     res = { set: jest.fn() };
     controller = new AdminPricingSpreadsheetController(

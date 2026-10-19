@@ -380,7 +380,11 @@ export class OrdersService {
           dto.paymentStatus === 'REFUNDED' ? (dto.refundNote ?? null) : null,
         // A coupon belongs to the payment it discounted, so moving off PAID clears it. The
         // redemption already counted stays counted — it was used.
-        couponId: coupon ? coupon.id : dto.paymentStatus === 'PAID' ? undefined : null,
+        couponId: coupon
+          ? coupon.id
+          : dto.paymentStatus === 'PAID'
+            ? undefined
+            : null,
         discountAmount: coupon
           ? coupon.discountAmount
           : dto.paymentStatus === 'PAID'

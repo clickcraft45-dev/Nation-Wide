@@ -336,24 +336,30 @@ describe('OrdersService', () => {
     it.each([
       ['refunded', { refundedAt: { not: null } }],
       ['not-refunded', { refundedAt: null }],
-    ])('filters the cancelled view by refund state: %s', async (refund, expected) => {
-      prisma.order.findMany.mockResolvedValue([]);
+    ])(
+      'filters the cancelled view by refund state: %s',
+      async (refund, expected) => {
+        prisma.order.findMany.mockResolvedValue([]);
 
-      await service.findAll({ refund: refund as never });
+        await service.findAll({ refund: refund as never });
 
-      expect(whereOf()).toMatchObject(expected);
-    });
+        expect(whereOf()).toMatchObject(expected);
+      },
+    );
 
     it.each([
       ['returned', { returnedAt: { not: null } }],
       ['not-returned', { returnedAt: null }],
-    ])('filters by whether the parcel came back: %s', async (returned, expected) => {
-      prisma.order.findMany.mockResolvedValue([]);
+    ])(
+      'filters by whether the parcel came back: %s',
+      async (returned, expected) => {
+        prisma.order.findMany.mockResolvedValue([]);
 
-      await service.findAll({ returned: returned as never });
+        await service.findAll({ returned: returned as never });
 
-      expect(whereOf()).toMatchObject(expected);
-    });
+        expect(whereOf()).toMatchObject(expected);
+      },
+    );
 
     // Money and goods move independently: refunded-but-not-returned is the state staff chase.
     it('combines the two, because they answer different questions', async () => {

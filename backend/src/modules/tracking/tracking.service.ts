@@ -141,7 +141,11 @@ export class TrackingService {
         `Provider lookup failed for ${internalTrackingNumber} [correlationId=${correlationId}]`,
         error instanceof Error ? error.stack : String(error),
       );
-      return this.buildFallbackDto(internalTrackingNumber, details, shipment.id);
+      return this.buildFallbackDto(
+        internalTrackingNumber,
+        details,
+        shipment.id,
+      );
     }
 
     const dto = await this.buildDtoFromDb(

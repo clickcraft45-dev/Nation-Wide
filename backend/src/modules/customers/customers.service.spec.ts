@@ -94,7 +94,9 @@ describe('CustomersService', () => {
           email: 'sujith@example.com',
           consentSource: 'admin_b2b_link',
         }),
-      ).rejects.toThrow('A customer with email sujith@example.com already exists');
+      ).rejects.toThrow(
+        'A customer with email sujith@example.com already exists',
+      );
     });
 
     it('still names the phone when the phone is what clashes', async () => {

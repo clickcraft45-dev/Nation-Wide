@@ -56,7 +56,13 @@ export class RateSheetImportService {
    */
   async export(providerId: string): Promise<{ name: string; file: Buffer }> {
     const provider = await this.provider(providerId);
-    const view = sheetView(provider, await this.liveCards(provider.id), null, [], []);
+    const view = sheetView(
+      provider,
+      await this.liveCards(provider.id),
+      null,
+      [],
+      [],
+    );
     const links = await this.prisma.zoneCountry.findMany({
       where: { rateProviderId: provider.id },
       include: { zone: true, country: true },
@@ -294,8 +300,7 @@ export class RateSheetImportService {
     const provider = await this.prisma.rateProvider.findUnique({
       where: { id },
     });
-    if (!provider)
-      throw new NotFoundException('That provider does not exist.');
+    if (!provider) throw new NotFoundException('That provider does not exist.');
     return provider;
   }
 
@@ -469,7 +474,8 @@ export function exportRows(
     rows.push([]);
   }
   rows.push(['Country', 'Zone']);
-  for (const link of links) rows.push([`${link.country} (${link.code})`, link.zone]);
+  for (const link of links)
+    rows.push([`${link.country} (${link.code})`, link.zone]);
   return rows;
 }
 
@@ -534,7 +540,10 @@ export function sheetView(
     const ranges = new Map<string, { fromKg: number; toKg: number }>();
     for (const col of columns) {
       for (const r of [
-        ...col.live.map((s) => ({ fromKg: s.weightFromKg, toKg: s.weightToKg })),
+        ...col.live.map((s) => ({
+          fromKg: s.weightFromKg,
+          toKg: s.weightToKg,
+        })),
         ...(col.sheet ?? []).map((b) => ({
           fromKg: b.weightFromKg,
           toKg: b.weightToKg,
