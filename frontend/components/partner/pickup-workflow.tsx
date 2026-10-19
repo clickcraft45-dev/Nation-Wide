@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Check, MapPinned, Phone } from "lucide-react";
+import { ArrowLeft, CalendarPlus, Check, MapPinned, Phone } from "lucide-react";
 import {
   chargeableWeightKg,
   type PickupDocumentsDto,
@@ -32,7 +32,12 @@ import {
   type RecipientErrors,
   type RecipientForm,
 } from "@/components/quote/recipient-fields";
-import { isOpenRequest, mapsUrl, useClaimPickup } from "@/components/partner/pickup-card";
+import {
+  googleCalendarUrl,
+  isOpenRequest,
+  mapsUrl,
+  useClaimPickup,
+} from "@/components/partner/pickup-card";
 import {
   PackagesEditor,
   packagesFrom,
@@ -421,6 +426,7 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
   const isOpen = mode === "partner" && isOpenRequest(pickup);
   const atWarehouse = pickup.dropAtWarehouse;
   const canReject = !isTerminal && !isOpen;
+  const calendarUrl = mode === "partner" ? googleCalendarUrl(pickup) : null;
   const step: Step = !pickup.arrivedAt
     ? "arrived"
     : // A due settles the payment step as surely as cash does — the parcel moves on either way.
@@ -479,15 +485,28 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
                       {pickup.pickupAddressLine2 ? `, ${pickup.pickupAddressLine2}` : ""}, {pickup.pickupCity},{" "}
                       {pickup.pickupState} {pickup.pickupPostalCode}
                     </p>
-                    <a
-                      href={mapsUrl(pickup)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="mt-1 inline-flex items-center gap-1.5 text-sm font-medium text-primary"
-                    >
-                      <MapPinned className="h-3.5 w-3.5" aria-hidden />
-                      Navigate
-                    </a>
+                    <div className="mt-1 flex flex-wrap gap-x-5">
+                      <a
+                        href={mapsUrl(pickup)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-sm font-medium text-primary"
+                      >
+                        <MapPinned className="h-3.5 w-3.5" aria-hidden />
+                        Navigate
+                      </a>
+                      {calendarUrl && (
+                        <a
+                          href={calendarUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 text-sm font-medium text-primary"
+                        >
+                          <CalendarPlus className="h-3.5 w-3.5" aria-hidden />
+                          Add to Google Calendar
+                        </a>
+                      )}
+                    </div>
                     {pickup.pickupLatitude != null && pickup.pickupLongitude != null ? (
                       <p className="mt-1 text-xs text-muted-foreground">
                         Customer&apos;s pin: {pickup.pickupLatitude.toFixed(6)}, {pickup.pickupLongitude.toFixed(6)}

@@ -8,6 +8,8 @@ async function run() {
 
   const child = spawn('npm', ['run', 'start:dev', '--workspace=backend'], {
     stdio: 'inherit',
+    // npm is npm.cmd on Windows, which Node only spawns through a shell.
+    shell: process.platform === 'win32',
     env: { ...process.env, PORT: String(BACKEND_PORT) },
   });
 

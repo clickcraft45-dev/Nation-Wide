@@ -1,4 +1,4 @@
-import { Controller, Get, Param, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, UseGuards, Header } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import type { PincodeLookupDto } from '@nationwide/shared-types';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -14,6 +14,8 @@ export class PincodesController {
   // Stricter than the global 300/min: each keystroke past six digits is a potential call, and
   // this route proxies a third-party API we don't own.
   @Throttle({ default: { limit: 60, ttl: 60_000 } })
+  // A pincode's city and state never change.
+  @Header('Cache-Control', 'private, max-age=86400')
   @Get(':pincode')
   lookup(@Param('pincode') pincode: string): Promise<PincodeLookupDto> {
     return this.pincodesService.lookup(pincode);

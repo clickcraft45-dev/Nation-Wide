@@ -26,6 +26,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { JwtRefreshGuard } from '../../common/guards/jwt-refresh.guard';
 import { GoogleConfiguredGuard } from '../../common/guards/google-configured.guard';
 import { GoogleOAuthGuard } from '../../common/guards/google-oauth.guard';
+import { RequireTurnstile } from '../../common/guards/turnstile.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { GoogleProfile } from './strategies/google.strategy';
 import type {
@@ -47,6 +48,7 @@ export class AuthController {
   ) {}
 
   @Throttle(AUTH_THROTTLE)
+  @RequireTurnstile('signup')
   @Post('register')
   @HttpCode(HttpStatus.CREATED)
   async register(
@@ -76,6 +78,7 @@ export class AuthController {
    * same limit as login, since it triggers an outbound email per call.
    */
   @Throttle(AUTH_THROTTLE)
+  @RequireTurnstile('forgot_password')
   @Post('forgot-password')
   @HttpCode(HttpStatus.ACCEPTED)
   async forgotPassword(
@@ -135,6 +138,7 @@ export class AuthController {
   }
 
   @Throttle(AUTH_THROTTLE)
+  @RequireTurnstile('login')
   @Post('login')
   @HttpCode(HttpStatus.OK)
   async login(

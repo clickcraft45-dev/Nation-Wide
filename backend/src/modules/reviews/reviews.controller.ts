@@ -6,6 +6,7 @@ import {
   HttpStatus,
   Param,
   Post,
+  Header,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { ReviewsService } from './reviews.service';
@@ -20,6 +21,8 @@ export class ReviewsController {
   constructor(private readonly reviews: ReviewsService) {}
 
   /** Approved reviews for the marketing site. No token, no personal data beyond a first name. */
+  // Same published list for every visitor, so shared caches (CDN, proxy) may hold it too.
+  @Header('Cache-Control', 'public, max-age=600')
   @Get('reviews')
   async published() {
     const rows = await this.reviews.publishedReviews();

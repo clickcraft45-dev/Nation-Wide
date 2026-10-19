@@ -56,6 +56,16 @@ class EnvironmentVariables {
   @IsString()
   PUBLIC_FRONTEND_URL?: string;
 
+  // Cloudflare Turnstile on register, login and forgot-password (see TurnstileGuard). The check
+  // is off while the secret is unset.
+  @IsOptional()
+  @IsString()
+  TURNSTILE_SECRET?: string;
+
+  @IsOptional()
+  @IsString()
+  TURNSTILE_HOSTNAMES?: string;
+
   // The backend's own public origin, e.g. https://api.nationwidelogistics.co. Required only by
   // invoice delivery: Meta's servers fetch the attachment from a link we build, so this has to
   // be the externally-reachable origin, never localhost or an internal AWS DNS name.

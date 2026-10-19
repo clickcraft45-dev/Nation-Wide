@@ -1,4 +1,4 @@
-import { Controller, Get, Param } from '@nestjs/common';
+import { Controller, Get, Param, Header } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import type { TrackingResultDto } from '@nationwide/shared-types';
 import { TrackingService } from './tracking.service';
@@ -21,6 +21,9 @@ export class TrackingController {
   constructor(private readonly trackingService: TrackingService) {}
 
   @Throttle(TRACKING_THROTTLE)
+  // Inside the server-side cache window (TRACKING_CACHE_TTL_ACTIVE_SECONDS), so no fresher data
+  // is missed; it only stops repeat clicks re-hitting the API.
+  @Header('Cache-Control', 'private, max-age=60')
   @Get(':internalTrackingNumber')
   getStatus(
     @Param('internalTrackingNumber') internalTrackingNumber: string,

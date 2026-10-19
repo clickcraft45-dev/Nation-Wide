@@ -4,9 +4,11 @@ import { Clock, Mail, MapPin, Phone } from "lucide-react";
 import { MarketingNavbar } from "@/components/marketing/navbar";
 import { MarketingFooter } from "@/components/marketing/footer";
 import { SectionHeading } from "@/components/marketing/section-heading";
+import { AssetImage } from "@/components/marketing/asset-image";
 import { Card, CardContent } from "@/components/ui/card";
 import { buttonVariants } from "@/components/ui/button";
 import { CONTACT_EMAIL, CONTACT_PHONE } from "@/lib/constants/contact";
+import { SUPPORT_IMAGE } from "@/lib/constants/assets";
 import { REGISTERED_COMPANY } from "@nationwide/shared-types";
 
 export const metadata: Metadata = {
@@ -103,6 +105,13 @@ export default function ContactPage() {
             </div>
 
             <div className="space-y-4">
+              <div className="relative aspect-[3/2] overflow-hidden rounded-2xl">
+                <AssetImage
+                  src={SUPPORT_IMAGE.src}
+                  alt={SUPPORT_IMAGE.alt}
+                  sizes="(min-width: 1024px) 480px, 100vw"
+                />
+              </div>
               <Card>
                 <CardContent className="flex items-start gap-4 pt-5">
                   <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-red-tint text-brand-red">

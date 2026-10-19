@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Clock, MapPin, Navigation, Phone, Scale } from "lucide-react";
+import { CalendarPlus, Clock, MapPin, Navigation, Phone, Scale } from "lucide-react";
 import type { PickupRequestDto } from "@nationwide/shared-types";
 import { apiClient, errorMessage } from "@/lib/api-client";
+import { SITE_URL } from "@/lib/constants/site";
 import { PickupRequestStatusBadge } from "@/components/ui/status-badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
@@ -55,6 +56,49 @@ export function mapsUrl(pickup: PickupRequestDto): string {
   return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}`;
 }
 
+/**
+ * A Google Calendar "new event" link for the pickup slot, filled in so the partner only taps Save.
+ * No Google sign-in or API key: the template URL opens in the partner's own account. Null when
+ * there is nothing to schedule: not yet theirs, already finished, a warehouse drop-off, or no
+ * date and slot booked.
+ */
+export function googleCalendarUrl(pickup: PickupRequestDto): string | null {
+  const active = ["ASSIGNED", "SCHEDULED", "OUT_FOR_PICKUP"].includes(pickup.status);
+  if (!active || pickup.dropAtWarehouse || !pickup.pickupDate || !pickup.pickupTimeSlot) return null;
+
+  // "2026-10-20" + "09:00-12:00" -> 20261020T090000/20261020T120000, read as IST through ctz.
+  const day = pickup.pickupDate.slice(0, 10).replace(/-/g, "");
+  const [start, end] = pickup.pickupTimeSlot
+    .split("-")
+    .map((time) => `${day}T${time.replace(":", "")}00`);
+  const address = [
+    pickup.pickupAddressLine1,
+    pickup.pickupAddressLine2,
+    pickup.pickupCity,
+    pickup.pickupState,
+    pickup.pickupPostalCode,
+  ]
+    .filter(Boolean)
+    .join(", ");
+  const details = [
+    `Contact: ${pickup.pickupContactName}, ${pickup.pickupContactPhone}`,
+    pickup.pickupInstructions ? `Instructions: ${pickup.pickupInstructions}` : null,
+    `Open in NationWide: ${SITE_URL}/partner/pickups/${pickup.id}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const params = new URLSearchParams({
+    action: "TEMPLATE",
+    text: `NationWide pickup: ${pickup.pickupContactName}`,
+    dates: `${start}/${end}`,
+    ctz: "Asia/Kolkata",
+    location: address,
+    details,
+  });
+  return `https://calendar.google.com/calendar/render?${params.toString()}`;
+}
+
 /** Claims an open request; resolves to the updated pickup, or null when someone else got it first. */
 export function useClaimPickup() {
   const { showToast } = useToast();
@@ -91,13 +135,16 @@ export function PickupCard({ pickup, onClaimFailed }: { pickup: PickupRequestDto
   const href = `/partner/pickups/${pickup.id}`;
   const open = isOpenRequest(pickup);
   const pending = pendingStep(pickup);
+  const calendarUrl = googleCalendarUrl(pickup);
 
   function openDetail() {
     router.push(href);
   }
 
+  // 32px to look at, 44px to hit: the ::before reaches 6px past each edge, and the gap-3 between
+  // icons keeps neighbouring hit areas from overlapping.
   const iconLink =
-    "flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-info-bg text-primary";
+    "relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-info-bg text-primary before:absolute before:-inset-1.5 before:content-['']";
 
   return (
     <div
@@ -115,7 +162,7 @@ export function PickupCard({ pickup, onClaimFailed }: { pickup: PickupRequestDto
     >
       <div className="flex items-start justify-between gap-2">
         <p className="text-base font-semibold text-foreground">{pickup.pickupContactName}</p>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 items-center gap-3">
           <PickupRequestStatusBadge status={pickup.status} />
           {!pickup.dropAtWarehouse && (
             <a
@@ -127,6 +174,18 @@ export function PickupCard({ pickup, onClaimFailed }: { pickup: PickupRequestDto
               className={iconLink}
             >
               <Navigation className="h-4 w-4" aria-hidden />
+            </a>
+          )}
+          {calendarUrl && (
+            <a
+              href={calendarUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              aria-label={`Add the ${pickup.pickupContactName} pickup to Google Calendar`}
+              className={iconLink}
+            >
+              <CalendarPlus className="h-4 w-4" aria-hidden />
             </a>
           )}
           {/* Tap-to-call without opening the pickup — the partner is often mid-walk to the door. */}

@@ -25,6 +25,9 @@ const S3_ORIGIN =
 const CF_BEACON_SCRIPT = "https://static.cloudflareinsights.com";
 const CF_BEACON_REPORT = "https://cloudflareinsights.com";
 
+// Cloudflare Turnstile (components/ui/turnstile.tsx): its script, and the iframe the check runs in.
+const TURNSTILE = "https://challenges.cloudflare.com";
+
 const isDev = process.env.NODE_ENV !== "production";
 
 /**
@@ -63,7 +66,7 @@ const MAPS_CONNECT = "https://*.googleapis.com *.google.com https://*.gstatic.co
 const CSP = [
   "default-src 'self'",
   // Dev additionally needs 'unsafe-eval' for Turbopack's HMR runtime; production never gets it.
-  `script-src 'self' 'unsafe-inline' ${CF_BEACON_SCRIPT} ${MAPS_SCRIPT}${isDev ? " 'unsafe-eval'" : ""}`,
+  `script-src 'self' 'unsafe-inline' ${CF_BEACON_SCRIPT} ${TURNSTILE} ${MAPS_SCRIPT}${isDev ? " 'unsafe-eval'" : ""}`,
   // Tailwind/Radix ship some styling via inline <style>/style attributes at runtime. style-src is
   // a far lower-value target than script-src, so 'unsafe-inline' here is uncontroversial.
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
@@ -81,7 +84,7 @@ const CSP = [
   // The rate-card preview renders the generated PDF in an <iframe src="blob:...">. blob: is NOT
   // covered by default-src 'self' — without this the preview is blocked in production (and only
   // there, since nothing else embeds a blob), which is exactly how it failed.
-  "frame-src 'self' blob:",
+  `frame-src 'self' blob: ${TURNSTILE}`,
   "manifest-src 'self'",
   "object-src 'none'",
   "base-uri 'self'",

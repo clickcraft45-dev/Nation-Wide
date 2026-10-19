@@ -2,28 +2,47 @@
 // through this file rather than being hardcoded in components, so swapping in the final
 // photography/logos later is a one-line change per asset — no component or layout edits.
 //
-// The images here are hand-authored placeholders (see frontend/public/assets/) — swap the
-// path, and where the final asset is a photo the extension to .webp/.avif, once real assets are
-// supplied. PARTNER_NETWORKS at the bottom is not a placeholder; see its own note.
+// The photos are Unsplash-licensed stand-ins until NationWide has its own (sources noted on each
+// set). The world map is still a hand-authored placeholder. PARTNER_NETWORKS at the bottom is not
+// a placeholder; see its own note.
 
+// Service and page photography. Free under the Unsplash License (commercial use, no attribution
+// required), and like the hero set, chosen so no other carrier or retailer branding shows.
+// Sources:
+//   international  https://unsplash.com/photos/sWOvgOOFk1g
+//   express        https://unsplash.com/photos/clYlmCaQbzY
+//   pickup         https://unsplash.com/photos/MGaFENpDCsw
+//   business       https://unsplash.com/photos/ZwUnAP-NLac
+//   support        https://unsplash.com/photos/mHusyBu4bxM
+//   login          https://unsplash.com/photos/Su1gc1A63xE (the hero air photo, at panel size)
 export const SERVICE_IMAGES = {
   international: {
-    src: "/assets/images/service-international-placeholder.svg",
-    alt: "International shipping",
+    src: "/assets/images/service-international.webp",
+    alt: "A container port at night, cranes loading ships",
   },
   express: {
-    src: "/assets/images/service-express-placeholder.svg",
-    alt: "Express delivery",
+    src: "/assets/images/service-express.webp",
+    alt: "A delivery rider on a scooter moving through the city",
   },
   pickup: {
-    src: "/assets/images/service-pickup-placeholder.svg",
-    alt: "Pickup and door-to-door service",
+    src: "/assets/images/service-pickup.webp",
+    alt: "A parcel being packed on a desk, ready for collection",
   },
   business: {
-    src: "/assets/images/service-business-placeholder.svg",
-    alt: "Business shipping",
+    src: "/assets/images/service-business.webp",
+    alt: "Two people sorting a large batch of parcels",
   },
 } as const;
+
+export const SUPPORT_IMAGE = {
+  src: "/assets/images/contact-support.webp",
+  alt: "A support agent on a headset call",
+};
+
+export const LOGIN_IMAGE = {
+  src: "/assets/images/login-air-freight.webp",
+  alt: "",
+};
 
 // Hero photography, shown beside the copy on wide screens only. Free under the Unsplash License
 // (commercial use, no attribution required); chosen because none shows another carrier's or

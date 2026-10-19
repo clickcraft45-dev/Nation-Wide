@@ -18,6 +18,8 @@ async function run() {
 
   const child = spawn('npm', ['run', 'dev', '--workspace=frontend'], {
     stdio: 'inherit',
+    // npm is npm.cmd on Windows, which Node only spawns through a shell.
+    shell: process.platform === 'win32',
     env: {
       ...process.env,
       PORT: String(FRONTEND_PORT),

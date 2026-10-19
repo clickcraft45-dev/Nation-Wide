@@ -220,8 +220,8 @@ async function requestBlob(
 export const apiClient = {
   get: <T>(path: string) => request<T>(path),
   getWithHeaders: <T>(path: string) => requestWithHeaders<T>(path),
-  post: <T>(path: string, body: unknown) =>
-    request<T>(path, { method: "POST", body: JSON.stringify(body) }),
+  post: <T>(path: string, body: unknown, headers?: Record<string, string>) =>
+    request<T>(path, { method: "POST", body: JSON.stringify(body), headers }),
   patch: <T>(path: string, body: unknown) =>
     request<T>(path, { method: "PATCH", body: JSON.stringify(body) }),
   put: <T>(path: string, body: unknown) =>

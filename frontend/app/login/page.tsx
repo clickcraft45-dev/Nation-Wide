@@ -15,7 +15,9 @@ import { Logo } from "@/components/brand/logo";
 import { GoogleIcon } from "@/components/ui/google-icon";
 import { TextDivider } from "@/components/ui/divider";
 import { AssetImage } from "@/components/marketing/asset-image";
-import { WORLD_MAP_IMAGE } from "@/lib/constants/assets";
+import { LOGIN_IMAGE } from "@/lib/constants/assets";
+import { useTurnstile } from "@/components/ui/turnstile";
+import { writeSessionHint } from "@/lib/auth/session-hint";
 
 // Google sign-in never creates an account, so "no account" is the one outcome the visitor can
 // act on — it points at sign-up instead of leaving them retrying a button that keeps failing.
@@ -62,6 +64,7 @@ function LoginPageInner() {
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const currentYear = useCurrentYear();
+  const turnstile = useTurnstile("login");
 
   useEffect(() => {
     if (isLoading || !user) return;
@@ -99,9 +102,10 @@ function LoginPageInner() {
 
     setIsSubmitting(true);
     try {
-      await login(email, password);
+      await login(email, password, turnstile.headers);
       // Redirect happens in the effect above once `user` updates.
     } catch (err) {
+      turnstile.reset();
       if (err instanceof ApiError && err.status === 401) {
         setApiError("Incorrect email or password.");
       } else if (err instanceof ApiError && err.status === 429) {
@@ -119,6 +123,8 @@ function LoginPageInner() {
   // ?error= code rendered from GOOGLE_ERRORS above. If Google isn't configured, the backend's
   // GoogleConfiguredGuard answers 503 rather than a confusing "invalid_client" from Google.
   function handleGoogleLogin() {
+    // The OAuth round trip lands back on /login; this makes that load restore the new session.
+    writeSessionHint(true);
     // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- API_BASE_URL is the external backend origin, not an internal Next.js route.
     window.location.href = `${API_BASE_URL}/auth/google`;
   }
@@ -138,9 +144,9 @@ function LoginPageInner() {
           source design mobile is derived from. Fully absent below lg, so it costs mobile visitors
           nothing. */}
       <div className="relative hidden w-1/2 overflow-hidden bg-sidebar-bg lg:flex lg:flex-col lg:justify-between lg:p-12">
-        {/* Dotted world map, reusing the marketing world-map asset. */}
-        <AssetImage src={WORLD_MAP_IMAGE.src} alt="" className="object-contain opacity-25" />
-        <HeroBackground />
+        {/* Decorative photo under a near-black scrim, so the white copy keeps its contrast. */}
+        <AssetImage src={LOGIN_IMAGE.src} alt={LOGIN_IMAGE.alt} sizes="50vw" priority />
+        <div aria-hidden className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/80 to-black/60" />
         <Link href="/" className="relative z-10">
           <Logo variant="reverse" size="md" />
         </Link>
@@ -252,7 +258,15 @@ function LoginPageInner() {
               </div>
             )}
 
-            <Button type="submit" className="w-full" size="lg" isLoading={isSubmitting}>
+            {turnstile.element}
+
+            <Button
+              type="submit"
+              className="w-full"
+              size="lg"
+              isLoading={isSubmitting}
+              disabled={turnstile.pending}
+            >
               {isSubmitting ? "Signing in…" : "Sign in"}
             </Button>
           </form>
@@ -274,36 +288,5 @@ export default function LoginPage() {
     <Suspense fallback={null}>
       <LoginPageInner />
     </Suspense>
-  );
-}
-
-function HeroBackground() {
-  return (
-    <svg
-      className="absolute inset-0 h-full w-full opacity-40"
-      viewBox="0 0 600 800"
-      fill="none"
-      aria-hidden
-    >
-      <circle cx="500" cy="120" r="180" stroke="#1E88E5" strokeOpacity="0.35" strokeWidth="1" />
-      <circle cx="500" cy="120" r="260" stroke="#1E88E5" strokeOpacity="0.2" strokeWidth="1" />
-      <path
-        d="M-40 300 C 150 250, 250 400, 400 340 S 650 280, 700 380"
-        stroke="#4AA3EC"
-        strokeOpacity="0.35"
-        strokeWidth="1.5"
-      />
-      <path
-        d="M-40 500 C 120 450, 260 600, 420 520 S 620 460, 700 560"
-        stroke="#4AA3EC"
-        strokeOpacity="0.25"
-        strokeWidth="1.5"
-      />
-      <g opacity="0.6">
-        <circle cx="120" cy="620" r="3" fill="#7FC2F5" />
-        <circle cx="260" cy="560" r="3" fill="#7FC2F5" />
-        <circle cx="400" cy="620" r="3" fill="#7FC2F5" />
-      </g>
-    </svg>
   );
 }

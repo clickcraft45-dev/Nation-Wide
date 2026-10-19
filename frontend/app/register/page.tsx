@@ -12,6 +12,7 @@ import { Input, Label, FieldError } from "@/components/ui/input";
 import { PhoneInput } from "@/components/ui/phone-input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Logo } from "@/components/brand/logo";
+import { useTurnstile } from "@/components/ui/turnstile";
 
 interface FormState {
   name: string;
@@ -38,6 +39,7 @@ export default function RegisterPage() {
   const [errors, setErrors] = useState<Partial<FormState>>({});
   const [apiError, setApiError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const turnstile = useTurnstile("signup");
   // Customer is the default: it is the overwhelmingly common case, and the one that
   // actually creates an account here. Partner is an application, not a sign-up.
 
@@ -75,9 +77,10 @@ export default function RegisterPage() {
         phone: form.phone.trim(),
         email: form.email.trim(),
         password: form.password,
-      });
+      }, turnstile.headers);
       // Redirect happens in the effect above once `user` updates.
     } catch (err) {
+      turnstile.reset();
       // The server already words these for the user — a duplicate account, a password that is
       // too short, a phone that is not E.164. Showing its message beats guessing from a status
       // code, which is how "Something went wrong" ended up covering every real reason.
@@ -179,7 +182,15 @@ export default function RegisterPage() {
             </div>
           )}
 
-          <Button type="submit" className="w-full" size="lg" isLoading={isSubmitting}>
+          {turnstile.element}
+
+          <Button
+            type="submit"
+            className="w-full"
+            size="lg"
+            isLoading={isSubmitting}
+            disabled={turnstile.pending}
+          >
             {isSubmitting ? "Creating account…" : "Create account"}
           </Button>
         </form>

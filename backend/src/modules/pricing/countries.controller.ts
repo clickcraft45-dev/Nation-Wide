@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Controller, Get, UseGuards, Header } from '@nestjs/common';
 import type { CountryDto } from '@nationwide/shared-types';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CountriesService } from './countries.service';
@@ -11,6 +11,8 @@ import { toCountryDto } from './country.mapper';
 export class CountriesController {
   constructor(private readonly countriesService: CountriesService) {}
 
+  // Changes only when staff edit the country list; ten minutes of browser reuse is plenty fresh.
+  @Header('Cache-Control', 'private, max-age=600')
   @Get()
   async findAllActive(): Promise<CountryDto[]> {
     const countries = await this.countriesService.findAllActive();

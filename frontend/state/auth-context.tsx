@@ -9,8 +9,9 @@ import {
   type ReactNode,
 } from "react";
 import type { AuthUserDto, LoginResponseDto } from "@nationwide/shared-types";
-import { apiClient, setAccessToken, setUnauthorizedHandler } from "@/lib/api-client";
+import { ApiError, apiClient, setAccessToken, setUnauthorizedHandler } from "@/lib/api-client";
 import { decodeAccessToken } from "@/lib/auth/jwt";
+import { readSessionHint, writeSessionHint } from "@/lib/auth/session-hint";
 
 export interface RegisterInput {
   name: string;
@@ -22,8 +23,9 @@ export interface RegisterInput {
 interface AuthContextValue {
   user: AuthUserDto | null;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  register: (input: RegisterInput) => Promise<void>;
+  /** `headers` carries the Turnstile token from useTurnstile(). */
+  login: (email: string, password: string, headers?: Record<string, string>) => Promise<void>;
+  register: (input: RegisterInput, headers?: Record<string, string>) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -50,35 +52,52 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             }
           : null,
       );
+      writeSessionHint(true);
       return res.accessToken;
-    } catch {
+    } catch (err) {
       setAccessToken(null);
       setUser(null);
+      // Only a real refusal means signed out. A network blip must not mark a signed-in browser
+      // as signed out, or the next visit would skip restoring a session that still exists.
+      if (err instanceof ApiError) writeSessionHint(false);
       return null;
     }
   }, []);
 
   useEffect(() => {
     setUnauthorizedHandler(refresh);
-    // Restoring a session from the httpOnly refresh cookie on mount is inherently a one-shot
-    // async check, not a subscription — there's no external-system event to subscribe to here.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void refresh().finally(() => setIsLoading(false));
+    // A browser known to be signed out skips the call entirely (see lib/auth/session-hint.ts).
+    if (readSessionHint() === "0") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setIsLoading(false);
+    } else {
+      // Restoring a session from the httpOnly refresh cookie on mount is inherently a one-shot
+      // async check, not a subscription — there's no external-system event to subscribe to here.
+      void refresh().finally(() => setIsLoading(false));
+    }
     return () => setUnauthorizedHandler(null);
   }, [refresh]);
 
-  const login = useCallback(async (email: string, password: string) => {
-    const res = await apiClient.post<LoginResponseDto>("/auth/login", { email, password });
+  const login = useCallback(
+    async (email: string, password: string, headers?: Record<string, string>) => {
+      const res = await apiClient.post<LoginResponseDto>(
+        "/auth/login",
+        { email, password },
+        headers,
+      );
+      setAccessToken(res.accessToken);
+      setUser(res.user);
+      writeSessionHint(true);
+    },
+    [],
+  );
+
+  const register = useCallback(async (input: RegisterInput, headers?: Record<string, string>) => {
+    const res = await apiClient.post<LoginResponseDto>("/auth/register", input, headers);
     setAccessToken(res.accessToken);
     setUser(res.user);
+    writeSessionHint(true);
   }, []);
-
-  const register = useCallback(async (input: RegisterInput) => {
-    const res = await apiClient.post<LoginResponseDto>("/auth/register", input);
-    setAccessToken(res.accessToken);
-    setUser(res.user);
-  }, []);
-
 
   const logout = useCallback(async () => {
     try {
@@ -86,6 +105,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setAccessToken(null);
       setUser(null);
+      writeSessionHint(false);
     }
   }, []);
 

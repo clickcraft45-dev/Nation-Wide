@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Input, Label, FieldError } from "@/components/ui/input";
 import { Logo } from "@/components/brand/logo";
+import { useTurnstile } from "@/components/ui/turnstile";
 
 function ForgotPasswordForm() {
   // Carried over from the login page so nobody retypes the address they just tried.
@@ -16,6 +17,7 @@ function ForgotPasswordForm() {
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const turnstile = useTurnstile("forgot_password");
   const [sent, setSent] = useState(false);
 
   async function handleSubmit(e: FormEvent) {
@@ -28,12 +30,14 @@ function ForgotPasswordForm() {
     setFieldError(null);
     setIsSubmitting(true);
     try {
-      await apiClient.post("/auth/forgot-password", { email: email.trim() });
+      await apiClient.post("/auth/forgot-password", { email: email.trim() }, turnstile.headers);
       setSent(true);
     } catch (err) {
       setApiError(errorMessage(err, "Something went wrong. Please try again."));
     } finally {
       setIsSubmitting(false);
+      // The page stays mounted (it can be sent again), and a token is only accepted once.
+      turnstile.reset();
     }
   }
 
@@ -100,7 +104,15 @@ function ForgotPasswordForm() {
             </div>
           )}
 
-          <Button type="submit" className="w-full" size="lg" isLoading={isSubmitting}>
+          {turnstile.element}
+
+          <Button
+            type="submit"
+            className="w-full"
+            size="lg"
+            isLoading={isSubmitting}
+            disabled={turnstile.pending}
+          >
             {isSubmitting ? "Sending…" : "Send reset link"}
           </Button>
         </form>
