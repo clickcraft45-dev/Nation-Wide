@@ -25,6 +25,7 @@ import {
   Home,
   type LucideIcon,
   TicketPercent,
+  Megaphone,
 } from "lucide-react";
 import type { Role } from "@nationwide/shared-types";
 
@@ -122,6 +123,8 @@ export const ADMIN_NAV_GROUPS: NavGroup[] = [
       // Kept — not deleted — but relabeled and moved away from "Pickup Requests" so it reads as
       // a separate, secondary record rather than a duplicate of the active pickup workflow.
       { label: "Pickups (Legacy)", href: "/admin/pickups", icon: Truck },
+      // ADMIN-only, matching AdminAnnouncementsController: an offer is a public promise of money off.
+      { label: "Events & Offers", href: "/admin/announcements", icon: Megaphone, roles: ["ADMIN"] },
       { label: "Send Email", href: "/admin/mail", icon: Send },
       { label: "Send WhatsApp", href: "/admin/whatsapp", icon: MessageCircle, roles: ["ADMIN"] },
       { label: "Settings", href: "/admin/settings", icon: Settings },

@@ -63,8 +63,18 @@ export function MarketingFooter() {
                 </Link>
               </li>
               <li>
-                <Link href="/#contact" className={LINK}>
+                <Link href="/contact" className={LINK}>
                   Contact
+                </Link>
+              </li>
+              <li>
+                <Link href="/events" className={LINK}>
+                  Events and News
+                </Link>
+              </li>
+              <li>
+                <Link href="/offers" className={LINK}>
+                  Offers
                 </Link>
               </li>
             </ul>

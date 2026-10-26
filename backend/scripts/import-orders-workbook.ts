@@ -9,9 +9,6 @@
  * Idempotent: a row whose external tracking number already exists is skipped, so a re-run after a
  * partial failure imports only what is missing. --dry-run touches nothing and prints the summary,
  * which is the way to check a new spreadsheet before it reaches the database.
- *
- * Unlike scripts/import-nwseed-orders.ts (a one-off JSON recovery that skipped rows whose customer
- * did not already exist), this reads the workbook directly and creates what is missing.
  */
 import { randomBytes } from 'node:crypto';
 import { randomUUID } from 'node:crypto';

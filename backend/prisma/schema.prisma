@@ -1167,25 +1167,25 @@ model Invoice {
   sacCode            String @map("sac_code")
 
   // --- Amounts. Exactly one of (cgst+sgst) or igst is ever non-zero. ---
-  currency          String @default("INR")
-  taxableValue      Float  @map("taxable_value")
-  cgstRate          Float  @default(0) @map("cgst_rate")
-  cgstAmount        Float  @default(0) @map("cgst_amount")
-  sgstRate          Float  @default(0) @map("sgst_rate")
-  sgstAmount        Float  @default(0) @map("sgst_amount")
-  igstRate          Float  @default(0) @map("igst_rate")
-  igstAmount        Float  @default(0) @map("igst_amount")
-  totalTax          Float  @map("total_tax")
+  currency          String  @default("INR")
+  taxableValue      Float   @map("taxable_value")
+  cgstRate          Float   @default(0) @map("cgst_rate")
+  cgstAmount        Float   @default(0) @map("cgst_amount")
+  sgstRate          Float   @default(0) @map("sgst_rate")
+  sgstAmount        Float   @default(0) @map("sgst_amount")
+  igstRate          Float   @default(0) @map("igst_rate")
+  igstAmount        Float   @default(0) @map("igst_amount")
+  totalTax          Float   @map("total_tax")
   /// NationWide Cut and anything else added AFTER tax — the pricing engine never taxes it
   /// (pricing-engine.service.ts step 7), so it must sit outside taxableValue or the invoice
   /// would overstate the tax base.
-  nonTaxableCharges Float  @default(0) @map("non_taxable_charges")
+  nonTaxableCharges Float   @default(0) @map("non_taxable_charges")
   /// A coupon taken off AFTER tax, and the code it came from. The taxable value and the tax on
   /// it stay what the supply was worth; this comes off the payable total underneath. Frozen
   /// here because a coupon can be retired or re-priced after the document is issued.
-  discountAmount    Float  @default(0) @map("discount_amount")
+  discountAmount    Float   @default(0) @map("discount_amount")
   discountCode      String? @map("discount_code")
-  totalAmount       Float  @map("total_amount")
+  totalAmount       Float   @map("total_amount")
 
   /// Which record the breakdown came from — RATE_OPTION, PICKUP_VERIFICATION, or
   /// MANUAL_QUOTE_INCLUSIVE (back-derived from a staff-typed gross amount). Kept because the
@@ -1583,4 +1583,36 @@ model FuelSurchargeUpdate {
 
   @@index([rateProviderId, createdAt])
   @@map("fuel_surcharge_updates")
+}
+
+enum AnnouncementKind {
+  EVENT
+  OFFER
+}
+
+/// What the marketing site publishes besides its fixed pages: events (trade fairs, holiday
+/// closures, new lanes) under /events and sales under /offers. `isPublished` is the page toggle;
+/// `showBanner` puts it in the strip across the top of the public site while it is live.
+model Announcement {
+  id          String           @id @default(uuid())
+  kind        AnnouncementKind
+  title       String
+  /// URL segment for /events/<slug>. Unique across both kinds so one slug never means two things.
+  slug        String           @unique
+  summary     String
+  /// Plain text; blank lines separate paragraphs.
+  body        String?
+  location    String?
+  /// Offers: when the sale runs. Events: when the event happens. Null start = already started,
+  /// null end = open-ended.
+  startsAt    DateTime?        @map("starts_at")
+  endsAt      DateTime?        @map("ends_at")
+  couponCode  String?          @map("coupon_code")
+  isPublished Boolean          @default(false) @map("is_published")
+  showBanner  Boolean          @default(false) @map("show_banner")
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+
+  @@index([kind, isPublished])
+  @@map("announcements")
 }

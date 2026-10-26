@@ -19,3 +19,6 @@ backups/
 
 # SSH keys — never commit
 *.pem
+
+# Operations workbooks hold real customer names and phone numbers. Keep them local.
+docs/Untitled spreadsheet.xlsx

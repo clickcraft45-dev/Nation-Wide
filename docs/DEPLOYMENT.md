@@ -149,12 +149,12 @@ container would have stayed green throughout.
 
 ## Building the images
 
-Both apps are containerized. **Build context must be the monorepo root** — both Dockerfiles
-depend on `packages/shared-types`, which lives outside `apps/*`:
+The backend is containerized; the frontend runs on Cloudflare Workers (`npm run build:cf` /
+`npm run deploy:cf` in `frontend/`) and has no image. **Build context must be the monorepo root**,
+because the Dockerfile depends on `packages/shared-types`:
 
 ```bash
 docker build -f backend/Dockerfile -t nationwide-backend:latest .
-docker build -f frontend/Dockerfile -t nationwide-frontend:latest .
 ```
 
 Or use the provided `docker-compose.yml`, which builds the backend and wires it to Redis.
@@ -234,7 +234,7 @@ parallel. **Only the database decides the status code.** Redis is a cache that f
 "ok", redis: "error"}}` — the app is still serving every request correctly. A `503` means the
 database is unreachable. This matters: returning `503` for a dead cache made every probe wired to
 this endpoint kill and restart a healthy container, turning a cache blip into a crash loop. Alert
-on `status: "degraded"`, but never restart on it. Both Dockerfiles declare a `HEALTHCHECK` against this endpoint
+on `status: "degraded"`, but never restart on it. The backend Dockerfile declares a `HEALTHCHECK` against this endpoint
 (backend) and `/` (frontend) — point your orchestrator's readiness/liveness probe at the same
 endpoint rather than reimplementing the check.
 

@@ -29,6 +29,15 @@ const WEIGHT_SLAB_FIELD_LABELS: Record<string, string> = {
 };
 
 function describeChange(entry: AuditLogEntryDto): string {
+  // One row per uploaded rate sheet, with the totals the import reported.
+  if (entry.entity === "RateSheet" && typeof entry.after === "object" && entry.after !== null) {
+    const a = entry.after as Record<string, number | boolean>;
+    return (
+      `Rate sheet imported${a.allIn ? " (all-in)" : ""}: ${a.bandsCreated ?? 0} added, ` +
+      `${a.bandsUpdated ?? 0} changed, ${a.bandsDeactivated ?? 0} switched off, ` +
+      `${a.countriesLinked ?? 0} countries moved`
+    );
+  }
   if (entry.entity !== "WeightSlab" || typeof entry.after !== "object" || entry.after === null) {
     return `${JSON.stringify(entry.before ?? {})} → ${JSON.stringify(entry.after ?? {})}`;
   }
@@ -57,7 +66,7 @@ export default function RateHistoryPage() {
     setIsLoading(true);
     setError(null);
     const params = new URLSearchParams();
-    params.set("entities", "WeightSlab,RateProvider");
+    params.set("entities", "WeightSlab,RateProvider,RateSheet");
     params.set("limit", "100");
     if (debouncedSearch.trim()) params.set("search", debouncedSearch.trim());
     if (dateFrom) params.set("dateFrom", dateFrom);
