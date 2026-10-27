@@ -697,7 +697,8 @@ body {
 }
 
 .glass-panel-dark {
-  background-color: rgba(9, 9, 11, 0.72);
+  /* 0.9, not lower: on the white About section anything thinner reads as grey, not black. */
+  background-color: rgba(9, 9, 11, 0.9);
   border: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow:
     0 24px 50px -30px rgba(9, 9, 11, 0.8),

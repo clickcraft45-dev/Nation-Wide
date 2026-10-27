@@ -88,7 +88,6 @@ export function MarketingServices() {
     <section id="services" className="bg-background py-20">
       <div className="mx-auto max-w-6xl px-6">
         <SectionHeading
-          eyebrow="What we do"
           title="Logistics solutions built around your shipment"
           description="Whatever you're sending, wherever it's going: we've got a service built for it."
         />

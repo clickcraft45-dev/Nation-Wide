@@ -9,6 +9,7 @@ import type { AuthUserDto } from "@nationwide/shared-types";
 import { useAuth } from "@/state/auth-context";
 import { CUSTOMER_NAV_ITEMS, CUSTOMER_TAB_ITEMS } from "@/lib/nav-config";
 import { Logo } from "@/components/brand/logo";
+import { SiteBanner } from "@/components/marketing/site-banner";
 import { MobileTabBar } from "@/components/layout/mobile-tab-bar";
 import { cn } from "@/lib/utils/cn";
 
@@ -44,6 +45,9 @@ export function CustomerMobileShell({
      It also sidesteps 100vh being wrong on mobile browsers with a retracting URL bar. */
   return (
     <div className="app-ambient fixed inset-0 flex flex-col overflow-hidden">
+      {/* Same live offer or event as the public site: a customer about to quote is the person a
+          festival code is for. */}
+      <SiteBanner />
       <header className="glass-chrome z-20 flex h-14 shrink-0 items-center gap-3 border-b border-white/40 px-4">
         <button
           onClick={() => setDrawerOpen(true)}

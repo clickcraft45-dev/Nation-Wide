@@ -79,7 +79,6 @@ export function MarketingFaqs() {
 
       <div className="mx-auto max-w-3xl px-6">
         <SectionHeading
-          eyebrow="Frequently asked"
           title="Questions, answered"
           description="The things people ask us most before their first shipment."
         />

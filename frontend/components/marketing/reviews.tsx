@@ -181,7 +181,6 @@ export async function MarketingReviews() {
     <section id="reviews" className="relative isolate overflow-hidden bg-background py-20">
       <div className="mx-auto w-full max-w-6xl px-6">
         <SectionHeading
-          eyebrow="Reviews"
           title="What our customers say"
           description="Unedited, from our Google Business Profile and from customers who shipped with us."
         />

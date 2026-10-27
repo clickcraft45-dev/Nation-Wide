@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 import { MarketingNavbar } from "@/components/marketing/navbar";
 import { MarketingHero } from "@/components/marketing/hero";
+import { MarketingEventSpotlight } from "@/components/marketing/event-spotlight";
 import { MarketingServices } from "@/components/marketing/services";
 import { MarketingHowItWorks } from "@/components/marketing/how-it-works";
 import { MarketingAbout } from "@/components/marketing/about";
 import { MarketingTrustedNetwork } from "@/components/marketing/trusted-network";
-import { MarketingCapabilities } from "@/components/marketing/capabilities";
 import { MarketingBusiness } from "@/components/marketing/business";
 import { MarketingReviews } from "@/components/marketing/reviews";
 import { MarketingFaqs } from "@/components/marketing/faqs";
@@ -35,6 +35,8 @@ export default function HomePage() {
       <SmoothScroll />
       <MarketingNavbar />
       <MarketingHero />
+      {/* Renders only while an admin has a live offer or event marked "Site banner". */}
+      <MarketingEventSpotlight />
       <Reveal from="fade">
         <MarketingServices />
       </Reveal>
@@ -46,9 +48,6 @@ export default function HomePage() {
       </Reveal>
       <Reveal from="fade">
         <MarketingTrustedNetwork />
-      </Reveal>
-      <Reveal from="fade">
-        <MarketingCapabilities />
       </Reveal>
       <Reveal from="fade">
         <MarketingBusiness />

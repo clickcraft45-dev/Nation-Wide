@@ -11,8 +11,8 @@ const VALUE_POINTS = [
   { icon: Headset, label: "Customer support" },
 ];
 
-// What the network actually gives a shipment. Deliberately unquantified — see the note in
-// capabilities.tsx: no invented figures anywhere on the public site.
+// What the network actually gives a shipment. Deliberately unquantified: no invented figures
+// anywhere on the public site. When real statistics exist, they go here.
 const NETWORK_FACTS = [
   { title: "Air & road lanes", detail: "Chosen per shipment" },
   { title: "Verified pickup", detail: "Collected at your door" },
@@ -63,7 +63,7 @@ export function MarketingAbout() {
           <p className="text-sm font-semibold uppercase tracking-[0.16em] text-primary">
             Hyderabad · Since 2018
           </p>
-          <h2 className="mt-3 text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
+          <h2 className="mt-3 text-balance text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
             Hyderabad&apos;s trusted international courier, 8+ years on
           </h2>
           <p className="mt-4 text-muted-foreground">
