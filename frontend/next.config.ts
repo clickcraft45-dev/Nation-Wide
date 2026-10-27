@@ -122,7 +122,15 @@ const nextConfig: NextConfig = {
     contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
   },
   async headers() {
-    return [{ source: "/:path*", headers: SECURITY_HEADERS }];
+    return [
+      { source: "/:path*", headers: SECURITY_HEADERS },
+      // robots.txt only stops crawling; a private link someone pastes publicly can still be
+      // indexed from the link alone. This header is what keeps it out of results.
+      ...["/b2b/:path*", "/feedback/:path*", "/track/:id", "/reset-password"].map((source) => ({
+        source,
+        headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
+      })),
+    ];
   },
 };
 

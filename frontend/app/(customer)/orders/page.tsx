@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Package } from "lucide-react";
 import type { OrderDto } from "@nationwide/shared-types";
 import { apiClient } from "@/lib/api-client";
+import { formatDateTime } from "@/lib/utils/format-date-time";
 import {
   Table,
   TableHeader,
@@ -108,7 +109,7 @@ export default function CustomerOrdersPage() {
                     <TrackingStatusBadge status={shipment?.currentStatus} />
                   </TableCell>
                   <TableCell className="whitespace-nowrap text-muted-foreground">
-                    {new Date(order.createdAt).toLocaleDateString()}
+                    {formatDateTime(order.createdAt)}
                   </TableCell>
                   <TableCell className="whitespace-nowrap">
                     {order.dueAmount ? (

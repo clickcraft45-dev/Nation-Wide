@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Warehouse } from "lucide-react";
 import type { PickupRequestDto } from "@nationwide/shared-types";
 import { apiClient, errorMessage } from "@/lib/api-client";
+import { formatDateTime } from "@/lib/utils/format-date-time";
 import { SearchInput } from "@/components/ui/search-input";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
@@ -123,7 +124,7 @@ export default function WarehouseDropoffsPage() {
                   <PickupRequestStatusBadge status={p.status} />
                 </TableCell>
                 <TableCell className="whitespace-nowrap text-muted-foreground">
-                  {new Date(p.createdAt).toLocaleDateString()}
+                  {formatDateTime(p.createdAt)}
                 </TableCell>
               </TableRow>
             ))}

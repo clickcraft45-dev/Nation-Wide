@@ -25,6 +25,11 @@ services:
       context: .
       dockerfile: backend/Dockerfile
     restart: unless-stopped
+    # A real PID 1 that passes docker's SIGTERM on to Node and reaps zombies; Node as PID 1 ignores
+    # signals it has no handler for. The grace period is what main.ts's graceful shutdown gets to
+    # finish in-flight requests and the current WhatsApp job before docker sends SIGKILL.
+    init: true
+    stop_grace_period: 30s
     depends_on:
       redis:
         condition: service_healthy

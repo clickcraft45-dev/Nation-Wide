@@ -15,6 +15,7 @@ import { apiClient, ApiError, errorMessage } from "@/lib/api-client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input, Label, FieldError } from "@/components/ui/input";
+import { focusFirstInvalid } from "@/lib/utils/focus-first-invalid";
 import { ErrorState } from "@/components/ui/page-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PickupRequestStatusBadge } from "@/components/ui/status-badge";
@@ -272,12 +273,14 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
     const price = Number(manualPrice);
     if (needsManualPrice && (!price || price <= 0)) {
       setVerifyError("Enter the price you agreed with the customer.");
+      document.getElementById("manual-price")?.focus();
       return;
     }
     const recipientProblems = validateRecipient(recipient);
     setRecipientErrors(recipientProblems);
     if (Object.keys(recipientProblems).length > 0) {
       setVerifyError("Fill in the recipient's delivery address.");
+      focusFirstInvalid();
       return;
     }
     setIsVerifying(true);

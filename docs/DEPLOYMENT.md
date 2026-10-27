@@ -87,7 +87,10 @@ container recreation and a full redeploy.
 
 8. **Put TLS in front of it.** Point an `api.` DNS record at the Elastic IP. Either terminate TLS
    with Caddy/nginx on the box, or proxy the record through Cloudflare (orange cloud) with SSL
-   mode **Full (strict)**. If you proxy `/api/*` through Cloudflare, read the caching warning in
+   mode **Full (strict)**. The Nginx config is in the repo: install
+   [`deploy/nginx/api.nationwidelogistics.co.conf`](../deploy/nginx/api.nationwidelogistics.co.conf)
+   as its header says. Don't skip its `client_max_body_size`: without it, photo and rate-sheet
+   uploads fail with 413. If you proxy `/api/*` through Cloudflare, read the caching warning in
    [Invoices](#invoices) first — it is not optional.
 
 ### 2. Frontend on Cloudflare Pages

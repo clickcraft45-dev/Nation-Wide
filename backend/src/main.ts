@@ -16,6 +16,12 @@ async function bootstrap() {
     rawBody: true,
   });
 
+  // On SIGTERM (every deploy: `docker compose up` stops the old container) Nest closes the HTTP
+  // server, which lets in-flight requests finish, and runs every onModuleDestroy: the BullMQ
+  // worker finishes the WhatsApp send it is on and Prisma disconnects. Without this the process
+  // is killed mid-request, and a job cut off after Meta accepted it is retried and sent twice.
+  app.enableShutdownHooks();
+
   // WITHOUT THIS, EVERY REQUEST LOOKS LIKE IT CAME FROM THE REVERSE PROXY. Nginx/Caddy on the
   // host terminates TLS and forwards to this process (see docker-compose.yml), so req.ip is the
   // proxy's address for everyone — and ThrottlerGuard keys its per-IP buckets on req.ip. The
@@ -34,6 +40,19 @@ async function bootstrap() {
   // URL on the bucket's own origin, which this header does not govern.
   app.use(helmet());
   app.use(requestIdMiddleware);
+  // Responses here are per-user and carry authorisation, so by default nothing (browser, proxy,
+  // Cloudflare) may keep a copy. Routes that are safe to cache say so with @Header('Cache-Control'),
+  // which runs after this and wins.
+  app.use(
+    (
+      _req: unknown,
+      res: { setHeader(k: string, v: string): void },
+      next: () => void,
+    ) => {
+      res.setHeader('Cache-Control', 'no-store');
+      next();
+    },
+  );
 
   app.setGlobalPrefix('api/v1');
   app.use(cookieParser());
@@ -99,7 +118,25 @@ if (workers > 1 && cluster.isPrimary) {
   // The primary accepts nothing itself; it owns the listening socket and hands connections to
   // the workers, and replaces any that dies so a crash costs one in-flight request, not the API.
   for (let i = 0; i < workers; i += 1) cluster.fork();
+  let alive = workers;
+  let stopping = false;
+  // A stop signal is passed on to every worker, each of which shuts down gracefully (see
+  // enableShutdownHooks), and the primary leaves once the last one has. Without this the primary
+  // died at once and the exit handler below would have been busy re-forking the workers.
+  for (const sig of ['SIGTERM', 'SIGINT'] as const) {
+    process.on(sig, () => {
+      stopping = true;
+      for (const worker of Object.values(cluster.workers ?? {})) {
+        worker?.process.kill(sig);
+      }
+    });
+  }
   cluster.on('exit', (worker, code, signal) => {
+    if (stopping) {
+      alive -= 1;
+      if (alive === 0) process.exit(0);
+      return;
+    }
     console.error(
       `[cluster] worker ${worker.process.pid} exited (code=${code} signal=${signal}) — restarting`,
     );

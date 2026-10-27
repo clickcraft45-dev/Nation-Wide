@@ -20,6 +20,7 @@ import type {
   PickupRequestDto,
 } from "@nationwide/shared-types";
 import { apiClient, errorMessage } from "@/lib/api-client";
+import { formatDateTime } from "@/lib/utils/format-date-time";
 import { useAuth } from "@/state/auth-context";
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { QuickActions } from "@/components/dashboard/quick-actions";
@@ -423,7 +424,7 @@ export default function AdminDashboardHomePage() {
                         <TableCell>
                           <OrderStatusBadge status={order.status} />
                         </TableCell>
-                        <TableCell>{new Date(order.createdAt).toLocaleDateString("en-IN")}</TableCell>
+                        <TableCell>{formatDateTime(order.createdAt)}</TableCell>
                         <TableCell>
                           {order.paidAmount !== null ? `₹${Math.round(order.paidAmount).toLocaleString("en-IN")}` : "—"}
                         </TableCell>

@@ -1,4 +1,5 @@
-import { NotificationsService } from './notifications.service';
+import { NotificationsService, pushTagFor } from './notifications.service';
+import { NOTIFICATION_TEMPLATES as T } from './templates';
 
 describe('NotificationsService', () => {
   let prisma: {
@@ -112,5 +113,22 @@ describe('NotificationsService', () => {
         service.recordDeliveryStatus('unknown-msg', 'sent'),
       ).resolves.toBeUndefined();
     });
+  });
+});
+
+describe('pushTagFor', () => {
+  it('puts every step of finishing a pickup under one tag', () => {
+    const steps = [
+      T.PICKUP_VERIFICATION_COMPLETE,
+      T.PAYMENT_COLLECTED,
+      T.RECEIPT_READY,
+      T.ORDER_CREATED_FROM_PICKUP,
+    ];
+    expect(new Set(steps.map(pushTagFor))).toEqual(new Set(['pickup']));
+  });
+
+  it('leaves tracking updates on their own tags', () => {
+    expect(pushTagFor(T.IN_TRANSIT)).toBe(T.IN_TRANSIT);
+    expect(pushTagFor(T.DELIVERED)).toBe(T.DELIVERED);
   });
 });

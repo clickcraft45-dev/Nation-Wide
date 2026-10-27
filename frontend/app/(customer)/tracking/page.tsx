@@ -125,7 +125,7 @@ function CustomerTrackingPageInner() {
             <button
               key={trackingNumber}
               type="button"
-              onClick={() => void handleSearch(trackingNumber)}
+              onClick={() => handleSearch(trackingNumber)}
               className="glass-pill rounded-full border px-2.5 py-1 font-mono text-xs text-foreground transition-colors hover:bg-white/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               {trackingNumber}

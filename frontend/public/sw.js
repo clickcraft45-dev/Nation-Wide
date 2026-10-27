@@ -61,18 +61,29 @@ self.addEventListener("push", (event) => {
   } catch {
     data = { body: event.data ? event.data.text() : "" };
   }
-  event.waitUntil(
-    self.registration.showNotification(data.title || "NationWide Logistics", {
-      body: data.body || "",
-      icon: "/assets/icons/icon-192.png",
-      badge: "/assets/icons/badge-72.png",
-      // Same tag replaces the earlier notification for the same thing, instead of stacking five
-      // "in transit" updates for one parcel.
-      tag: data.tag,
-      data: { url: data.url || "/" },
-    }),
-  );
+  event.waitUntil(show(data));
 });
+
+// Finishing a pickup sends four updates in a minute or two, all with the "pickup" tag. Buzz for
+// the first; for the next ten minutes swap the text in silently, then buzz again for what follows.
+const QUIET_MS = 10 * 60 * 1000;
+
+async function show(data) {
+  const shown = data.tag ? await self.registration.getNotifications({ tag: data.tag }) : [];
+  const lastAlert = Math.max(0, ...shown.map((n) => (n.data && n.data.alertedAt) || 0));
+  const quiet = Date.now() - lastAlert < QUIET_MS;
+  return self.registration.showNotification(data.title || "NationWide Logistics", {
+    body: data.body || "",
+    icon: "/assets/icons/icon-192.png",
+    badge: "/assets/icons/badge-72.png",
+    // Same tag replaces the earlier notification for the same thing, instead of stacking five
+    // "in transit" updates for one parcel.
+    tag: data.tag,
+    renotify: Boolean(data.tag) && !quiet,
+    silent: quiet,
+    data: { url: data.url || "/", alertedAt: quiet ? lastAlert : Date.now() },
+  });
+}
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();

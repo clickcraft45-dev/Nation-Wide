@@ -13,6 +13,7 @@ import {
 } from '@nestjs/common';
 import type { RawBodyRequest } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { SkipThrottle } from '@nestjs/throttler';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { Request, Response } from 'express';
 import { NotificationsService } from '../notifications.service';
@@ -52,6 +53,10 @@ export class WhatsAppWebhookController {
     throw new ForbiddenException('Webhook verification failed');
   }
 
+  // Meta sends a status (sent, delivered, read) per message from a handful of shared IPs, so a
+  // busy hour trips the per-IP limit and those statuses are lost to 429s. Every request is
+  // authenticated by its HMAC below instead, which costs one hash to reject.
+  @SkipThrottle()
   @Post()
   @HttpCode(200)
   async receive(

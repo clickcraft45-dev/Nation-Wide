@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ClipboardList } from "lucide-react";
 import type { PickupRequestDto, PickupRequestStatusCode } from "@nationwide/shared-types";
 import { apiClient, errorMessage } from "@/lib/api-client";
+import { formatDateTime } from "@/lib/utils/format-date-time";
 import { SearchInput } from "@/components/ui/search-input";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import {
@@ -181,7 +182,7 @@ export default function AdminPickupRequestsPage() {
                   <PickupRequestStatusBadge status={p.status} />
                 </TableCell>
                 <TableCell className="whitespace-nowrap text-muted-foreground">
-                  {new Date(p.createdAt).toLocaleDateString()}
+                  {formatDateTime(p.createdAt)}
                 </TableCell>
               </TableRow>
             ))}

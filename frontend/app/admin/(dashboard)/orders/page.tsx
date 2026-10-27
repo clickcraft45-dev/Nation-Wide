@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { ArrowUpDown, Package, Plus } from "lucide-react";
 import type { OrderDto, ShippingProviderDto } from "@nationwide/shared-types";
 import { apiClient, errorMessage } from "@/lib/api-client";
+import { formatDateTime } from "@/lib/utils/format-date-time";
 import { useDebouncedValue } from "@/lib/utils/use-debounced-value";
 import { Button } from "@/components/ui/button";
 import { SearchInput } from "@/components/ui/search-input";
@@ -371,7 +372,7 @@ export default function AdminOrdersPage() {
                       )}
                     </TableCell>
                     <TableCell className="whitespace-nowrap text-muted-foreground">
-                      {new Date(order.createdAt).toLocaleDateString()}
+                      {formatDateTime(order.createdAt)}
                     </TableCell>
                     {isCancelledView && (
                       <TableCell className="whitespace-nowrap">

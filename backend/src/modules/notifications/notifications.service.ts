@@ -74,7 +74,7 @@ export class NotificationsService {
       title: 'NationWide Logistics',
       body: renderMessageBody(template, variables),
       url: pushUrlFor(template),
-      tag: template,
+      tag: pushTagFor(template),
     });
 
     // Returns the id so a caller that has to record what it sent (InvoicesService, linking an
@@ -107,6 +107,20 @@ export class NotificationsService {
       data,
     });
   }
+}
+
+/**
+ * The phone keeps one notification per tag and swaps a newer one in silently. Finishing a pickup
+ * sends verified, payment collected, receipt and order created within a minute or two; as one
+ * tag that is one notification that updates in place, not four buzzes. Anything else keeps its
+ * own tag, so an "in transit" update still replaces only the previous "in transit".
+ */
+export function pushTagFor(template: string): string {
+  return /^pickup_|^payment_collected$|^receipt_ready$|^invoice_ready$|^order_created_from_pickup$/.test(
+    template,
+  )
+    ? 'pickup'
+    : template;
 }
 
 /** Where tapping the phone notification lands in the customer app. */

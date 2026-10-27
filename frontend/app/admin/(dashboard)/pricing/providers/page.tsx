@@ -112,7 +112,7 @@ export default function PricingProvidersPage() {
                   <Button
                     size="sm"
                     variant="secondary"
-                    onClick={() => void exportSheet(p)}
+                    onClick={() => exportSheet(p)}
                     isLoading={exporting === p.id}
                     aria-label={`Export ${p.name} rates to Excel`}
                   >

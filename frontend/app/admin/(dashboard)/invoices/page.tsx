@@ -800,7 +800,7 @@ export default function AdminInvoicesPage() {
                     <TableCell>
                       <button
                         type="button"
-                        onClick={() => void download(inv)}
+                        onClick={() => download(inv)}
                         disabled={downloadingId === inv.id}
                         aria-label={`Download ${inv.invoiceNumber}`}
                         className="glass-interactive inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground hover:text-foreground disabled:opacity-50"

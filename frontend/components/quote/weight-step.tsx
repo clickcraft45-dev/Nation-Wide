@@ -45,8 +45,9 @@ export function WeightStep({
   );
   const [boxes, setBoxes] = useState<PackageForm[]>(() => packagesFrom(initialPackages));
   const [error, setError] = useState<string | null>(null);
-  // A document envelope can be booked on weight alone; anything else needs its size.
-  const requireDimensions = shipmentType !== "DOCUMENT";
+  // The customer can book on weight alone: many don't know the box size yet, and the partner
+  // measures every box at pickup anyway (requireDimensions there), which is what gets priced.
+  const requireDimensions = false;
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

@@ -28,6 +28,18 @@ export async function fetchAnnouncement(slug: string): Promise<AnnouncementDto |
   }
 }
 
+/** The one live offer or event an admin switched "Site banner" on for, or null. */
+export async function fetchBanner(): Promise<AnnouncementDto | null> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/announcements/banner`, {
+      next: { revalidate: REVALIDATE_SECONDS },
+    });
+    return res.ok ? ((await res.json()) as { banner: AnnouncementDto | null }).banner : null;
+  } catch {
+    return null;
+  }
+}
+
 const DAY = new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeZone: "Asia/Kolkata" });
 
 /** "12 Nov 2026", "12 Nov 2026 to 14 Nov 2026", "Until 14 Nov 2026", or null. */

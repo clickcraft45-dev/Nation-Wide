@@ -5,6 +5,7 @@ import { AuthProvider } from "@/state/auth-context";
 import { ToastProvider } from "@/components/ui/toast";
 import { LiquidGlassFilter } from "@/components/ui/liquid-glass-button";
 import { InstallPrompt } from "@/components/pwa/install-prompt";
+import { FormFocus } from "@/components/ui/form-focus";
 import { SITE_URL } from "@/lib/constants/site";
 import { JsonLd } from "@/components/seo/json-ld";
 import {
@@ -122,6 +123,8 @@ export default function RootLayout({
         <LiquidGlassFilter />
         {/* Registers the service worker and offers the install, once, on a device that can. */}
         <InstallPrompt />
+        {/* After any submit, moves to the first field that failed validation. */}
+        <FormFocus />
       </body>
     </html>
   );

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, ArrowDown, ArrowUp, CheckCircle2, Upload } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, CheckCircle2, Copy, ExternalLink, Upload } from "lucide-react";
 import type {
   ProviderRateSheetDto,
   RateGridCellDto,
@@ -11,8 +11,9 @@ import type {
 } from "@nationwide/shared-types";
 import { apiClient, errorMessage } from "@/lib/api-client";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { FieldError, Label } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/select";
 import { SegmentedControl } from "@/components/ui/segmented-control";
@@ -23,6 +24,29 @@ type Kind = "normal" | "allin";
 
 const num = (n: number) => n.toLocaleString("en-IN", { maximumFractionDigits: 2 });
 const kg = (n: number) => n.toLocaleString("en-IN", { maximumFractionDigits: 2 });
+
+/**
+ * What to paste into ChatGPT with the carrier's raw sheet, so it comes back in the layout this
+ * page reads: the same layout the provider's Export writes (exportRows in the backend's
+ * rate-sheet-import.service.ts). Keep the two in step.
+ */
+export function conversionPrompt(provider: { code: string; name: string }): string {
+  return [
+    `I have a raw courier rate sheet from ${provider.name}. Convert it into one Excel file (.xlsx) I can download, laid out exactly like this:`,
+    "",
+    `Sheet name: ${provider.code}. Add " All in" to the end only if the prices already include fuel surcharge and GST.`,
+    "",
+    `1. A title row: "${provider.name} Package rates".`,
+    `2. A header row: "Weight (kg)", then one column per zone, named as in my sheet (for example Zone 1, Zone 2, or A, B, C).`,
+    "3. One row per weight. For a flat price, put the upper weight in kg in the first column (0.5, 1, 1.5 ...). For a price charged per kg over a range, write the range as from-to (for example 21-44) and put the per-kg price in the zone columns.",
+    `4. An empty row, then the same block for documents with the title "${provider.name} Document rates", only if my sheet has document rates.`,
+    `5. An empty row, then a header row "Country" | "Zone" and one row per country: the country name with its 2-letter ISO code in brackets, for example "United States (US)", and its zone.`,
+    "",
+    "Rules: prices are plain numbers in INR, no currency symbols or thousands separators. Weights are in kg (500 gms = 0.5). Weight bands must not overlap. Leave a cell empty when a zone has no price for that weight. Copy every price exactly, never estimate or round. After the file, list any rows you could not read.",
+    "",
+    "My raw rate sheet is attached.",
+  ].join("\n");
+}
 
 /**
  * A provider's rates as the carrier's own sheet: pick the provider, see its live grid, upload the
@@ -42,6 +66,10 @@ export function RateSheetImport() {
   const [isApplying, setIsApplying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [applied, setApplied] = useState<RateSheetApplyResultDto | null>(null);
+  // The file the last apply came from: its comparison stays on screen as the record of what changed.
+  const [appliedFrom, setAppliedFrom] = useState<string | null>(null);
+  const [promptOpen, setPromptOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     apiClient
@@ -80,6 +108,7 @@ export function RateSheetImport() {
   }, [providerId, reload]);
 
   function showLive() {
+    setAppliedFrom(null);
     setIsLoading(true);
     setError(null);
     setReload((n) => n + 1);
@@ -95,6 +124,7 @@ export function RateSheetImport() {
   async function compare(upload: File, as: Kind) {
     setFile(upload);
     setApplied(null);
+    setAppliedFrom(null);
     setError(null);
     setIsLoading(true);
     try {
@@ -122,7 +152,9 @@ export function RateSheetImport() {
         form(file, kind),
       );
       setApplied(result);
-      showLive();
+      // The comparison on screen is exactly what was applied: keep it as the record, minus Apply.
+      setAppliedFrom(file.name);
+      setFile(null);
     } catch (err) {
       setError(errorMessage(err, "The update failed. Nothing was changed."));
     } finally {
@@ -160,6 +192,7 @@ export function RateSheetImport() {
                 setFile(null);
                 setSheet(null);
                 setApplied(null);
+                setAppliedFrom(null);
                 setIsLoading(true);
                 setProviderId(e.target.value);
               }}
@@ -198,15 +231,28 @@ export function RateSheetImport() {
                 <Button variant="secondary" disabled={isApplying} onClick={showLive}>
                   Cancel
                 </Button>
-                <Button onClick={() => void apply()} isLoading={isApplying} disabled={isLoading}>
+                <Button onClick={() => apply()} isLoading={isApplying} disabled={isLoading}>
                   Apply to {provider?.name ?? "provider"}
                 </Button>
               </>
             ) : (
-              <Button onClick={() => inputRef.current?.click()} disabled={!providerId || isLoading}>
-                <Upload className="h-4 w-4" aria-hidden />
-                Upload new sheet
-              </Button>
+              <>
+                {appliedFrom && (
+                  <Button variant="secondary" onClick={showLive}>
+                    Show live grid
+                  </Button>
+                )}
+                <Button
+                  onClick={() => {
+                    setCopied(false);
+                    setPromptOpen(true);
+                  }}
+                  disabled={!providerId || isLoading}
+                >
+                  <Upload className="h-4 w-4" aria-hidden />
+                  Import new sheet
+                </Button>
+              </>
             )}
           </div>
 
@@ -218,6 +264,60 @@ export function RateSheetImport() {
         </CardContent>
       </Card>
 
+      {provider && (
+        <Dialog open={promptOpen} onOpenChange={setPromptOpen}>
+          <DialogContent
+            className="max-w-xl"
+            title={`Import ${provider.name} rates`}
+            description="Carrier sheets come in every shape. Paste this prompt into ChatGPT with the raw sheet attached, download the .xlsx it returns, then choose that file here."
+          >
+            <div className="space-y-3">
+              <textarea
+                readOnly
+                aria-label="ChatGPT prompt"
+                value={conversionPrompt(provider)}
+                onFocus={(e) => e.currentTarget.select()}
+                className="glass-field h-56 w-full resize-none rounded-lg p-3 font-mono text-xs text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              />
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="secondary"
+                  onClick={async () => {
+                    await navigator.clipboard.writeText(conversionPrompt(provider));
+                    setCopied(true);
+                  }}
+                >
+                  <Copy className="h-4 w-4" aria-hidden />
+                  {copied ? "Copied" : "Copy prompt"}
+                </Button>
+                <a
+                  href={`https://chatgpt.com/?q=${encodeURIComponent(conversionPrompt(provider))}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={buttonVariants({ variant: "secondary" })}
+                >
+                  <ExternalLink className="h-4 w-4" aria-hidden />
+                  Open ChatGPT
+                </a>
+                <Button
+                  className="sm:ml-auto"
+                  onClick={() => {
+                    setPromptOpen(false);
+                    inputRef.current?.click();
+                  }}
+                >
+                  <Upload className="h-4 w-4" aria-hidden />
+                  Choose .xlsx file
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Already have the file in this layout, or exported it from here? Choose it directly. Nothing changes until you press Apply.
+              </p>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
       {error && <FieldError>{error}</FieldError>}
 
       {applied && (
@@ -225,7 +325,7 @@ export function RateSheetImport() {
           <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
           <span>
             {provider?.name} rates updated: {applied.bandsUpdated} changed, {applied.bandsCreated} added,{" "}
-            {applied.bandsDeactivated} removed. The grid below is now live.
+            {applied.bandsDeactivated} removed. These rates are live now; the grid below shows what changed.
           </span>
         </div>
       )}
@@ -236,13 +336,17 @@ export function RateSheetImport() {
           <Skeleton className="h-96 w-full rounded-2xl" />
         </div>
       ) : sheet ? (
-        <SheetView sheet={sheet} fileName={comparing ? file?.name : undefined} busy={isLoading} />
+        <SheetView
+          sheet={sheet}
+          heading={appliedFrom ? `Applied ${appliedFrom}: changes from the previous rates` : `Comparing ${file?.name ?? ""}`}
+          busy={isLoading}
+        />
       ) : null}
     </div>
   );
 }
 
-function SheetView({ sheet, fileName, busy }: { sheet: ProviderRateSheetDto; fileName?: string; busy: boolean }) {
+function SheetView({ sheet, heading, busy }: { sheet: ProviderRateSheetDto; heading: string; busy: boolean }) {
   const [type, setType] = useState<RateGridDto["shipmentType"]>("PACKAGE");
   const [changesOnly, setChangesOnly] = useState(false);
   const grid = sheet.grids.find((g) => g.shipmentType === type) ?? sheet.grids[0];
@@ -262,10 +366,14 @@ function SheetView({ sheet, fileName, busy }: { sheet: ProviderRateSheetDto; fil
     <div className={cn("space-y-3 transition-opacity", busy && "opacity-60")} aria-busy={busy}>
       {sheet.compare && (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
-          <span className="font-medium text-foreground">Comparing {fileName}</span>
+          <span className="font-medium text-foreground">{heading}</span>
           <span className="text-muted-foreground">
             <b className="text-foreground">{s.changed}</b> changed · <b className="text-foreground">{s.added}</b> new ·{" "}
             <b className="text-foreground">{s.removed}</b> removed · {s.unchanged} same
+          </span>
+          <span className="inline-flex items-center gap-2 text-xs">
+            <span className="rounded bg-danger-bg px-1.5 py-0.5 text-danger line-through">old rate</span>
+            <span className="rounded bg-success-bg px-1.5 py-0.5 text-success">new rate</span>
           </span>
           {sheet.sources.length > 0 && (
             <span className="text-xs text-muted-foreground">Read from {sheet.sources.join("; ")}</span>
@@ -389,8 +497,8 @@ function Cell({ cell, compare }: { cell: RateGridCellDto; compare: boolean }) {
 
   if (cell.new === null) {
     return (
-      <td className={cn(base, "bg-muted/60")} title="Not in the new sheet: this band will be switched off">
-        <span className="text-muted-foreground line-through">{num(cell.old!)}</span>
+      <td className={cn(base, "bg-danger-bg")} title="Not in the new sheet: this band is switched off">
+        <span className="text-danger line-through">{num(cell.old!)}</span>
         <span className="sr-only"> removed</span>
       </td>
     );
@@ -399,18 +507,20 @@ function Cell({ cell, compare }: { cell: RateGridCellDto; compare: boolean }) {
   const up = cell.old !== null && cell.new > cell.old;
   const down = cell.old !== null && cell.new < cell.old;
   return (
-    <td
-      className={cn(base, "bg-muted/60")}
-      title={cell.old === null ? "New band" : `Was ${num(cell.old)}`}
-    >
-      <span className="inline-flex items-center justify-end gap-1 font-semibold text-foreground">
-        {up && <ArrowUp className="h-3 w-3 text-warning" aria-label="up" />}
-        {down && <ArrowDown className="h-3 w-3 text-success" aria-label="down" />}
+    // GitHub-style: the old rate struck through on red above, the new rate on green below.
+    <td className={cn(base, "p-0")} title={cell.old === null ? "New band" : `Was ${num(cell.old)}`}>
+      {cell.old !== null && (
+        <span className="block bg-danger-bg px-3 pt-1 text-[11px] text-danger line-through">
+          <span className="sr-only">was </span>
+          {num(cell.old)}
+        </span>
+      )}
+      <span className="flex items-center justify-end gap-1 bg-success-bg px-3 py-1 font-semibold text-success">
+        {up && <ArrowUp className="h-3 w-3" aria-label="up" />}
+        {down && <ArrowDown className="h-3 w-3" aria-label="down" />}
+        {cell.old === null && <span className="text-[11px] font-normal">new</span>}
         {num(cell.new)}
         {perKg}
-      </span>
-      <span className="block text-[11px] font-normal text-muted-foreground">
-        {cell.old === null ? "new" : <span className="line-through">{num(cell.old)}</span>}
       </span>
     </td>
   );

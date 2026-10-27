@@ -352,7 +352,7 @@ export function InvoicesPanel({ client }: { client: B2bClient }) {
               <div className="text-right md:order-4">
                 <button
                   type="button"
-                  onClick={() => void download(invoice)}
+                  onClick={() => download(invoice)}
                   disabled={busyId === invoice.id}
                   aria-label={`Download invoice ${invoice.invoiceNumber}`}
                   className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
@@ -443,7 +443,7 @@ export function TrackingPanel({
               <button
                 key={order.id}
                 type="button"
-                onClick={() => void search(order.trackingNumber!)}
+                onClick={() => search(order.trackingNumber!)}
                 className="glass glass-interactive flex w-full items-center justify-between gap-3 rounded-2xl p-3 text-left active:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <span className="min-w-0">
@@ -471,7 +471,7 @@ export function TrackingPanel({
               <button
                 key={trackingNumber}
                 type="button"
-                onClick={() => void search(trackingNumber)}
+                onClick={() => search(trackingNumber)}
                 className="glass-pill rounded-full border px-2.5 py-1 font-mono text-xs text-foreground transition-colors hover:bg-white/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 {trackingNumber}

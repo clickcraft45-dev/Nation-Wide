@@ -158,7 +158,7 @@ function AdminShipmentsPageInner() {
             <button
               key={num}
               type="button"
-              onClick={() => void loadShipment(num)}
+              onClick={() => loadShipment(num)}
               className="glass-pill rounded-full border px-2.5 py-1 font-mono text-xs text-foreground transition-colors hover:bg-white/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               {num}

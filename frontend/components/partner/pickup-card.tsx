@@ -9,6 +9,7 @@ import { SITE_URL } from "@/lib/constants/site";
 import { PickupRequestStatusBadge } from "@/components/ui/status-badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
+import { formatDateTime } from "@/lib/utils/format-date-time";
 
 function shipmentLabel(type: PickupRequestDto["shipmentType"]): string {
   return type.charAt(0) + type.slice(1).toLowerCase();
@@ -211,6 +212,9 @@ export function PickupCard({ pickup, onClaimFailed }: { pickup: PickupRequestDto
         {pickup.dropAtWarehouse
           ? "Warehouse drop-off"
           : `${pickup.pickupDate ?? "Unscheduled"} · ${pickup.pickupTimeSlot ?? "—"}`}
+      </p>
+      <p className="mt-0.5 text-xs text-muted-foreground">
+        Booked <time dateTime={pickup.createdAt}>{formatDateTime(pickup.createdAt)}</time>
       </p>
 
       {!pickup.dropAtWarehouse && (
