@@ -19,7 +19,17 @@ import {
 function Breadcrumbs({ pathname, items }: { pathname: string; items: NavItem[] }) {
   const current = findNavItemForPath(pathname, items);
   const matchedDepth = current ? current.href.split("/").filter(Boolean).length : 0;
-  const segments = pathname.split("/").filter(Boolean).slice(matchedDepth);
+  // Slugs read as words ("bulk-edit" → "Bulk edit"); a raw UUID tells the admin nothing, so it is
+  // left out rather than shown as "d4f71de0-5892…".
+  const segments = pathname
+    .split("/")
+    .filter(Boolean)
+    .slice(matchedDepth)
+    .filter((s) => !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s))
+    .map((s) => {
+      const words = decodeURIComponent(s).replace(/-/g, " ");
+      return words.charAt(0).toUpperCase() + words.slice(1);
+    });
 
   return (
     <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-sm">
@@ -28,7 +38,7 @@ function Breadcrumbs({ pathname, items }: { pathname: string; items: NavItem[] }
         segments.map((segment, i) => (
           <span key={i} className="flex items-center gap-1.5 text-muted-foreground">
             <ChevronRight className="h-3.5 w-3.5" aria-hidden />
-            <span className="max-w-[16rem] truncate">{decodeURIComponent(segment)}</span>
+            <span className="max-w-[16rem] truncate">{segment}</span>
           </span>
         ))}
     </nav>

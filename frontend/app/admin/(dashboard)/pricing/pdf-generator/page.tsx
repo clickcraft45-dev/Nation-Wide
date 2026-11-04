@@ -15,6 +15,7 @@ export default function PdfGeneratorPage() {
   return (
     <div className="page-enter space-y-5">
       <BackLink href="/admin/pricing/dashboard">Back to pricing</BackLink>
+      <h1 className="text-xl font-semibold text-foreground">Rate card PDFs</h1>
       <div className="glass inline-flex rounded-2xl p-1.5">
         {(
           [

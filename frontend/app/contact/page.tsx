@@ -57,6 +57,7 @@ export default function ContactPage() {
       <main className="flex-1 bg-muted/30 py-16">
         <div className="mx-auto max-w-5xl px-4">
           <SectionHeading
+            as="h1"
             eyebrow="Contact"
             title="Talk to us"
             description="Rates, a pickup that needs chasing, or opening a business account. A person answers."

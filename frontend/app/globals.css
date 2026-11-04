@@ -554,21 +554,6 @@ html.lenis body {
   animation: marquee 32s linear infinite;
 }
 
-/* Slow sheen crossing a button, so the primary CTA catches the eye without moving. */
-@keyframes sheen {
-  0% {
-    transform: translateX(-120%) skewX(-18deg);
-  }
-  60%,
-  100% {
-    transform: translateX(320%) skewX(-18deg);
-  }
-}
-
-.animate-sheen {
-  animation: sheen 4.5s ease-in-out infinite;
-}
-
 @keyframes scroll-cue {
   0%,
   100% {
@@ -831,7 +816,6 @@ body {
   .animate-slide-in-left,
   .animate-slide-in-right,
   .animate-marquee,
-  .animate-sheen,
   .animate-scroll-cue {
     /* fill-mode `both` is dropped with the animation, so these render in their natural,
        fully-visible state. */

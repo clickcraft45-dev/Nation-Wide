@@ -46,6 +46,7 @@ export default function PricingCountriesPage() {
   return (
     <div className="space-y-4">
       <BackLink href="/admin/pricing/dashboard">Back to pricing</BackLink>
+      <h1 className="text-xl font-semibold text-foreground">Countries</h1>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <SpreadsheetActions resource="countries" label="Countries" onImported={load} />
         <AddCountryDialog onSaved={load} trigger={<Button size="sm">Add country</Button>} />

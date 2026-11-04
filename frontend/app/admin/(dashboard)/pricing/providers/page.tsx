@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Download, Tag, Upload } from "lucide-react";
+import { Tag, Upload } from "lucide-react";
 import type { RateProviderDto } from "@nationwide/shared-types";
 import { apiClient, errorMessage } from "@/lib/api-client";
 import { Card, CardContent } from "@/components/ui/card";
@@ -11,8 +11,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { EmptyState, ErrorState } from "@/components/ui/page-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RateProviderDialog } from "@/components/pricing/rate-provider-dialog";
-import { useToast } from "@/components/ui/toast";
-import { downloadBlob } from "@/lib/utils/download-blob";
+import { ExportRateSheetButton } from "@/components/pricing/rate-sheet-actions";
 import { cn } from "@/lib/utils/cn";
 import { BackLink } from "@/components/ui/back-link";
 
@@ -20,24 +19,6 @@ export default function PricingProvidersPage() {
   const [providers, setProviders] = useState<RateProviderDto[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [exporting, setExporting] = useState<string | null>(null);
-  const { showToast } = useToast();
-
-  // Each provider has its own zones, countries and rates, so its sheet goes in and out on its own.
-  async function exportSheet(p: RateProviderDto) {
-    setExporting(p.id);
-    try {
-      const { blob, headers } = await apiClient.getBlob(`/admin/pricing/providers/${p.id}/rate-sheet/export`);
-      const name =
-        /filename="([^"]+)"/.exec(headers.get("Content-Disposition") ?? "")?.[1] ??
-        `${p.code.toLowerCase()}-rates.xlsx`;
-      downloadBlob(blob, name);
-    } catch (err) {
-      showToast({ variant: "error", title: errorMessage(err, `Couldn't export ${p.name}'s rates.`) });
-    } finally {
-      setExporting(null);
-    }
-  }
 
   function load() {
     setIsLoading(true);
@@ -59,6 +40,7 @@ export default function PricingProvidersPage() {
   return (
     <div className="space-y-4">
       <BackLink href="/admin/pricing/dashboard">Back to pricing</BackLink>
+      <h1 className="text-xl font-semibold text-foreground">Providers &amp; rates</h1>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">
           Pick a provider to manage its countries, weight categories, and rates.
@@ -109,16 +91,7 @@ export default function PricingProvidersPage() {
                   </dd>
                 </dl>
                 <div className="grid grid-cols-2 gap-2">
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => exportSheet(p)}
-                    isLoading={exporting === p.id}
-                    aria-label={`Export ${p.name} rates to Excel`}
-                  >
-                    <Download className="h-4 w-4" aria-hidden />
-                    Export
-                  </Button>
+                  <ExportRateSheetButton provider={p} />
                   <Link
                     href={`/admin/pricing/rate-sheets?provider=${p.id}`}
                     className={buttonVariants({ variant: "secondary", size: "sm" })}

@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Poppins, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { MotionConfig } from "motion/react";
 import { AuthProvider } from "@/state/auth-context";
 import { ToastProvider } from "@/components/ui/toast";
 import { LiquidGlassFilter } from "@/components/ui/liquid-glass-button";
@@ -111,9 +112,13 @@ export default function RootLayout({
       className={`${poppins.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        <AuthProvider>
-          <ToastProvider>{children}</ToastProvider>
-        </AuthProvider>
+        {/* reducedMotion="user": every motion/react animation on the site drops its movement when
+            the visitor has asked the OS for reduced motion, without each component checking. */}
+        <MotionConfig reducedMotion="user">
+          <AuthProvider>
+            <ToastProvider>{children}</ToastProvider>
+          </AuthProvider>
+        </MotionConfig>
         {/* Site-wide structured data: who this business is, where it is, and what it sells.
             Emitted on every page so any entry point carries the identity, not just the home page. */}
         <JsonLd data={organizationSchema()} />

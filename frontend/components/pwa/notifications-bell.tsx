@@ -177,14 +177,14 @@ export function NotificationsBell({ className }: { className?: string }) {
                   Turn on notifications
                 </p>
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  Get new pickup requests and shipment updates on this device
-                  the moment they happen.
+                  Get pickup and shipment updates on this device the moment
+                  they happen.
                 </p>
                 <div className="mt-3 flex gap-2">
-                  <Button size="sm" onClick={toggle} isLoading={busy}>
+                  <Button size="sm" className="min-h-11 px-5 sm:min-h-8" onClick={toggle} isLoading={busy}>
                     Allow
                   </Button>
-                  <Button size="sm" variant="ghost" onClick={dismissAsk}>
+                  <Button size="sm" variant="ghost" className="min-h-11 px-5 sm:min-h-8" onClick={dismissAsk}>
                     Not now
                   </Button>
                 </div>
@@ -193,7 +193,7 @@ export function NotificationsBell({ className }: { className?: string }) {
                 type="button"
                 onClick={dismissAsk}
                 aria-label="Close"
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                className="-m-1.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <X className="h-4 w-4" aria-hidden />
               </button>

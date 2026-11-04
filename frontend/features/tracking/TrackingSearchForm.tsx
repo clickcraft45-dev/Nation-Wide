@@ -39,6 +39,7 @@ export function TrackingSearchForm({
           value={value}
           onChange={(e) => setValue(e.target.value)}
           placeholder="Order ID / Tracking ID"
+          aria-label="Order ID or tracking ID"
           className="h-11 pl-10 text-base"
         />
       </div>

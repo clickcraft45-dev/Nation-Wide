@@ -198,8 +198,10 @@ export function buildBands(
       if (top !== null) top = round2(Math.max(top, to));
       return;
     }
-    // A bracket with no price before it ("**" for small parcels) starts at its own weight.
-    if (top === null) top = round2(f.label.kg - 0.01);
+    // A bracket with no price before it ("**" for small parcels) starts at its own weight, and so
+    // does one well past the last band: "30.1-50" after a 1 kg row leaves 1–30 kg unpriced rather
+    // than charging it per kg. Within a kg it carries on ("21-44" after 20 means 20.01–44).
+    if (top === null || f.label.kg - top > 1) top = round2(f.label.kg - 0.01);
     push(to, f.price, 'PER_KG');
   });
   return bands;
@@ -324,20 +326,22 @@ function zoneMapOf(rows: string[][]): DetectedTable['countryMap'] {
   const entries: DetectedTable['countryMap'] = [];
   for (let r = 0; r < rows.length; r++) {
     const row = rows[r] ?? [];
+    // The zone sits in the next filled column, not always the adjacent one: carriers merge the
+    // country name across A:C and put the zone in D.
     const pairs = row
-      .map((_, c) => c)
+      .map((_, c) => [c, row.findIndex((cell, z) => z > c && text(cell))])
       .filter(
-        (c) =>
+        ([c, z]) =>
           /^(countr|destination)/i.test(text(row[c])) &&
-          /^zone$/i.test(text(row[c + 1])),
+          /^zone$/i.test(text(row[z])),
       );
     if (pairs.length === 0) continue;
     for (r = r + 1; r < rows.length; r++) {
       const data = rows[r] ?? [];
-      if (pairs.every((c) => !text(data[c]))) break;
-      for (const c of pairs) {
+      if (pairs.every(([c]) => !text(data[c]))) break;
+      for (const [c, z] of pairs) {
         const raw = text(data[c]);
-        const zone = text(data[c + 1]);
+        const zone = text(data[z]);
         if (!raw || !zone) continue;
         const code = /\(([A-Z]{2})\)\s*$/.exec(raw)?.[1] ?? null;
         const country = raw
@@ -453,7 +457,7 @@ function gridAt(
     if (row.filter((c) => ZONE_HEADER.test(text(c))).length >= 3) {
       // The same header again under a new section continues this table; a different layout
       // ("From | To | Zone 1 …" with the zones moved over) is a table of its own.
-      const same = zoneCols.every(
+      const same = [weightCol, ...zoneCols].every(
         (c) => text(row[c]).toLowerCase() === text(header[c]).toLowerCase(),
       );
       if (!same) break;

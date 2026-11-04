@@ -79,6 +79,7 @@ export default function PricingDashboardPage() {
 
   return (
     <div className="space-y-6">
+      <h1 className="text-xl font-semibold text-foreground">Pricing</h1>
       <div className="relative max-w-md">
         <Search
           className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"

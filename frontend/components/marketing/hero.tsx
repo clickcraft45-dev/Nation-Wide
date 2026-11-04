@@ -2,7 +2,8 @@
 
 import { useRef } from "react";
 import { motion, useReducedMotion, useScroll, useSpring, useTransform } from "motion/react";
-import { ArrowRight, Building2, Radar } from "lucide-react";
+import Link from "next/link";
+import { ArrowRight, Building2, IndianRupee, Radar } from "lucide-react";
 import { LiquidButton } from "@/components/ui/liquid-glass-button";
 import { useAuthGate } from "@/lib/auth/use-auth-gate";
 import { TrackingLookupPanel } from "@/features/tracking/TrackingLookupPanel";
@@ -157,7 +158,7 @@ export function MarketingHero() {
             {/* Brand red, not --danger: this is the identity accent on the tagline, not a
                 failure signal. See the SIGNAL RED note in globals.css. */}
             <span className="relative flex h-1.5 w-1.5">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand-red opacity-75" />
+              <span className="absolute inline-flex h-full w-full motion-safe:animate-ping rounded-full bg-brand-red opacity-75" />
               <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-brand-red" />
             </span>
             Delivering trust worldwide
@@ -179,7 +180,7 @@ export function MarketingHero() {
               <span className="mr-[0.25em] inline-block animate-rise-in [animation-delay:360ms]">
                 Delivered
               </span>
-              <span className="inline-block animate-rise-in bg-gradient-to-r from-foreground via-zinc-600 to-zinc-400 bg-clip-text text-transparent [animation-delay:440ms]">
+              <span className="block animate-rise-in bg-gradient-to-r md:inline-block from-foreground via-zinc-600 to-zinc-400 bg-clip-text text-transparent [animation-delay:440ms]">
                 <TypingText words={HEADLINE_WORDS} />
               </span>
             </span>
@@ -223,19 +224,18 @@ export function MarketingHero() {
               className="group w-full overflow-hidden sm:w-auto"
               onClick={() => gate("/quote")}
             >
-              {/* Sheen sweeping the primary CTA every few seconds. */}
-              <span
-                aria-hidden
-                className="pointer-events-none absolute inset-y-0 -left-8 z-0 w-12 animate-sheen bg-white/25 blur-md"
-              />
               Get a Quote
               <ArrowRight
                 className="transition-transform group-hover:translate-x-1"
                 aria-hidden
               />
             </LiquidButton>
+            {/* Prices are public: no sign-in until the visitor picks a carrier to book. */}
             <LiquidButton asChild variant="default" size="lg" className="glass-panel w-full sm:w-auto">
-              <a href="#how-it-works">How it works</a>
+              <Link href="/prices">
+                <IndianRupee aria-hidden />
+                Explore prices
+              </Link>
             </LiquidButton>
           </div>
 

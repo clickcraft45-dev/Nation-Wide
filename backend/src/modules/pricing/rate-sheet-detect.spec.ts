@@ -31,6 +31,24 @@ const zoneOf = (
     .find((z) => z.name === name && z.shipmentType === type);
 
 describe('buildBands', () => {
+  it('leaves a real gap before a per-kg range unpriced, but bridges a carrier\'s "21-44" after 20', () => {
+    const gap = buildBands([
+      { label: { kind: 'at', kg: 1 }, price: 1511 },
+      { label: { kind: 'from', kg: 30.1, toKg: 50 }, price: 538 },
+    ]);
+    expect(gap[1]).toEqual({
+      weightFromKg: 30.1,
+      weightToKg: 50,
+      rate: 538,
+      rateType: 'PER_KG',
+    });
+    const bridged = buildBands([
+      { label: { kind: 'at', kg: 20 }, price: 9000 },
+      { label: { kind: 'from', kg: 21, toKg: 44 }, price: 450 },
+    ]);
+    expect(bridged[1].weightFromKg).toBe(20.01);
+  });
+
   it('expands first 500 g + each extra 500 g into flat bands, then per-kg brackets', () => {
     const bands = buildBands([
       { label: { kind: 'first' }, price: 1700 },
@@ -92,7 +110,7 @@ describe('detectRateTables on the real rate book', () => {
   });
 
   it('reads a From | To per-kg table with its zones shifted over', () => {
-    const dhl = byId('DHL!62');
+    const dhl = byId('DHL!63');
     expect(dhl?.providers[0].zones).toHaveLength(14);
     expect(zoneOf(dhl, 'Zone 1')?.bands[0]).toEqual({
       weightFromKg: 30.1,
@@ -103,7 +121,7 @@ describe('detectRateTables on the real rate book', () => {
   });
 
   it("reads the carrier's own country → zone list", () => {
-    expect(byId('DHL!4')?.countryMap).toContainEqual({
+    expect(byId('DHL!5')?.countryMap).toContainEqual({
       country: 'Afghanistan',
       code: 'AF',
       zone: 'Zone 11',

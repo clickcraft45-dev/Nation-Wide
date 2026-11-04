@@ -16,11 +16,14 @@ export function RateHistoryDialog({
   rateId,
   entity = "WeightSlab",
   title = "Rate history",
+  describe,
 }: {
   trigger: ReactNode;
   rateId: string;
   entity?: string;
   title?: string;
+  /** A readable line for an entry; without it the raw before → after is shown. */
+  describe?: (entry: AuditLogEntryDto) => ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const [entries, setEntries] = useState<AuditLogEntryDto[]>([]);
@@ -61,13 +64,17 @@ export function RateHistoryDialog({
                       {entry.action.replace(/_/g, " ")}
                     </span>
                     <span className="text-xs text-muted-foreground">
-                      {new Date(entry.createdAt).toLocaleString()}
+                      {new Date(entry.createdAt).toLocaleString("en-IN")}
                     </span>
                   </div>
                   <p className="text-xs text-muted-foreground">{entry.actorEmail}</p>
-                  <pre className="mt-2 whitespace-pre-wrap break-all font-mono text-xs text-muted-foreground">
-                    {JSON.stringify(entry.before)} → {JSON.stringify(entry.after)}
-                  </pre>
+                  {describe ? (
+                    <p className="mt-2 text-sm text-foreground">{describe(entry)}</p>
+                  ) : (
+                    <pre className="mt-2 whitespace-pre-wrap break-all font-mono text-xs text-muted-foreground">
+                      {JSON.stringify(entry.before)} → {JSON.stringify(entry.after)}
+                    </pre>
+                  )}
                 </div>
               ))}
           </div>

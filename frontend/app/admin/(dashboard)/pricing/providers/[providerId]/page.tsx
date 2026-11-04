@@ -3,17 +3,18 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, Globe, History } from "lucide-react";
+import { ArrowLeft, Globe, History, Upload } from "lucide-react";
 import type { ProviderCountryDto, RateProviderDto } from "@nationwide/shared-types";
 import { apiClient, ApiError } from "@/lib/api-client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/page-state";
 import { RateProviderDialog } from "@/components/pricing/rate-provider-dialog";
 import { RateHistoryDialog } from "@/components/pricing/rate-history-dialog";
 import { AddCountryDialog } from "@/components/pricing/add-country-dialog";
+import { ExportRateSheetButton, RateSheetHistoryButton } from "@/components/pricing/rate-sheet-actions";
 
 export default function ProviderDetailPage() {
   const params = useParams<{ providerId: string }>();
@@ -70,12 +71,12 @@ export default function ProviderDetailPage() {
 
       {!isLoading && !error && provider && (
         <>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-lg font-semibold text-foreground">{provider.name}</h2>
               <p className="font-mono text-xs text-muted-foreground">{provider.code}</p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Badge variant={provider.isActive ? "success" : "neutral"}>
                 {provider.isActive ? "Active" : "Inactive"}
               </Badge>
@@ -91,7 +92,7 @@ export default function ProviderDetailPage() {
                 trigger={
                   <Button variant="ghost" size="sm">
                     <History className="mr-1.5 h-3.5 w-3.5" aria-hidden />
-                    Recent updates
+                    Configuration history
                   </Button>
                 }
               />
@@ -117,6 +118,28 @@ export default function ProviderDetailPage() {
                 <p className="text-lg font-semibold text-foreground">
                   {new Date(provider.updatedAt).toLocaleDateString("en-IN")}
                 </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="flex flex-wrap items-center justify-between gap-3 pt-5">
+              <div className="space-y-1">
+                <CardTitle>Rate sheet</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Download the live rates as Excel, or upload the carrier&apos;s new sheet to compare and apply.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <RateSheetHistoryButton provider={provider} />
+                <ExportRateSheetButton provider={provider} />
+                <Link
+                  href={`/admin/pricing/rate-sheets?provider=${provider.id}`}
+                  className={buttonVariants({ size: "sm" })}
+                >
+                  <Upload className="h-4 w-4" aria-hidden />
+                  Import
+                </Link>
               </div>
             </CardContent>
           </Card>

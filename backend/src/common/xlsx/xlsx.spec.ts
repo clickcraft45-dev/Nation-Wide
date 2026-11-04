@@ -1,4 +1,5 @@
-import { buildWorkbook } from './xlsx-writer';
+import { buildWorkbook, zip } from './xlsx-writer';
+import { detectRateTables } from '../../modules/pricing/rate-sheet-detect';
 import { listSheets, readSheetFromBuffer } from './xlsx-reader';
 
 // The writer and the reader are two halves of the same contract: an exported sheet has to come
@@ -52,5 +53,57 @@ describe('xlsx round trip', () => {
   it('names a blank sheet rather than writing an unopenable file', () => {
     const file = buildWorkbook([{ name: '  ', rows: [['x']] }]);
     expect(listSheets(file)).toEqual(['Sheet1']);
+  });
+
+  // What ChatGPT hands back is written by openpyxl, not Excel: Target before Id in the
+  // relationships, an absolute sheet path, shared strings, and no element at all for a blank
+  // row. Uploading one used to fail with 'Could not resolve the file for sheet "FEDEX"'.
+  it('reads a workbook written by openpyxl', () => {
+    const strings = [
+      'Fedex Package rates',
+      'Weight (kg)',
+      'Zone 1',
+      'Zone 2',
+      'Country',
+      'Zone',
+      'United States (US)',
+      '1',
+    ];
+    const s = (v: string) =>
+      `<c r="REF" t="s"><v>${strings.indexOf(v)}</v></c>`;
+    const row = (r: number, cells: string[]) =>
+      `<row r="${r}">${cells.map((c, i) => c.replace('REF', `${'ABC'[i]}${r}`)).join('')}</row>`;
+    const n = (v: number) => `<c r="REF" t="n"><v>${v}</v></c>`;
+    const sheet = `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${[
+      row(1, [s('Fedex Package rates')]),
+      row(2, [s('Weight (kg)'), s('Zone 1'), s('Zone 2')]),
+      row(3, [n(0.5), n(1200), n(1500)]),
+      row(4, [n(1), n(1700), n(2100)]),
+      // Row 5 left blank: openpyxl writes nothing for it.
+      row(6, [s('Country'), s('Zone')]),
+      row(7, [s('United States (US)'), s('1')]),
+    ].join('')}</sheetData></worksheet>`;
+    const file = zip(
+      Object.entries({
+        'xl/workbook.xml': `<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" name="FEDEX" sheetId="1" state="visible" r:id="rId1"/></sheets></workbook>`,
+        'xl/_rels/workbook.xml.rels': `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="/xl/worksheets/sheet1.xml" Id="rId1"/></Relationships>`,
+        'xl/sharedStrings.xml': `<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">${strings.map((t) => `<si><t>${t}</t></si>`).join('')}</sst>`,
+        'xl/worksheets/sheet1.xml': sheet,
+      }).map(([name, xml]) => ({ name, data: Buffer.from(xml, 'utf8') })),
+    );
+
+    const rows = readSheetFromBuffer(file, 'FEDEX');
+    expect(rows[2]).toEqual(['0.5', '1200', '1500']);
+    expect(rows[4]).toEqual([]);
+    expect(rows[6]).toEqual(['United States (US)', '1']);
+
+    const [table] = detectRateTables('FEDEX', rows);
+    expect(table.providers[0].zones.map((z) => z.name)).toEqual([
+      'Zone 1',
+      'Zone 2',
+    ]);
+    expect(table.countryMap).toEqual([
+      { country: 'United States', code: 'US', zone: 'Zone 1' },
+    ]);
   });
 });

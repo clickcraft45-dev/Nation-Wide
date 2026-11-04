@@ -6,6 +6,7 @@ import { SITE_URL } from "@/lib/constants/site";
 const PUBLIC_ROUTES = [
   { path: "/", changeFrequency: "weekly", priority: 1 },
   { path: "/track", changeFrequency: "monthly", priority: 0.8 },
+  { path: "/prices", changeFrequency: "weekly", priority: 0.9 },
   { path: "/contact", changeFrequency: "yearly", priority: 0.6 },
   { path: "/events", changeFrequency: "weekly", priority: 0.5 },
   { path: "/offers", changeFrequency: "weekly", priority: 0.5 },

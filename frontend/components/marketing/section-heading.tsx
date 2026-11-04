@@ -13,12 +13,15 @@ export function SectionHeading({
   description,
   align = "center",
   className,
+  as: Heading = "h2",
 }: {
   eyebrow?: string;
   title: string;
   description?: string;
   align?: "center" | "left";
   className?: string;
+  /** "h1" when the heading is the page title (e.g. /contact), not a homepage section. */
+  as?: "h1" | "h2";
 }) {
   return (
     <div
@@ -33,7 +36,7 @@ export function SectionHeading({
         </p>
       )}
 
-      <h2 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">{title}</h2>
+      <Heading className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">{title}</Heading>
 
       <div
         className={cn(

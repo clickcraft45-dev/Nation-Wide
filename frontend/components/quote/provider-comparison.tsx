@@ -60,9 +60,11 @@ export function ProviderComparison<T extends QuotePreviewOptionDto>({
 
       <div>
         <h2 className="mb-3 text-sm font-medium text-muted-foreground">Available Shipping Options</h2>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {/* Centred flex-wrap rather than a 3-col grid: one or two carriers would otherwise sit
+            left-aligned under a centred heading. */}
+        <div className="flex flex-wrap justify-center gap-4">
           {sorted.map((option) => (
-            <Card key={option.rateProviderId} className="flex flex-col">
+            <Card key={option.rateProviderId} className="flex w-full flex-col sm:w-[calc(50%-0.5rem)] lg:w-[calc(33.333%-0.667rem)]">
               <CardContent className="flex flex-1 flex-col items-center gap-3 pt-5 text-center">
                 {option.finalPrice === cheapestPrice && sorted.length > 1 && (
                   <Badge variant="success">BEST PRICE</Badge>

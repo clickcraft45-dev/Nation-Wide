@@ -4,7 +4,6 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { randomUUID } from 'node:crypto';
 import type { Country, RateProvider } from '@prisma/client';
 import type {
   ProviderRateSheetDto,
@@ -54,7 +53,10 @@ export class RateSheetImportService {
    * The live rates as a workbook: the same grid, then the country → zone list. Upload it back
    * (edited or not) and it reads as this provider's sheet.
    */
-  async export(providerId: string): Promise<{ name: string; file: Buffer }> {
+  async export(
+    providerId: string,
+    actorId: string,
+  ): Promise<{ name: string; file: Buffer }> {
     const provider = await this.provider(providerId);
     const view = sheetView(
       provider,
@@ -69,6 +71,20 @@ export class RateSheetImportService {
       orderBy: [{ zone: { name: 'asc' } }, { country: { name: 'asc' } }],
     });
     const allIn = view.grids.some((g) => g.allIn);
+    // Logged like an import, so the provider's history shows who took a copy of the rates and when.
+    await this.prisma.auditLog.create({
+      data: {
+        actorId,
+        action: 'EXPORT',
+        entity: 'RateSheet',
+        entityId: provider.id,
+        after: {
+          allIn,
+          bands: view.grids.reduce((n, g) => n + g.rows.length, 0),
+          countries: links.length,
+        },
+      },
+    });
     return {
       name: `${provider.code.toLowerCase()}-rates`,
       file: buildWorkbook([
@@ -79,6 +95,7 @@ export class RateSheetImportService {
           rows: exportRows(
             provider.name,
             view.grids,
+            `${allIn ? 'Prices include fuel surcharge and GST' : 'Prices before fuel surcharge, PSS and GST, which are added at quote time'}. Exported ${new Date().toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })}.`,
             links.map((l) => ({
               country: l.country.name,
               code: l.country.code,
@@ -114,7 +131,7 @@ export class RateSheetImportService {
   async import(
     providerId: string,
     file: Buffer,
-    options: { allIn: boolean; gstPercent: number },
+    options: { allIn: boolean; gstPercent: number; fileName?: string },
     actorId: string,
   ): Promise<RateSheetApplyResultDto> {
     if (!(options.gstPercent >= 0 && options.gstPercent <= 100)) {
@@ -272,9 +289,10 @@ export class RateSheetImportService {
             actorId,
             action: 'IMPORT',
             entity: 'RateSheet',
-            entityId: randomUUID(),
+            // Keyed by provider, so its page can list every import and export of its rates.
+            entityId: provider.id,
             after: {
-              providerId: provider.id,
+              fileName: options.fileName ?? null,
               allIn: options.allIn,
               gstPercent: options.gstPercent,
               zonesCreated: result.zonesCreated,
@@ -356,16 +374,19 @@ export class RateSheetImportService {
   }
 
   private read(file: Buffer): DetectedTable[] {
-    let sheets: string[];
+    let sheets: { name: string; rows: string[][] }[];
     try {
-      sheets = listSheets(file);
+      sheets = listSheets(file).map((name) => ({
+        name,
+        rows: readSheetFromBuffer(file, name),
+      }));
     } catch (error) {
       throw new BadRequestException(
-        `That file could not be read as a spreadsheet (${(error as Error).message}).`,
+        `That file could not be read as a spreadsheet (${(error as Error).message}). Open it in Excel and save it again as .xlsx, then upload that copy.`,
       );
     }
     const tables = sheets.flatMap((sheet) =>
-      detectRateTables(sheet, readSheetFromBuffer(file, sheet)),
+      detectRateTables(sheet.name, sheet.rows),
     );
     if (tables.length === 0) {
       throw new BadRequestException(
@@ -454,6 +475,7 @@ export function pickTables(
 export function exportRows(
   providerName: string,
   grids: RateGridDto[],
+  note: string,
   links: { country: string; code: string; zone: string }[],
 ): Cell[][] {
   const columns = [...new Set(grids.flatMap((g) => g.columns))];
@@ -463,6 +485,9 @@ export function exportRows(
     rows.push([
       `${providerName} ${grid.shipmentType === 'DOCUMENT' ? 'Document' : 'Package'} rates${grid.allIn ? ' (all-in)' : ''}`,
     ]);
+    // A plain label for whoever opens the file. It must not name a shipment type, which the
+    // detector reads from the rows above a header.
+    rows.push([note]);
     rows.push(['Weight (kg)', ...columns]);
     for (const row of grid.rows) {
       const perKg = row.cells.some((c) => c.old !== null && c.perKg);

@@ -59,6 +59,7 @@ export default function PricingZonesPage() {
   return (
     <div className="space-y-4">
       <BackLink href="/admin/pricing/dashboard">Back to pricing</BackLink>
+      <h1 className="text-xl font-semibold text-foreground">Zones</h1>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <NativeSelect
           className="sm:w-56"

@@ -13,6 +13,7 @@ import { RateProviderDialog } from "@/components/pricing/rate-provider-dialog";
 import { FuelSurchargePanel } from "@/components/pricing/fuel-surcharge-panel";
 import { MarginBandsDialog } from "@/components/pricing/margin-bands-dialog";
 import { BackLink } from "@/components/ui/back-link";
+import { CancellationChargesCard } from "@/components/pricing/cancellation-charges-card";
 
 // Fuel Charge % and PSS/kg live once per provider (RateProvider), not per rate — updating either
 // here affects every shipment quoted for that provider immediately, with no duplicate values
@@ -39,9 +40,24 @@ export default function FuelAndPssPage() {
     load();
   }, []);
 
+  // ?section=cancellation (the overview's tile): scroll <main>, the shell's scroll container, once
+  // the provider cards above have loaded and stopped moving the card down. scrollIntoView would
+  // also scroll the fixed shell itself and leave a gap under it.
+  useEffect(() => {
+    if (isLoading || new URLSearchParams(window.location.search).get("section") !== "cancellation") return;
+    const card = document.getElementById("cancellation");
+    const main = card?.closest("main");
+    if (!card || !main) return;
+    main.scrollTo({
+      top: main.scrollTop + card.getBoundingClientRect().top - main.getBoundingClientRect().top - 24,
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+    });
+  }, [isLoading]);
+
   return (
     <div className="space-y-4">
       <BackLink href="/admin/pricing/dashboard">Back to pricing</BackLink>
+      <h1 className="text-xl font-semibold text-foreground">Charges and margins</h1>
       <p className="text-sm text-muted-foreground">
         Fuel Charge % applies to Base Rate only; PSS is a flat rate per kg. Margin bands set the
         NationWide cut by weight. A rate that carries its own margin keeps it. All three apply
@@ -126,6 +142,10 @@ export default function FuelAndPssPage() {
           ))}
         </div>
       )}
+
+      <div id="cancellation" className="scroll-mt-20">
+        <CancellationChargesCard />
+      </div>
     </div>
   );
 }

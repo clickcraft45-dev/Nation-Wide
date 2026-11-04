@@ -66,6 +66,13 @@ Installed as project skills in `.claude/skills/`. Read the relevant one before U
 | `taste-skill` (`design-taste-frontend`) | Building or redesigning marketing/landing pages without generic AI-template output | [Leonxlnx/taste-skill](https://github.com/Leonxlnx/taste-skill) |
 | `web-design-guidelines` | Reviewing any UI for accessibility, UX and performance; fetches Vercel's Web Interface Guidelines and reports `file:line` findings | [vercel-labs/agent-skills](https://github.com/vercel-labs/agent-skills) |
 | `awesome-design-md` | Borrowing structure from a real product's DESIGN.md (Stripe, Linear, Vercel...) or writing this project's own DESIGN.md | [VoltAgent/awesome-design-md](https://github.com/VoltAgent/awesome-design-md) |
+| `hallmark` | New marketing pages, or `/hallmark audit <path>` for a slop check. Only on existing pages when named. Its image-gen script needs `TOGETHER_API_KEY`; don't run `install-hook.mjs` | [Nutlope/hallmark](https://github.com/Nutlope/hallmark) |
+| `interface-design` | Admin console, partner app and customer portal screens (not marketing) | [Dammyjay93/interface-design](https://github.com/Dammyjay93/interface-design) |
+| `ui-ux-pro-max` | UX rules lookup (`python .claude/skills/ui-ux-pro-max/scripts/search.py "<query>" --domain ux`) | [nextlevelbuilder/ui-ux-pro-max-skill](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill) |
+| `better-typography` | Type scale, wrapping, truncation, punctuation reviews | [jakubkrehel/skills](https://github.com/jakubkrehel/skills) |
+| `hue` | Generating a design-language skill from a brand. Only for writing this project's own one, never to import another brand | [dominikmartn/hue](https://github.com/dominikmartn/hue) |
+
+`ponytail` is installed as a user-level plugin, not a project skill.
 
 Rules that apply to every UI change, from those skills:
 

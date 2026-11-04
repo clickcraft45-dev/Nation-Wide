@@ -26,6 +26,13 @@ import {
   type LucideIcon,
   TicketPercent,
   Megaphone,
+  Receipt,
+  FileSpreadsheet,
+  MapPinned,
+  Fuel,
+  Globe,
+  FileText,
+  FileClock,
 } from "lucide-react";
 import type { Role } from "@nationwide/shared-types";
 
@@ -110,7 +117,18 @@ export const ADMIN_NAV_GROUPS: NavGroup[] = [
   },
   {
     label: "Pricing",
-    items: [{ label: "Pricing", href: "/admin/pricing", icon: Tag, roles: ["ADMIN"] }],
+    // Same pages, same order as the groups on the pricing overview (pricing-quick-actions.tsx):
+    // rates, the charges added on top, destinations, then publishing and the audit trail.
+    items: [
+      { label: "Overview", href: "/admin/pricing/dashboard", icon: Tag, roles: ["ADMIN"] },
+      { label: "Providers & rates", href: "/admin/pricing/providers", icon: Receipt, roles: ["ADMIN"] },
+      { label: "Rate sheets", href: "/admin/pricing/rate-sheets", icon: FileSpreadsheet, roles: ["ADMIN"] },
+      { label: "Zones", href: "/admin/pricing/zones", icon: MapPinned, roles: ["ADMIN"] },
+      { label: "Charges & margins", href: "/admin/pricing/fuel-pss", icon: Fuel, roles: ["ADMIN"] },
+      { label: "Countries", href: "/admin/pricing/countries", icon: Globe, roles: ["ADMIN"] },
+      { label: "Rate card PDFs", href: "/admin/pricing/pdf-generator", icon: FileText, roles: ["ADMIN"] },
+      { label: "Rate history", href: "/admin/pricing/rate-history", icon: FileClock, roles: ["ADMIN"] },
+    ],
   },
   {
     label: "Analytics",

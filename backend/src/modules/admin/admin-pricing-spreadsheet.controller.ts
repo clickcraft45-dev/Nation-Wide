@@ -66,10 +66,11 @@ export class AdminPricingSpreadsheetController {
   /** The same grid as a workbook, which this page's import reads straight back. */
   @Get('providers/:providerId/rate-sheet/export')
   async exportRateSheet(
+    @CurrentUser() user: JwtPayload,
     @Param('providerId', ParseUUIDPipe) providerId: string,
     @Res({ passthrough: true }) res: Response,
   ): Promise<StreamableFile> {
-    const { name, file } = await this.rateSheets.export(providerId);
+    const { name, file } = await this.rateSheets.export(providerId, user.sub);
     return this.send(res, name, file);
   }
 
@@ -107,6 +108,7 @@ export class AdminPricingSpreadsheetController {
         allIn: body.allIn === 'true',
         // A cleared field arrives as "", and Number("") is 0: that would import every band at 0% GST.
         gstPercent: Number(body.gstPercent?.trim() || 18),
+        fileName: file?.originalname,
       },
       user.sub,
     );

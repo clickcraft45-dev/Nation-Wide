@@ -1,17 +1,17 @@
 "use client";
 
-// "Rate Management" is the task-framed entry point to the same Provider -> Country -> Weight
-// Category -> Rate drill-down as the Providers grid, so it renders that exact page rather than a
-// second, divergent provider picker. What it adds is the money that is not per rate: the charges
-// a cancellation carries, which admins come looking for here.
-import PricingProvidersPage from "../providers/page";
-import { CancellationChargesCard } from "@/components/pricing/cancellation-charges-card";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 
-export default function RateManagementPage() {
-  return (
-    <div className="space-y-6">
-      <PricingProvidersPage />
-      <CancellationChargesCard />
-    </div>
-  );
+// "Rate Management" used to render the Providers page a second time, with cancellation charges
+// tucked underneath. Rates now live under Providers & rates and the charges under Charges &
+// margins; this keeps old bookmarks working.
+export default function RateManagementRedirectPage() {
+  const router = useRouter();
+
+  useEffect(() => {
+    router.replace("/admin/pricing/providers");
+  }, [router]);
+
+  return null;
 }

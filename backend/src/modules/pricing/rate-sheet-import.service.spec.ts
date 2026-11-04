@@ -208,7 +208,15 @@ describe('a provider exported and uploaded back', () => {
     );
     const view = sheetView(provider, live, null, [], []);
     const file = buildWorkbook([
-      { name: code, rows: exportRows(code, view.grids, links) },
+      {
+        name: code,
+        rows: exportRows(
+          code,
+          view.grids,
+          'Prices before fuel surcharge, PSS and GST. Exported 5/11/2026.',
+          links,
+        ),
+      },
     ]);
     const back = listSheets(file).flatMap((sheet) =>
       detectRateTables(sheet, readSheetFromBuffer(file, sheet)),

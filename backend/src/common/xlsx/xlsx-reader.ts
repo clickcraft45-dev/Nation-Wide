@@ -80,6 +80,19 @@ function columnIndex(ref: string): number {
   return n - 1;
 }
 
+/** 54 -> "BC". */
+function columnName(index: number): string {
+  let name = '';
+  for (let n = index + 1; n > 0; n = Math.floor((n - 1) / 26))
+    name = String.fromCharCode(65 + ((n - 1) % 26)) + name;
+  return name;
+}
+
+/** One attribute of a tag, wherever it sits in it. */
+function attr(tag: string, name: string): string | undefined {
+  return new RegExp(`\\s${name}="([^"]*)"`).exec(tag)?.[1];
+}
+
 /** Every sheet name in the workbook, in tab order. */
 export function listSheets(file: Buffer): string[] {
   const workbook = readZip(file).get('xl/workbook.xml')?.toString('utf8') ?? '';
@@ -106,9 +119,11 @@ function readNamedSheet(
   const workbook = zip.get('xl/workbook.xml')?.toString('utf8') ?? '';
   const rels = zip.get('xl/_rels/workbook.xml.rels')?.toString('utf8') ?? '';
 
-  const sheetTag = new RegExp(
-    `<sheet[^>]*name="${sheetName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"[^>]*>`,
-  ).exec(workbook)?.[0];
+  // Attributes are read one by one: openpyxl (what ChatGPT and most scripts write with) puts
+  // Target before Id, and the relationships prefix is not always "r:".
+  const sheetTag = [...workbook.matchAll(/<sheet\b[^>]*>/g)]
+    .map((m) => m[0])
+    .find((tag) => decodeEntities(attr(tag, 'name') ?? '') === sheetName);
   if (!sheetTag) {
     const names = [...workbook.matchAll(/<sheet[^>]*name="([^"]+)"/g)].map(
       (m) => m[1],
@@ -117,29 +132,43 @@ function readNamedSheet(
       `Sheet "${sheetName}" not found. Available: ${names.join(', ')}`,
     );
   }
-  const rid = /r:id="([^"]+)"/.exec(sheetTag)?.[1];
-  const target = new RegExp(`Id="${rid}"[^>]*Target="([^"]+)"`).exec(rels)?.[1];
-  if (!target)
+  const rid = /\s[\w-]+:id="([^"]+)"/.exec(sheetTag)?.[1];
+  const target = [...rels.matchAll(/<Relationship\b[^>]*>/g)]
+    .map((m) => m[0])
+    .find((tag) => attr(tag, 'Id') === rid);
+  const href = target && attr(target, 'Target');
+  if (!href)
     throw new Error(`Could not resolve the file for sheet "${sheetName}"`);
-  const sheetPath = target.startsWith('/')
-    ? target.slice(1)
-    : `xl/${target.replace(/^\.\//, '')}`;
+  const sheetPath = href.startsWith('/')
+    ? href.slice(1)
+    : `xl/${href.replace(/^\.\//, '')}`;
 
   const sharedXml = zip.get('xl/sharedStrings.xml')?.toString('utf8') ?? '';
-  const shared = (sharedXml.match(/<si>[\s\S]*?<\/si>/g) ?? []).map(textOf);
+  const shared = (sharedXml.match(/<si(?:\s*\/>|>[\s\S]*?<\/si>)/g) ?? []).map(
+    textOf,
+  );
 
   const sheetXml = zip.get(sheetPath)?.toString('utf8');
   if (!sheetXml)
     throw new Error(`Sheet part ${sheetPath} missing from the workbook`);
 
   const out: string[][] = [];
-  for (const rowXml of sheetXml.match(/<row[^>]*>[\s\S]*?<\/row>/g) ?? []) {
+  // Lazy attributes, so "<row r="5"/>" ends at its own "/>" instead of running into the next row.
+  for (const rowXml of sheetXml.match(
+    /<row\b[^>]*?(?:\/>|>[\s\S]*?<\/row>)/g,
+  ) ?? []) {
+    // Writers other than Excel skip empty rows; put them back, since a blank row is what
+    // separates one block of a rate sheet from the next.
+    const rowNumber = Number(attr(rowXml.slice(0, rowXml.indexOf('>')), 'r'));
+    while (rowNumber > out.length + 1) out.push([]);
     const cells: Record<number, string> = {};
-    for (const cellXml of rowXml.match(/<c[^>]*(?:\/>|>[\s\S]*?<\/c>)/g) ??
+    let next = 0;
+    for (const cellXml of rowXml.match(/<c\b[^>]*?(?:\/>|>[\s\S]*?<\/c>)/g) ??
       []) {
-      const ref = /r="([A-Z]+\d+)"/.exec(cellXml)?.[1];
-      if (!ref) continue;
-      const type = /t="([^"]+)"/.exec(cellXml)?.[1];
+      // The cell reference is optional in the format; without one a cell follows the last.
+      const ref = /\sr="([A-Z]+)\d*"/.exec(cellXml)?.[1] ?? columnName(next);
+      next = columnIndex(ref) + 1;
+      const type = attr(/^<c\b[^>]*/.exec(cellXml)![0], 't');
       let value: string;
       if (type === 's') {
         const idx = Number(/<v>(\d+)<\/v>/.exec(cellXml)?.[1] ?? '-1');

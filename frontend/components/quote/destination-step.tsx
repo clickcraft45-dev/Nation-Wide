@@ -61,7 +61,11 @@ export function DestinationStep({
         )}
 
         {!isLoading && filtered.length === 0 && (
-          <p className="py-6 text-center text-sm text-muted-foreground">No countries match &quot;{search}&quot;.</p>
+          <p className="py-6 text-center text-sm text-muted-foreground">
+            {countries.length === 0
+              ? "No destinations are open for online booking right now. Call or email us for a price."
+              : <>No countries match &quot;{search}&quot;.</>}
+          </p>
         )}
 
         {!isLoading && filtered.length > 0 && (

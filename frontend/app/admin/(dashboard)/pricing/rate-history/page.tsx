@@ -19,6 +19,7 @@ import { Label } from "@/components/ui/input";
 import { DateField } from "@/components/ui/date-field";
 import { useDebouncedValue } from "@/lib/utils/use-debounced-value";
 import { BackLink } from "@/components/ui/back-link";
+import { describeRateSheetEntry } from "@/components/pricing/rate-sheet-actions";
 
 const WEIGHT_SLAB_FIELD_LABELS: Record<string, string> = {
   weightFromKg: "Weight from",
@@ -29,15 +30,7 @@ const WEIGHT_SLAB_FIELD_LABELS: Record<string, string> = {
 };
 
 function describeChange(entry: AuditLogEntryDto): string {
-  // One row per uploaded rate sheet, with the totals the import reported.
-  if (entry.entity === "RateSheet" && typeof entry.after === "object" && entry.after !== null) {
-    const a = entry.after as Record<string, number | boolean>;
-    return (
-      `Rate sheet imported${a.allIn ? " (all-in)" : ""}: ${a.bandsCreated ?? 0} added, ` +
-      `${a.bandsUpdated ?? 0} changed, ${a.bandsDeactivated ?? 0} switched off, ` +
-      `${a.countriesLinked ?? 0} countries moved`
-    );
-  }
+  if (entry.entity === "RateSheet") return describeRateSheetEntry(entry);
   if (entry.entity !== "WeightSlab" || typeof entry.after !== "object" || entry.after === null) {
     return `${JSON.stringify(entry.before ?? {})} → ${JSON.stringify(entry.after ?? {})}`;
   }
@@ -91,6 +84,7 @@ export default function RateHistoryPage() {
   return (
     <div className="space-y-4">
       <BackLink href="/admin/pricing/dashboard">Back to pricing</BackLink>
+      <h1 className="text-xl font-semibold text-foreground">Rate history</h1>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
         <div className="sm:w-64">
           <SearchInput

@@ -40,7 +40,11 @@ describe('AdminPricingSpreadsheetController downloads', () => {
   it.each([
     ['countries template', () => controller.countriesTemplate(response())],
     ['countries export', () => controller.exportCountries(response())],
-    ['provider rate sheet', () => controller.exportRateSheet('p', response())],
+    [
+      'provider rate sheet',
+      () =>
+        controller.exportRateSheet({ sub: 'admin' } as never, 'p', response()),
+    ],
   ])(
     '%s streams the workbook rather than JSON-encoding it',
     async (_label, call) => {

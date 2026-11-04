@@ -9,7 +9,7 @@ import { MarketingTrustedNetwork } from "@/components/marketing/trusted-network"
 import { MarketingBusiness } from "@/components/marketing/business";
 import { MarketingReviews } from "@/components/marketing/reviews";
 import { MarketingFaqs } from "@/components/marketing/faqs";
-import { MarketingFinalCta } from "@/components/marketing/final-cta";
+import { MarketingTermsSummary } from "@/components/marketing/terms-summary";
 import { MarketingFooter } from "@/components/marketing/footer";
 import { Reveal } from "@/components/marketing/reveal";
 import { SmoothScroll } from "@/components/marketing/smooth-scroll";
@@ -20,8 +20,8 @@ export const metadata: Metadata = {
   alternates: { canonical: "/" },
 };
 
-// The public homepage — Track Shipment is the one operational feature available without
-// signing in (see MarketingHero). Every other CTA (Get a Quote, My Orders, Schedule Pickup, ...)
+// The public homepage — Track Shipment and Explore prices (/prices) are the operational features available
+// without signing in (see MarketingHero). Every other CTA (Get a Quote, My Orders, Schedule Pickup, ...)
 // routes through useAuthGate, which sends signed-out visitors to /login first. This page itself
 // only renders static marketing content — no customer/order/quote/pricing data is fetched here.
 //
@@ -59,8 +59,9 @@ export default function HomePage() {
         <MarketingFaqs />
       </Reveal>
       <Reveal from="fade">
-        <MarketingFinalCta />
+        <MarketingTermsSummary />
       </Reveal>
+      {/* No separate closing CTA band: the footer opens with one (Explore prices / Track). */}
       <MarketingFooter />
     </div>
   );

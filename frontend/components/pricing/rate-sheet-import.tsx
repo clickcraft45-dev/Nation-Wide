@@ -19,33 +19,115 @@ import { NativeSelect } from "@/components/ui/select";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils/cn";
+import { ExportRateSheetButton, RateSheetHistoryButton } from "@/components/pricing/rate-sheet-actions";
 
 type Kind = "normal" | "allin";
 
 const num = (n: number) => n.toLocaleString("en-IN", { maximumFractionDigits: 2 });
 const kg = (n: number) => n.toLocaleString("en-IN", { maximumFractionDigits: 2 });
 
+const KIND_TEXT: Record<Kind, { label: string; sheetSuffix: string; prices: string }> = {
+  normal: {
+    label: "Prices before fuel surcharge, PSS and GST",
+    sheetSuffix: "",
+    prices:
+      "The prices in my sheet are BEFORE fuel surcharge and GST (fuel, PSS and 18% GST get added later). Copy them as they are.",
+  },
+  allin: {
+    label: "Prices include fuel surcharge and GST",
+    sheetSuffix: " All in",
+    prices:
+      "The prices in my sheet are ALL-IN: they already include fuel surcharge and GST. Copy them as they are, never take anything off.",
+  },
+};
+
 /**
  * What to paste into ChatGPT with the carrier's raw sheet, so it comes back in the layout this
  * page reads: the same layout the provider's Export writes (exportRows in the backend's
- * rate-sheet-import.service.ts). Keep the two in step.
+ * rate-sheet-import.service.ts). Keep the two in step. Row 2 of each block is a plain label; it
+ * must not say "document", "package" or "parcel", which the importer reads as a shipment type.
  */
-export function conversionPrompt(provider: { code: string; name: string }): string {
+export function conversionPrompt(provider: { code: string; name: string }, kind: Kind): string {
+  const k = KIND_TEXT[kind];
   return [
     `I have a raw courier rate sheet from ${provider.name}. Convert it into one Excel file (.xlsx) I can download, laid out exactly like this:`,
     "",
-    `Sheet name: ${provider.code}. Add " All in" to the end only if the prices already include fuel surcharge and GST.`,
+    k.prices,
     "",
-    `1. A title row: "${provider.name} Package rates".`,
-    `2. A header row: "Weight (kg)", then one column per zone, named as in my sheet (for example Zone 1, Zone 2, or A, B, C).`,
-    "3. One row per weight. For a flat price, put the upper weight in kg in the first column (0.5, 1, 1.5 ...). For a price charged per kg over a range, write the range as from-to (for example 21-44) and put the per-kg price in the zone columns.",
-    `4. An empty row, then the same block for documents with the title "${provider.name} Document rates", only if my sheet has document rates.`,
-    `5. An empty row, then a header row "Country" | "Zone" and one row per country: the country name with its 2-letter ISO code in brackets, for example "United States (US)", and its zone.`,
+    `Sheet name: exactly "${provider.code}${k.sheetSuffix}".`,
     "",
-    "Rules: prices are plain numbers in INR, no currency symbols or thousands separators. Weights are in kg (500 gms = 0.5). Weight bands must not overlap. Leave a cell empty when a zone has no price for that weight. Copy every price exactly, never estimate or round. After the file, list any rows you could not read.",
+    `1. Row 1, the title: "${provider.name} Package rates".`,
+    `2. Row 2, the label: "${k.label}".`,
+    `3. Row 3, the header: "Weight (kg)", then one column per zone, named as in my sheet (for example Zone 1, Zone 2, or A, B, C).`,
+    "4. One row per weight. For a flat price, put the upper weight in kg in the first column (0.5, 1, 1.5 ...). For a price charged per kg over a range, write the range as from-to (for example 21-44) and put the per-kg price in the zone columns.",
+    `5. An empty row, then the same block for documents (title "${provider.name} Document rates", the same label, the same header), only if my sheet has document rates.`,
+    `6. An empty row, then a header row "Country" | "Zone" and one row per country: the country name with its 2-letter ISO code in brackets, for example "United States (US)", and its zone as the zone column is named, without the word Zone (1 for Zone 1, A for A).`,
+    "",
+    "Rules: prices are plain numbers in INR, no currency symbols or thousands separators. Weights are in kg (500 gms = 0.5). Weight bands must not overlap. Leave a cell empty when a zone has no price for that weight. Copy every price exactly, never estimate or round. Do not merge cells. After the file, list any rows you could not read.",
     "",
     "My raw rate sheet is attached.",
   ].join("\n");
+}
+
+/** The first rows of the file this page reads, as a picture of the layout. Rates from DHL's July 2026 sheet. */
+function LayoutExample({ provider, kind }: { provider: { code: string; name: string }; kind: Kind }) {
+  const rows: string[][] = [
+    [`${provider.name} Package rates`],
+    [KIND_TEXT[kind].label],
+    ["Weight (kg)", "Zone 1", "Zone 2", "Zone 3"],
+    ["0.5", "1267", "1234", "1392"],
+    ["1", "1511", "1467", "1680"],
+    ["30.1-50", "538", "514", "573"],
+    [],
+    ["Country", "Zone"],
+    ["United States (US)", "1"],
+  ];
+  return (
+    <div className="space-y-1.5">
+      <p className="text-xs text-muted-foreground">
+        Sheet name{" "}
+        <span className="font-mono text-foreground">
+          {provider.code}
+          {KIND_TEXT[kind].sheetSuffix}
+        </span>
+      </p>
+      <div className="overflow-x-auto rounded-lg border border-border bg-white">
+        <table className="w-full border-collapse text-xs tabular-nums">
+          <tbody>
+            {rows.map((row, r) => (
+              <tr key={r} className="h-6">
+                <th
+                  scope="row"
+                  className="w-7 border-b border-r border-border bg-muted px-1.5 text-center font-normal text-muted-foreground"
+                >
+                  {r + 1}
+                </th>
+                {/* A lone cell spills over the empty ones beside it, as it does in Excel. */}
+                {(row.length === 1 ? [0] : [0, 1, 2, 3]).map((c) => (
+                  <td
+                    key={c}
+                    colSpan={row.length === 1 ? 4 : undefined}
+                    className={cn(
+                      "whitespace-nowrap border-b border-r border-border px-2 last:border-r-0",
+                      (r === 2 || r === 7) && "font-semibold text-foreground",
+                      r === 1 && "text-muted-foreground",
+                      c > 0 && /^\d/.test(row[c] ?? "") && "text-right",
+                    )}
+                  >
+                    {row[c] ?? ""}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Row 6 is a per-kg range: that price is charged for every kg from 30.1 to 50. Add a Document block the same way
+        if the carrier prices documents separately.
+      </p>
+    </div>
+  );
 }
 
 /**
@@ -242,6 +324,12 @@ export function RateSheetImport() {
                     Show live grid
                   </Button>
                 )}
+                {provider && (
+                  <>
+                    <RateSheetHistoryButton provider={provider} />
+                    <ExportRateSheetButton provider={provider} />
+                  </>
+                )}
                 <Button
                   onClick={() => {
                     setCopied(false);
@@ -268,14 +356,27 @@ export function RateSheetImport() {
         <Dialog open={promptOpen} onOpenChange={setPromptOpen}>
           <DialogContent
             className="max-w-xl"
-            title={`Import ${provider.name} rates`}
-            description="Carrier sheets come in every shape. Paste this prompt into ChatGPT with the raw sheet attached, download the .xlsx it returns, then choose that file here."
+            title={`Import ${provider.name} ${kind === "allin" ? "all-in" : "normal"} rates`}
+            description={
+              kind === "allin"
+                ? "All-in: the carrier's prices already include fuel and GST, so nothing is added on top except your margin. Paste this prompt into ChatGPT with the raw sheet attached, then choose the .xlsx it returns."
+                : "Normal: the carrier's prices are before fuel and GST, which are added at quote time. Paste this prompt into ChatGPT with the raw sheet attached, then choose the .xlsx it returns."
+            }
           >
             <div className="space-y-3">
+              <SegmentedControl<Kind>
+                ariaLabel="Sheet type"
+                value={kind}
+                onChange={setKind}
+                options={[
+                  { value: "normal", label: "Normal" },
+                  { value: "allin", label: "All-in" },
+                ]}
+              />
               <textarea
                 readOnly
                 aria-label="ChatGPT prompt"
-                value={conversionPrompt(provider)}
+                value={conversionPrompt(provider, kind)}
                 onFocus={(e) => e.currentTarget.select()}
                 className="glass-field h-56 w-full resize-none rounded-lg p-3 font-mono text-xs text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               />
@@ -283,7 +384,7 @@ export function RateSheetImport() {
                 <Button
                   variant="secondary"
                   onClick={async () => {
-                    await navigator.clipboard.writeText(conversionPrompt(provider));
+                    await navigator.clipboard.writeText(conversionPrompt(provider, kind));
                     setCopied(true);
                   }}
                 >
@@ -291,7 +392,7 @@ export function RateSheetImport() {
                   {copied ? "Copied" : "Copy prompt"}
                 </Button>
                 <a
-                  href={`https://chatgpt.com/?q=${encodeURIComponent(conversionPrompt(provider))}`}
+                  href={`https://chatgpt.com/?q=${encodeURIComponent(conversionPrompt(provider, kind))}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className={buttonVariants({ variant: "secondary" })}
@@ -310,6 +411,14 @@ export function RateSheetImport() {
                   Choose .xlsx file
                 </Button>
               </div>
+              <details className="rounded-lg border border-border p-3">
+                <summary className="min-h-6 cursor-pointer text-sm font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                  The layout the file needs
+                </summary>
+                <div className="mt-3">
+                  <LayoutExample provider={provider} kind={kind} />
+                </div>
+              </details>
               <p className="text-xs text-muted-foreground">
                 Already have the file in this layout, or exported it from here? Choose it directly. Nothing changes until you press Apply.
               </p>
