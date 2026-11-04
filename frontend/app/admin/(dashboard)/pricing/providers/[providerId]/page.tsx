@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, Globe, History, Upload } from "lucide-react";
+import { ArrowLeft, Download, Globe, History } from "lucide-react";
 import type { ProviderCountryDto, RateProviderDto } from "@nationwide/shared-types";
 import { apiClient, ApiError } from "@/lib/api-client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -137,7 +137,7 @@ export default function ProviderDetailPage() {
                   href={`/admin/pricing/rate-sheets?provider=${provider.id}`}
                   className={buttonVariants({ size: "sm" })}
                 >
-                  <Upload className="h-4 w-4" aria-hidden />
+                  <Download className="h-4 w-4" aria-hidden />
                   Import
                 </Link>
               </div>

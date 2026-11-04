@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, ArrowDown, ArrowUp, CheckCircle2, Copy, ExternalLink, Upload } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, CheckCircle2, Copy, Download, ExternalLink } from "lucide-react";
 import type {
   ProviderRateSheetDto,
   RateGridCellDto,
@@ -337,7 +337,7 @@ export function RateSheetImport() {
                   }}
                   disabled={!providerId || isLoading}
                 >
-                  <Upload className="h-4 w-4" aria-hidden />
+                  <Download className="h-4 w-4" aria-hidden />
                   Import new sheet
                 </Button>
               </>
@@ -407,7 +407,7 @@ export function RateSheetImport() {
                     inputRef.current?.click();
                   }}
                 >
-                  <Upload className="h-4 w-4" aria-hidden />
+                  <Download className="h-4 w-4" aria-hidden />
                   Choose .xlsx file
                 </Button>
               </div>

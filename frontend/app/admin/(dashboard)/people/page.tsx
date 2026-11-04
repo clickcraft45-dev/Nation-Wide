@@ -175,7 +175,12 @@ export default function AdminPeoplePage() {
             follows it.
           </p>
         </div>
-        <CreateFor tab={tab} onCustomer={load} onStaff={load} />
+        <CreateFor
+          tab={tab}
+          canCreateSuperAdmin={currentUser?.role === "SUPER_ADMIN"}
+          onCustomer={load}
+          onStaff={load}
+        />
       </div>
 
       <SegmentedControl ariaLabel="Which people" value={tab} onChange={setTab} options={TABS} />
@@ -216,6 +221,12 @@ export default function AdminPeoplePage() {
               // The server enforces this too; disabling the controls just avoids offering an
               // action guaranteed to fail.
               const isSelf = u.id === currentUser?.id;
+              // Only a super admin may touch a super admin (AdminUsersService enforces it).
+              const superLocked = currentUser?.role !== "SUPER_ADMIN" && u.role === "SUPER_ADMIN";
+              const lockedReason = superLocked ? "Only a super admin can change a super admin" : undefined;
+              const roleOptions = ROLE_OPTIONS.filter(
+                (role) => role !== "SUPER_ADMIN" || currentUser?.role === "SUPER_ADMIN" || u.role === "SUPER_ADMIN",
+              );
               return (
                 <TableRow key={u.id}>
                   <TableCell className="font-medium text-foreground">
@@ -239,7 +250,8 @@ export default function AdminPeoplePage() {
                     <NativeSelect
                       aria-label={`Role for ${u.email}`}
                       value={u.role}
-                      disabled={isSelf}
+                      disabled={isSelf || superLocked}
+                      title={lockedReason}
                       onChange={(e) =>
                         patchStaff(
                           u.id,
@@ -249,7 +261,7 @@ export default function AdminPeoplePage() {
                       }
                       className="w-36"
                     >
-                      {ROLE_OPTIONS.map((role) => (
+                      {roleOptions.map((role) => (
                         <option key={role} value={role}>
                           {ROLE_LABELS[role]}
                         </option>
@@ -263,21 +275,28 @@ export default function AdminPeoplePage() {
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-wrap gap-2">
-                      <EditAdminUserDialog
-                        user={u}
-                        onSaved={(updated) =>
-                          setStaff((prev) => prev.map((x) => (x.id === updated.id ? updated : x)))
-                        }
-                        trigger={
-                          <Button variant="secondary" size="sm">
-                            Edit
-                          </Button>
-                        }
-                      />
+                      {superLocked ? (
+                        <Button variant="secondary" size="sm" disabled title={lockedReason}>
+                          Edit
+                        </Button>
+                      ) : (
+                        <EditAdminUserDialog
+                          user={u}
+                          onSaved={(updated) =>
+                            setStaff((prev) => prev.map((x) => (x.id === updated.id ? updated : x)))
+                          }
+                          trigger={
+                            <Button variant="secondary" size="sm">
+                              Edit
+                            </Button>
+                          }
+                        />
+                      )}
                       <Button
                         variant="secondary"
                         size="sm"
-                        disabled={isSelf}
+                        disabled={isSelf || superLocked}
+                        title={lockedReason}
                         onClick={() =>
                           patchStaff(
                             u.id,
@@ -295,7 +314,7 @@ export default function AdminPeoplePage() {
                         variant="danger"
                         onConfirm={() => removeStaff(u)}
                         trigger={
-                          <Button variant="secondary" size="sm" disabled={isSelf}>
+                          <Button variant="secondary" size="sm" disabled={isSelf || superLocked} title={lockedReason}>
                             Delete
                           </Button>
                         }
@@ -364,10 +383,12 @@ export default function AdminPeoplePage() {
  */
 function CreateFor({
   tab,
+  canCreateSuperAdmin,
   onCustomer,
   onStaff,
 }: {
   tab: Tab;
+  canCreateSuperAdmin: boolean;
   onCustomer: () => void;
   onStaff: () => void;
 }) {
@@ -396,11 +417,12 @@ function CreateFor({
     <AdminUserDialog
       key="admin"
       defaultRole="ADMIN"
+      allowSuperAdmin={canCreateSuperAdmin}
       trigger={<Button size="sm">+ New admin</Button>}
       onSaved={onStaff}
     />
   );
-  const superAdmin = (
+  const superAdmin = canCreateSuperAdmin && (
     <AdminUserDialog
       key="super-admin"
       defaultRole="SUPER_ADMIN"

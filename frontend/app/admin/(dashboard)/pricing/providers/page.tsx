@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Tag, Upload } from "lucide-react";
+import { Download, Tag } from "lucide-react";
 import type { RateProviderDto } from "@nationwide/shared-types";
 import { apiClient, errorMessage } from "@/lib/api-client";
 import { Card, CardContent } from "@/components/ui/card";
@@ -97,7 +97,7 @@ export default function PricingProvidersPage() {
                     className={buttonVariants({ variant: "secondary", size: "sm" })}
                     aria-label={`Import a rate sheet for ${p.name}`}
                   >
-                    <Upload className="h-4 w-4" aria-hidden />
+                    <Download className="h-4 w-4" aria-hidden />
                     Import
                   </Link>
                 </div>

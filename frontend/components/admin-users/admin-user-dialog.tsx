@@ -18,11 +18,14 @@ export function AdminUserDialog({
   trigger,
   onSaved,
   defaultRole = "ADMIN",
+  allowSuperAdmin = true,
 }: {
   trigger: ReactNode;
   onSaved: (user: AdminUserDto) => void;
   /** Preselects the role when the caller already knows which kind is being created. */
   defaultRole?: "ADMIN" | "SUPER_ADMIN";
+  /** False for an ADMIN: only a super admin may create one (the server refuses it too). */
+  allowSuperAdmin?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
@@ -100,7 +103,7 @@ export function AdminUserDialog({
                 value={role}
                 onChange={(e) => setRole(e.target.value as "ADMIN" | "SUPER_ADMIN")}
               >
-                <option value="SUPER_ADMIN">Super Admin</option>
+                {allowSuperAdmin && <option value="SUPER_ADMIN">Super Admin</option>}
                 <option value="ADMIN">Admin</option>
               </NativeSelect>
               <p className="text-xs text-muted-foreground">

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Download, History } from "lucide-react";
+import { History, Upload } from "lucide-react";
 import type { AuditLogEntryDto } from "@nationwide/shared-types";
 import { apiClient, errorMessage } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
@@ -40,7 +40,7 @@ export function ExportRateSheetButton({ provider, className }: { provider: Provi
       isLoading={isExporting}
       aria-label={`Export ${provider.name} rates to Excel`}
     >
-      <Download className="h-4 w-4" aria-hidden />
+      <Upload className="h-4 w-4" aria-hidden />
       Export
     </Button>
   );

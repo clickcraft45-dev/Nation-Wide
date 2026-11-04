@@ -1,4 +1,4 @@
-import { IsOptional, IsString } from 'class-validator';
+import { IsIn, IsOptional, IsString } from 'class-validator';
 import { PaginationQueryDto } from '../../../common/dto/pagination-query.dto';
 
 export class QueryCustomersDto extends PaginationQueryDto {
@@ -16,4 +16,10 @@ export class QueryCustomersDto extends PaginationQueryDto {
   @IsOptional()
   @IsString()
   createdTo?: string; // YYYY-MM-DD
+
+  // "true": business accounts only, for the B2B links page, which has to list every business
+  // whether or not it has been issued a link yet.
+  @IsOptional()
+  @IsIn(['true'])
+  isB2b?: 'true';
 }

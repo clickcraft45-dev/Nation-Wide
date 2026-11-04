@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { Copy, Link2, ShieldOff } from "lucide-react";
 import type { B2bLinkDto, B2bLinkOverviewDto, CustomerDto } from "@nationwide/shared-types";
@@ -39,6 +39,9 @@ function when(iso: string | null): string {
  */
 export default function AdminB2bLinksPage() {
   const [links, setLinks] = useState<B2bLinkOverviewDto[] | null>(null);
+  // Every business account, link or not: one that signs in with a password, or whose links were
+  // all revoked, is still a business and has to be findable here.
+  const [accounts, setAccounts] = useState<CustomerDto[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [includeRevoked, setIncludeRevoked] = useState(false);
@@ -49,10 +52,13 @@ export default function AdminB2bLinksPage() {
   const load = useCallback(() => {
     setIsLoading(true);
     setError(null);
-    apiClient
-      .get<B2bLinkOverviewDto[]>(`/admin/b2b-links?includeRevoked=${includeRevoked}`)
-      .then((rows) => {
+    Promise.all([
+      apiClient.get<B2bLinkOverviewDto[]>(`/admin/b2b-links?includeRevoked=${includeRevoked}`),
+      apiClient.get<CustomerDto[]>("/customers?isB2b=true"),
+    ])
+      .then(([rows, businesses]) => {
         setLinks(rows);
+        setAccounts(businesses);
         // "Recently used" is measured from when the list was fetched, not from every render —
         // reading the clock during render makes the component impure.
         setLoadedAt(Date.now());
@@ -89,6 +95,15 @@ export default function AdminB2bLinksPage() {
     : (links ?? []);
 
   const active = (links ?? []).filter((link) => !link.revokedAt);
+  const liveLinksOf = (customerId: string) => active.filter((link) => link.customerId === customerId).length;
+  const visibleAccounts = term
+    ? accounts.filter(
+        (a) =>
+          a.name.toLowerCase().includes(term) ||
+          (a.email ?? "").toLowerCase().includes(term) ||
+          a.phone.includes(term),
+      )
+    : accounts;
 
   return (
     <div className="space-y-6">
@@ -106,8 +121,8 @@ export default function AdminB2bLinksPage() {
       <div className="grid gap-3 sm:grid-cols-3">
         <StatCard label="Live links" value={active.length} icon={Link2} />
         <StatCard
-          label="Businesses covered"
-          value={new Set(active.map((link) => link.customerId)).size}
+          label="Businesses with a live link"
+          value={`${accounts.filter((a) => liveLinksOf(a.id) > 0).length} of ${accounts.length}`}
         />
         <StatCard
           label="Used in the last 30 days"
@@ -140,6 +155,64 @@ export default function AdminB2bLinksPage() {
           Show revoked links
         </label>
       </div>
+
+      {!isLoading && !error && visibleAccounts.length > 0 && (
+        <section aria-labelledby="b2b-accounts" className="space-y-2">
+          <h2 id="b2b-accounts" className="text-sm font-semibold text-foreground">
+            Business accounts
+          </h2>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Business</TableHead>
+                <TableHead>Live links</TableHead>
+                <TableHead>Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {visibleAccounts.map((account) => {
+                const live = liveLinksOf(account.id);
+                return (
+                  <TableRow key={account.id}>
+                    <TableCell>
+                      <Link href={`/admin/customers/${account.id}`} className="font-medium underline hover:text-foreground">
+                        {account.name}
+                      </Link>
+                      <span className="block text-xs text-muted-foreground">
+                        {account.email ?? account.phone}
+                        {account.isActive ? "" : " (inactive)"}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      {live > 0 ? (
+                        <Badge variant="success">{live} live</Badge>
+                      ) : (
+                        <Badge variant="neutral">No link yet</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <GenerateLinkDialog
+                        onCreated={load}
+                        preset={account}
+                        trigger={
+                          <Button variant="secondary" size="sm">
+                            <Link2 className="mr-1.5 h-3.5 w-3.5" aria-hidden />
+                            Generate link
+                          </Button>
+                        }
+                      />
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </section>
+      )}
+
+      {!isLoading && !error && (
+        <h2 className="text-sm font-semibold text-foreground">Links</h2>
+      )}
 
       {isLoading && <TableSkeleton columns={6} />}
       {!isLoading && error && <ErrorState message={error} onRetry={load} />}
@@ -233,12 +306,21 @@ export default function AdminB2bLinksPage() {
  * Only the hash is stored, so the URL shown here is the only sight of it — that is said plainly
  * rather than discovered when someone comes back looking for it.
  */
-function GenerateLinkDialog({ onCreated }: { onCreated: () => void }) {
+function GenerateLinkDialog({
+  onCreated,
+  preset,
+  trigger,
+}: {
+  onCreated: () => void;
+  /** Opens with this business already picked: the Generate link button on an account's row. */
+  preset?: CustomerDto;
+  trigger?: ReactNode;
+}) {
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<"existing" | "new">("existing");
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<CustomerDto[]>([]);
-  const [customer, setCustomer] = useState<CustomerDto | null>(null);
+  const [customer, setCustomer] = useState<CustomerDto | null>(preset ?? null);
   const [label, setLabel] = useState("");
   const [contactName, setContactName] = useState("");
   // Only for the "new business" path — the account is created, then the link issued against it.
@@ -339,7 +421,7 @@ function GenerateLinkDialog({ onCreated }: { onCreated: () => void }) {
   function close() {
     setOpen(false);
     setCreated(null);
-    setCustomer(null);
+    setCustomer(preset ?? null);
     setMode("existing");
     setLabel("");
     setContactName("");
@@ -353,10 +435,12 @@ function GenerateLinkDialog({ onCreated }: { onCreated: () => void }) {
   return (
     <Dialog open={open} onOpenChange={(next) => (next ? setOpen(true) : close())}>
       <span onClick={() => setOpen(true)}>
-        <Button size="sm">
-          <Link2 className="mr-1.5 h-3.5 w-3.5" aria-hidden />
-          Generate link
-        </Button>
+        {trigger ?? (
+          <Button size="sm">
+            <Link2 className="mr-1.5 h-3.5 w-3.5" aria-hidden />
+            Generate link
+          </Button>
+        )}
       </span>
       {open && (
         <DialogContent
