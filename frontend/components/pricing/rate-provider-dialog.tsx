@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import { ExternalLink } from "lucide-react";
 import type { RateProviderDto } from "@nationwide/shared-types";
 import { apiClient, ApiError } from "@/lib/api-client";
 import { useToast } from "@/components/ui/toast";
@@ -50,6 +51,8 @@ export function RateProviderDialog({
         : await apiClient.post<RateProviderDto>("/admin/rate-providers", {
             code: code.trim(),
             name: name.trim(),
+            fuelChargePercent: Number(fuelChargePercent) || 0,
+            pssPerKg: Number(pssPerKg) || 0,
           });
       showToast({ variant: "success", title: provider ? "Provider updated" : "Provider created" });
       onSaved(saved);
@@ -101,13 +104,15 @@ export function RateProviderDialog({
                   />
                   Active (eligible for new quotes)
                 </label>
+              </>
+            )}
 
                 <div className="space-y-3 rounded-md border border-border p-3">
                   <p className="text-sm font-medium text-foreground">Provider Configuration</p>
                   <p className="text-xs text-muted-foreground">
-                    Applies to every quotation for {provider.name}: no need to re-enter these
-                    per country or weight. Past quotes keep the values that were active when they
-                    were generated.
+                    Applies to every quotation for {provider?.name ?? "this provider"}: no need to
+                    re-enter these per country or weight. Past quotes keep the values that were
+                    active when they were generated.
                   </p>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
@@ -133,12 +138,11 @@ export function RateProviderDialog({
                       />
                     </div>
                   </div>
+                  <SurchargeLinks code={code} />
                   <p className="text-xs text-muted-foreground">
                     Margin is set by weight under Margins, not here.
                   </p>
                 </div>
-              </>
-            )}
 
             {error && <FieldError>{error}</FieldError>}
 
@@ -156,5 +160,52 @@ export function RateProviderDialog({
         </DialogContent>
       )}
     </Dialog>
+  );
+}
+
+/**
+ * Where each carrier publishes the figures these two fields need, for the carriers NationWide
+ * resells. The fuel pages are the ones the backend checks (fuel-surcharge-sources.ts); PSS is what
+ * each carrier calls its demand or peak surcharge.
+ */
+const SURCHARGE_PAGES: Record<string, { fuel: string; pss: string }> = {
+  DHL: {
+    fuel: "https://www.dhl.com/in-en/home/important-information/2026/express-fuel-surcharge-updates.html",
+    pss: "https://www.dhl.com/us-en/home/express/products-and-solutions/products-and-services-overview/surcharges/demand-surcharge.html",
+  },
+  UPS: {
+    fuel: "https://www.ups.com/in/en/support/shipping-support/shipping-costs-rates/fuel-surcharges",
+    pss: "https://www.ups.com/in/en/support/shipping-support/shipping-costs-rates",
+  },
+  FEDEX: {
+    fuel: "https://www.fedex.com/en-in/shipping/surcharges.html",
+    pss: "https://www.fedex.com/en-in/shipping/surcharges/demand-surcharge.html",
+  },
+};
+
+function SurchargeLinks({ code }: { code: string }) {
+  // DHL_EXPRESS reads DHL's pages, as the rate-sheet import does.
+  const pages = SURCHARGE_PAGES[code.trim().toUpperCase().split("_")[0]];
+  if (!pages) {
+    return (
+      <p className="text-xs text-muted-foreground">
+        Take both figures from the carrier&apos;s surcharges page.
+      </p>
+    );
+  }
+  const link =
+    "inline-flex min-h-8 items-center gap-1 rounded text-xs font-medium text-foreground underline underline-offset-2 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  return (
+    <p className="flex flex-wrap items-center gap-x-4 text-xs text-muted-foreground">
+      Current figures:
+      <a href={pages.fuel} target="_blank" rel="noopener noreferrer" className={link}>
+        Fuel surcharge page
+        <ExternalLink className="h-3 w-3" aria-hidden />
+      </a>
+      <a href={pages.pss} target="_blank" rel="noopener noreferrer" className={link}>
+        PSS (demand surcharge) page
+        <ExternalLink className="h-3 w-3" aria-hidden />
+      </a>
+    </p>
   );
 }

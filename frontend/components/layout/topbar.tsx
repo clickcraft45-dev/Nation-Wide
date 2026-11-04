@@ -5,7 +5,7 @@ import { LogOut, User as UserIcon, ChevronRight } from "lucide-react";
 import { NotificationsBell } from "@/components/pwa/notifications-bell";
 import type { AuthUserDto } from "@nationwide/shared-types";
 import { useAuth } from "@/state/auth-context";
-import { findNavItemForPath, type NavItem } from "@/lib/nav-config";
+import { findNavItemForPath, navItemMatch, type NavItem } from "@/lib/nav-config";
 import { Avatar } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -18,7 +18,14 @@ import {
 
 function Breadcrumbs({ pathname, items }: { pathname: string; items: NavItem[] }) {
   const current = findNavItemForPath(pathname, items);
-  const matchedDepth = current ? current.href.split("/").filter(Boolean).length : 0;
+  // Under the item's own href the rest of the path follows it; under one of its alsoMatches pages
+  // that page's own name does ("Providers and rates > Rate sheets").
+  const matched = current ? navItemMatch(current, pathname) : undefined;
+  const matchedDepth = !matched
+    ? 0
+    : matched === current?.href
+      ? matched.split("/").filter(Boolean).length
+      : matched.split("/").filter(Boolean).length - 1;
   // Slugs read as words ("bulk-edit" → "Bulk edit"); a raw UUID tells the admin nothing, so it is
   // left out rather than shown as "d4f71de0-5892…".
   const segments = pathname

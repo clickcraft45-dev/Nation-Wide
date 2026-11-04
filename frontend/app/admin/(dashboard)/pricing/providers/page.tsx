@@ -40,7 +40,7 @@ export default function PricingProvidersPage() {
   return (
     <div className="space-y-4">
       <BackLink href="/admin/pricing/dashboard">Back to pricing</BackLink>
-      <h1 className="text-xl font-semibold text-foreground">Providers &amp; rates</h1>
+      <h1 className="text-xl font-semibold text-foreground">Providers and rates</h1>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">
           Pick a provider to manage its countries, weight categories, and rates.
