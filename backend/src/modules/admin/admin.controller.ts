@@ -1,5 +1,6 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import type {
+  AnalyticsDto,
   CommandCentreDto,
   DashboardSummaryDto,
 } from '@nationwide/shared-types';
@@ -10,6 +11,8 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/types/jwt-payload.type';
 import { AdminService } from './admin.service';
 import { CommandCentreService } from './command-centre.service';
+import { AnalyticsService } from './analytics.service';
+import { QueryAnalyticsDto } from './dto/query-analytics.dto';
 
 @Controller('admin')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -17,6 +20,7 @@ export class AdminController {
   constructor(
     private readonly adminService: AdminService,
     private readonly commandCentreService: CommandCentreService,
+    private readonly analyticsService: AnalyticsService,
   ) {}
 
   @Get('ping')
@@ -38,7 +42,14 @@ export class AdminController {
    */
   @Get('command-centre')
   @Roles('SUPER_ADMIN')
-  commandCentre(): Promise<CommandCentreDto> {
-    return this.commandCentreService.get();
+  commandCentre(@Query() query: QueryAnalyticsDto): Promise<CommandCentreDto> {
+    return this.commandCentreService.get(query.from, query.to);
+  }
+
+  /** Dashboard and reports figures for an IST day range, with the window before it to compare. */
+  @Get('analytics')
+  @Roles('ADMIN')
+  analytics(@Query() query: QueryAnalyticsDto): Promise<AnalyticsDto> {
+    return this.analyticsService.get(query.from, query.to);
   }
 }

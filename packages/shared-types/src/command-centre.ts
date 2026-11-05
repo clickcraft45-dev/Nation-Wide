@@ -4,9 +4,9 @@ export interface LabelledCountDto {
   count: number;
 }
 
-export interface MonthlyMoneyDto {
-  /** "2026-09" */
-  month: string;
+export interface PeriodMoneyDto {
+  /** First day of the bucket, YYYY-MM-DD (IST). */
+  start: string;
   revenue: number;
   expenses: number;
   profit: number;
@@ -15,16 +15,22 @@ export interface MonthlyMoneyDto {
 /**
  * The company-wide picture behind the SUPER_ADMIN dashboard.
  *
- * Revenue is money RECEIVED (receipts), not invoiced — comparing outgoings against what has merely
- * been billed answers a question nobody asked.
+ * Revenue is money COLLECTED (paid orders, by the day they were paid), not invoiced. It is the same
+ * definition the reports use, so the two screens never disagree about what came in.
  */
 export interface CommandCentreDto {
-  /** Six months, oldest first, gaps included as zeroes so the line keeps its shape. */
-  months: MonthlyMoneyDto[];
+  from: string;
+  to: string;
+  bucket: "day" | "week" | "month";
+  /** Oldest first, gaps included as zeroes so the chart keeps its shape. */
+  series: PeriodMoneyDto[];
   money: {
     revenue: number;
     expenses: number;
     profit: number;
+    /** The same three for the equal-length window just before, for the change badges. */
+    previousRevenue: number;
+    previousExpenses: number;
     /** Null when there is no revenue to take a share of — not zero, which would read as breaking even. */
     marginPercent: number | null;
     receivedToday: number;
@@ -41,12 +47,6 @@ export interface CommandCentreDto {
     partners: number;
     activePartners: number;
   };
-  work: {
-    ordersByStatus: LabelledCountDto[];
-    pickupsByStatus: LabelledCountDto[];
-    quotesAwaiting: number;
-  };
-  topDestinations: LabelledCountDto[];
   partnerLeaderboard: {
     partnerId: string;
     name: string;

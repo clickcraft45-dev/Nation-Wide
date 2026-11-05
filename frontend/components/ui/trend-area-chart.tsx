@@ -147,27 +147,29 @@ export function TrendAreaChart({
       </div>
 
       {/* Same numbers without a pointer — the relief the contrast check asks for. */}
-      <table className="sr-only">
-        <caption>{caption}</caption>
-        <thead>
-          <tr>
-            <th>Period</th>
-            {series.map((s) => (
-              <th key={s.key}>{s.label}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {data.map((point) => (
-            <tr key={point.label}>
-              <td>{point.label}</td>
+      <div className="sr-only">
+        <table>
+          <caption>{caption}</caption>
+          <thead>
+            <tr>
+              <th>Period</th>
               {series.map((s) => (
-                <td key={s.key}>{valueFormatter(Number(point[s.key] ?? 0))}</td>
+                <th key={s.key}>{s.label}</th>
               ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {data.map((point) => (
+              <tr key={point.label}>
+                <td>{point.label}</td>
+                {series.map((s) => (
+                  <td key={s.key}>{valueFormatter(Number(point[s.key] ?? 0))}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

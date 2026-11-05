@@ -17,7 +17,8 @@ export function KpiCard({
   title: string;
   value: number | string;
   icon: LucideIcon;
-  href: string;
+  /** Where the figure comes from. Omitted on report tiles that are the destination already. */
+  href?: string;
   isLoading?: boolean;
   hint?: string;
   /** Change against the previous period of the same length. Omit when there's nothing to compare. */
@@ -26,16 +27,15 @@ export function KpiCard({
 }) {
   const hasDelta = typeof deltaPercent === "number" && Number.isFinite(deltaPercent);
   const isUp = hasDelta && deltaPercent >= 0;
-  return (
-    <Link href={href} className="block rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-      <Card className="glass-interactive glass-sheen h-full">
+  const card = (
+      <Card className={cn("glass-sheen h-full", href && "glass-interactive")}>
         <CardContent className="flex items-start justify-between pt-5">
           <div className="space-y-1">
             <p className="text-xs font-medium text-muted-foreground">{title}</p>
             {isLoading ? (
               <Skeleton className="h-7 w-16" />
             ) : (
-              <p className="text-2xl font-semibold text-foreground">{value}</p>
+              <p className="text-2xl font-semibold tabular-nums text-foreground">{value}</p>
             )}
             {hasDelta && !isLoading && (
               <span
@@ -63,6 +63,12 @@ export function KpiCard({
           </div>
         </CardContent>
       </Card>
+  );
+  return href ? (
+    <Link href={href} className="block rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+      {card}
     </Link>
+  ) : (
+    card
   );
 }
