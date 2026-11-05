@@ -2,6 +2,7 @@ import { Controller, Get, Param, Header } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import type { TrackingResultDto } from '@nationwide/shared-types';
 import { TrackingService } from './tracking.service';
+import { publicTracking } from './public-view';
 
 // internalTrackingNumber is a sequential, enumerable identifier (NW-{YY}-{sequence}) and this
 // endpoint is intentionally public/unauthenticated (parcel tracking is public-by-design) — a
@@ -25,9 +26,13 @@ export class TrackingController {
   // is missed; it only stops repeat clicks re-hitting the API.
   @Header('Cache-Control', 'private, max-age=60')
   @Get(':internalTrackingNumber')
-  getStatus(
+  async getStatus(
     @Param('internalTrackingNumber') internalTrackingNumber: string,
   ): Promise<TrackingResultDto> {
-    return this.trackingService.getStatus(internalTrackingNumber);
+    // Walking the sequential range is slow (the throttle above) and, with this, pointless: no
+    // full names, phone numbers or declared values come back.
+    return publicTracking(
+      await this.trackingService.getStatus(internalTrackingNumber),
+    );
   }
 }

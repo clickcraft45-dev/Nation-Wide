@@ -105,6 +105,31 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       }
     }
 
+    // Body-parser rejects a request before Nest sees it (too large, bad JSON, wrong charset) with
+    // an http-errors object marked `expose`. That is the client's mistake, not a crash: pass its
+    // 4xx through with a fixed message instead of logging a 500.
+    const parserError = exception as {
+      expose?: boolean;
+      status?: number;
+      type?: string;
+    };
+    if (
+      parserError?.expose &&
+      Number(parserError.status) >= 400 &&
+      Number(parserError.status) < 500
+    ) {
+      return {
+        status: Number(parserError.status),
+        extra: {
+          message:
+            parserError.type === 'entity.too.large'
+              ? 'The request is too large.'
+              : 'The request could not be read.',
+          error: 'BadRequestException',
+        },
+      };
+    }
+
     return {
       status: HttpStatus.INTERNAL_SERVER_ERROR,
       extra: {
