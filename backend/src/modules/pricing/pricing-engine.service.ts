@@ -198,6 +198,29 @@ export class PricingEngineService {
         rateProvider: { isActive: true },
       },
     });
+    // A region ("Azores (Portugal)", PT-AZORES) is priced from its own zone by a carrier that
+    // lists it, and from its country's zone by every carrier that prices it as the country.
+    const region = await this.prisma.country.findFirst({
+      where: {
+        isActive: true,
+        name: { equals: input.destinationCountryName, mode: 'insensitive' },
+        code: { contains: '-' },
+      },
+      select: { code: true },
+    });
+    if (region) {
+      zoneCountries.push(
+        ...(await this.prisma.zoneCountry.findMany({
+          where: {
+            country: { isActive: true, code: region.code.split('-')[0] },
+            rateProvider: { isActive: true },
+            rateProviderId: {
+              notIn: zoneCountries.map((zc) => zc.rateProviderId),
+            },
+          },
+        })),
+      );
+    }
     if (zoneCountries.length === 0) return [];
 
     const rateCards = await this.prisma.rateCard.findMany({

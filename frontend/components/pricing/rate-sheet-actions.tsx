@@ -55,7 +55,8 @@ export function describeRateSheetEntry(entry: AuditLogEntryDto): string {
   }
   return (
     `Imported ${a.fileName ? String(a.fileName) : "a rate sheet"} as ${kind}: ${a.bandsUpdated ?? 0} changed, ` +
-    `${a.bandsCreated ?? 0} added, ${a.bandsDeactivated ?? 0} switched off, ${a.countriesLinked ?? 0} countries linked`
+    `${a.bandsCreated ?? 0} added, ${a.bandsDeactivated ?? 0} switched off, ${a.countriesLinked ?? 0} countries linked` +
+    (Number(a.countriesAdded) > 0 ? `, ${String(a.countriesAdded)} new destinations added` : "")
   );
 }
 

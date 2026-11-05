@@ -73,6 +73,30 @@ describe('buildPlan on the real rate book', () => {
   });
 });
 
+describe('destinations the country list lacks', () => {
+  const added = new Map(plan.added.map((c) => [c.code, c.name]));
+
+  it('adds an ISO country the list is missing, under its usual name', () => {
+    expect(added.get('MF')).toBe('St. Martin');
+    expect(added.get('PS')).toBe('Palestinian Territories');
+    expect(zoneOf('FEDEX', 'new:MF')).toBeDefined();
+  });
+
+  it("adds a region the carrier prices apart, under its country's code", () => {
+    expect(added.get('PT-AZORES')).toBe('Azores (Portugal)');
+    expect(added.get('GB-SCOTLAND')).toBe('Scotland (United Kingdom)');
+    expect(zoneOf('UPS', 'new:PT-AZORES')).toBeDefined();
+    // Portugal itself stays where the list puts it.
+    expect(zoneOf('UPS', 'PT')).toBeDefined();
+  });
+
+  it('never adds a row of junk as a place', () => {
+    expect(
+      [...added.keys()].every((code) => /^[A-Z]{2}(-[A-Z0-9]+)?$/.test(code)),
+    ).toBe(true);
+  });
+});
+
 describe('a provider picked by the admin', () => {
   const pick = (code: string, allIn: boolean) =>
     pickTables(tables, { code, name: code }, allIn);
