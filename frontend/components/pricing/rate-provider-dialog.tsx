@@ -8,6 +8,7 @@ import { useToast } from "@/components/ui/toast";
 import { Dialog, DialogContent, DialogClose } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input, Label, FieldError } from "@/components/ui/input";
+import { surchargePagesFor } from "@/lib/carrier-surcharge-pages";
 
 // Combined create/edit — pass `provider` to edit an existing row (code becomes read-only since
 // it's the natural key used by the pricing engine's lookups), omit it to create a new one.
@@ -163,29 +164,8 @@ export function RateProviderDialog({
   );
 }
 
-/**
- * Where each carrier publishes the figures these two fields need, for the carriers NationWide
- * resells. The fuel pages are the ones the backend checks (fuel-surcharge-sources.ts); PSS is what
- * each carrier calls its demand or peak surcharge.
- */
-const SURCHARGE_PAGES: Record<string, { fuel: string; pss: string }> = {
-  DHL: {
-    fuel: "https://www.dhl.com/in-en/home/important-information/2026/express-fuel-surcharge-updates.html",
-    pss: "https://www.dhl.com/us-en/home/express/products-and-solutions/products-and-services-overview/surcharges/demand-surcharge.html",
-  },
-  UPS: {
-    fuel: "https://www.ups.com/in/en/support/shipping-support/shipping-costs-rates/fuel-surcharges",
-    pss: "https://www.ups.com/in/en/support/shipping-support/shipping-costs-rates",
-  },
-  FEDEX: {
-    fuel: "https://www.fedex.com/en-in/shipping/surcharges.html",
-    pss: "https://www.fedex.com/en-in/shipping/surcharges/demand-surcharge.html",
-  },
-};
-
 function SurchargeLinks({ code }: { code: string }) {
-  // DHL_EXPRESS reads DHL's pages, as the rate-sheet import does.
-  const pages = SURCHARGE_PAGES[code.trim().toUpperCase().split("_")[0]];
+  const pages = surchargePagesFor(code);
   if (!pages) {
     return (
       <p className="text-xs text-muted-foreground">

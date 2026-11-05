@@ -7,10 +7,9 @@ import type { RateProviderDto } from "@nationwide/shared-types";
 import { apiClient, errorMessage } from "@/lib/api-client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import { EmptyState, ErrorState } from "@/components/ui/page-state";
 import { Skeleton } from "@/components/ui/skeleton";
-import { RateProviderDialog } from "@/components/pricing/rate-provider-dialog";
 import { ExportRateSheetButton } from "@/components/pricing/rate-sheet-actions";
 import { cn } from "@/lib/utils/cn";
 import { BackLink } from "@/components/ui/back-link";
@@ -46,7 +45,10 @@ export default function PricingProvidersPage() {
           Pick a provider to manage its countries, weight categories, and rates.
         </p>
         <div className="flex flex-wrap items-center gap-2">
-          <RateProviderDialog onSaved={() => load()} trigger={<Button size="sm">New provider</Button>} />
+          {/* The full onboarding: carrier, fuel and PSS, countries, zones and prices, margins. */}
+          <Link href="/admin/pricing/providers/new" className={buttonVariants({ size: "sm" })}>
+            New provider
+          </Link>
         </div>
       </div>
 

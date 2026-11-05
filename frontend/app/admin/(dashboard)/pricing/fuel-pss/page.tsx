@@ -14,6 +14,8 @@ import { FuelSurchargePanel } from "@/components/pricing/fuel-surcharge-panel";
 import { MarginBandsDialog } from "@/components/pricing/margin-bands-dialog";
 import { BackLink } from "@/components/ui/back-link";
 import { CancellationChargesCard } from "@/components/pricing/cancellation-charges-card";
+import { SurchargePasteReader } from "@/components/pricing/surcharge-paste-reader";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 
 // Fuel Charge % and PSS/kg live once per provider (RateProvider), not per rate — updating either
 // here affects every shipment quoted for that provider immediately, with no duplicate values
@@ -22,6 +24,8 @@ export default function FuelAndPssPage() {
   const [providers, setProviders] = useState<RateProviderDto[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // The provider whose carrier page is being read, when the paste dialog is open.
+  const [reading, setReading] = useState<RateProviderDto | null>(null);
 
   function load() {
     setIsLoading(true);
@@ -137,11 +141,29 @@ export default function FuelAndPssPage() {
                     }
                   />
                 </div>
+                <Button size="sm" variant="secondary" className="w-full" onClick={() => setReading(p)}>
+                  Fuel and PSS from carrier page
+                </Button>
               </CardContent>
             </Card>
           ))}
         </div>
       )}
+
+      <Dialog open={reading !== null} onOpenChange={(open) => !open && setReading(null)}>
+        {reading && (
+          <DialogContent
+            title={`${reading.name}: fuel and PSS from its page`}
+            description="For carriers whose site can't be read by the server. Nothing changes until you apply a figure."
+            className="max-w-3xl"
+          >
+            <SurchargePasteReader
+              provider={providers.find((p) => p.id === reading.id) ?? reading}
+              onApplied={load}
+            />
+          </DialogContent>
+        )}
+      </Dialog>
 
       <div id="cancellation" className="scroll-mt-20">
         <CancellationChargesCard />

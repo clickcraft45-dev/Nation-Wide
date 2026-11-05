@@ -142,10 +142,17 @@ function LayoutExample({ provider, kind }: { provider: { code: string; name: str
  * new workbook, compare old and new cell by cell, apply. The file is sent again on apply, so
  * nothing is held on the server between the two steps.
  */
-export function RateSheetImport() {
+export function RateSheetImport({
+  providerId: lockedProviderId,
+  onApplied,
+}: {
+  /** Fixes the import to one provider and hides the picker: the new-provider onboarding. */
+  providerId?: string;
+  onApplied?: (result: RateSheetApplyResultDto) => void;
+} = {}) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [providers, setProviders] = useState<RateProviderDto[] | null>(null);
-  const [providerId, setProviderId] = useState("");
+  const [providerId, setProviderId] = useState(lockedProviderId ?? "");
   const [kind, setKind] = useState<Kind>("normal");
   const [sheet, setSheet] = useState<ProviderRateSheetDto | null>(null);
   const [file, setFile] = useState<File | null>(null);
@@ -168,7 +175,8 @@ export function RateSheetImport() {
         // ?provider= from a provider card's Import button.
         const wanted = new URLSearchParams(window.location.search).get("provider");
         setProviderId(
-          (current) => current || list.find((p) => p.id === wanted)?.id || list[0]?.id || "",
+          (current) =>
+            lockedProviderId || current || list.find((p) => p.id === wanted)?.id || list[0]?.id || "",
         );
         if (list.length === 0) setIsLoading(false);
       })
@@ -176,7 +184,7 @@ export function RateSheetImport() {
         setError(errorMessage(err, "Couldn't load providers."));
         setIsLoading(false);
       });
-  }, []);
+  }, [lockedProviderId]);
 
   useEffect(() => {
     if (!providerId) return;
@@ -211,6 +219,8 @@ export function RateSheetImport() {
   }
 
   async function compare(upload: File, as: Kind) {
+    // A file picked before the provider list has loaded would post to ".../providers//...".
+    if (!providerId) return;
     setFile(upload);
     setApplied(null);
     setAppliedFrom(null);
@@ -241,6 +251,7 @@ export function RateSheetImport() {
         form(file, kind),
       );
       setApplied(result);
+      onApplied?.(result);
       // The comparison on screen is exactly what was applied: keep it as the record, minus Apply.
       setAppliedFrom(file.name);
       setFile(null);
@@ -271,7 +282,7 @@ export function RateSheetImport() {
 
       <Card>
         <CardContent className="flex flex-wrap items-end gap-4 pt-5">
-          <div className="w-full space-y-1.5 sm:w-64">
+          <div className={cn("w-full space-y-1.5 sm:w-64", lockedProviderId && "hidden")}>
             <Label htmlFor="rate-sheet-provider">Provider</Label>
             <NativeSelect
               id="rate-sheet-provider"
