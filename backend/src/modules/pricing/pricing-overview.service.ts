@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
+import { aliasCode } from './rate-sheet-import.service';
 
 export interface PricingDashboardSummary {
   totalProviders: number;
@@ -98,6 +99,8 @@ export class PricingOverviewService {
   async search(query: string): Promise<PricingSearchResult[]> {
     const q = query.trim();
     if (!q) return [];
+    // "USA" and "UK" are how people search; the list says United States and United Kingdom.
+    const alias = aliasCode(q);
 
     const memberships = await this.prisma.zoneCountry.findMany({
       where: {
@@ -106,6 +109,7 @@ export class PricingOverviewService {
           { rateProvider: { code: { contains: q, mode: 'insensitive' } } },
           { country: { name: { contains: q, mode: 'insensitive' } } },
           { country: { code: { contains: q, mode: 'insensitive' } } },
+          ...(alias ? [{ country: { code: alias } }] : []),
         ],
       },
       include: { rateProvider: true, country: true },

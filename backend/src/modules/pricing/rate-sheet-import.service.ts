@@ -965,6 +965,11 @@ const ALIASES: Record<string, string> = {
   congo: 'CG',
 };
 
+/** The ISO code a carrier's or a person's other name stands for: "USA" is US, "Holland" NL. */
+export function aliasCode(value: string): string | null {
+  return ALIASES[normalizeCountry(value)] ?? null;
+}
+
 export function normalizeCountry(value: string): string {
   return (
     value

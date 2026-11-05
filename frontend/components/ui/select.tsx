@@ -67,12 +67,18 @@ function readOptions(children: ReactNode): Option[] {
  *
  * `searchable` puts a filter box at the top of the list, for lists too long to scroll (countries,
  * saved recipients). Typing filters on the option's text; the arrows and Enter still pick.
+ * `rank` replaces that filter with a better one: given the query, the option values to show,
+ * best first (country pickers pass searchCountries, so "USA" and "germny" find their country).
  */
 export const NativeSelect = forwardRef<
   HTMLSelectElement,
-  SelectHTMLAttributes<HTMLSelectElement> & { searchable?: boolean; searchPlaceholder?: string }
+  SelectHTMLAttributes<HTMLSelectElement> & {
+    searchable?: boolean;
+    searchPlaceholder?: string;
+    rank?: (query: string) => string[];
+  }
 >(
-  ({ className, children, id, disabled, value, defaultValue, style, searchable, searchPlaceholder, ...props }, ref) => {
+  ({ className, children, id, disabled, value, defaultValue, style, searchable, searchPlaceholder, rank, ...props }, ref) => {
     const options = readOptions(children);
     const selectRef = useRef<HTMLSelectElement>(null);
     const triggerRef = useRef<HTMLButtonElement>(null);
@@ -96,7 +102,11 @@ export const NativeSelect = forwardRef<
     const [query, setQuery] = useState("");
     const q = query.trim().toLowerCase();
     // What the list shows, and what `active` indexes into.
-    const visible = searchable && q ? options.filter((o) => o.text.toLowerCase().includes(q)) : options;
+    const visible = !searchable || !q
+      ? options
+      : rank
+        ? rank(query).flatMap((v) => options.filter((o) => o.value === v))
+        : options.filter((o) => o.text.toLowerCase().includes(q));
 
     function place() {
       const rect = triggerRef.current?.getBoundingClientRect();
@@ -296,6 +306,7 @@ export const NativeSelect = forwardRef<
                       aria-activedescendant={visible[active] ? `${listId}-${active}` : undefined}
                       aria-label={searchPlaceholder ?? "Search"}
                       placeholder={searchPlaceholder ?? "Search…"}
+                      maxLength={64}
                       value={query}
                       onChange={(e) => {
                         setQuery(e.target.value);

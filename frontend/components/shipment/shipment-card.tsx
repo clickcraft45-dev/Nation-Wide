@@ -37,6 +37,7 @@ import {
   type ItemForm,
 } from "@/components/shipment/items-editor";
 import { SavedRecipients } from "@/components/shipment/saved-recipients";
+import { searchCountries } from "@/lib/country-search";
 
 const SHIPMENT_TYPES: { value: ShipmentTypeCode; label: string }[] = [
   { value: "PACKAGE", label: "Package" },
@@ -219,6 +220,7 @@ export function ShipmentCard({
                 id={`country-${draft.key}`}
                 searchable
                 searchPlaceholder="Search countries"
+                rank={(q) => searchCountries(countries, q).map((c) => c.name)}
                 value={draft.destinationCountry}
                 onChange={(e) => onChange({ destinationCountry: e.target.value })}
               >

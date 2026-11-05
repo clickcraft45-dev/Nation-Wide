@@ -5,6 +5,7 @@ import { listSheets, readSheetFromBuffer } from '../../common/xlsx/xlsx-reader';
 import { detectRateTables } from './rate-sheet-detect';
 import { buildWorkbook } from '../../common/xlsx/xlsx-writer';
 import {
+  aliasCode,
   buildPlan,
   CountryMatcher,
   exportRows,
@@ -274,4 +275,13 @@ describe('a provider exported and uploaded back', () => {
       expect(zonesOf(after, code)).toEqual(zonesOf(before, code));
     },
   );
+});
+
+describe('aliasCode', () => {
+  it('reads the names people search by', () => {
+    expect(aliasCode('USA')).toBe('US');
+    expect(aliasCode('U.S.A')).toBe('US');
+    expect(aliasCode('uk')).toBe('GB');
+    expect(aliasCode('Portugal')).toBeNull();
+  });
 });

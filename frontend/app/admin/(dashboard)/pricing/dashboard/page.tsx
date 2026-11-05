@@ -90,6 +90,7 @@ export default function PricingDashboardPage() {
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search a provider or country, e.g. “USA”…"
           className="pl-9"
+          maxLength={64}
           aria-label="Search pricing"
         />
         {query.trim() && (
