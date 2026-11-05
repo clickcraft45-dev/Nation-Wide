@@ -34,6 +34,7 @@ import {
 import {
   ItemsEditor,
   itemsFrom,
+  validateItems,
   type ItemForm,
 } from "@/components/shipment/items-editor";
 import { SavedRecipients } from "@/components/shipment/saved-recipients";
@@ -122,6 +123,9 @@ export function ShipmentCard({
   const [isPricing, setIsPricing] = useState(false);
 
   const boxProblem = validatePackages(draft.boxes, draft.shipmentType !== "DOCUMENT");
+  // A contents problem is shown under Contents, on the field to fix, not at the foot of the card.
+  const itemsProblem = error ? validateItems(draft.items) : null;
+  const itemsError = itemsProblem && error?.endsWith(itemsProblem) ? error : null;
   const chargeable = boxProblem ? 0 : chargeableWeightKg(shipmentPackages(draft));
   const debounced = useDebouncedValue(
     `${draft.destinationCountry}|${draft.shipmentType}|${chargeable}`,
@@ -199,7 +203,7 @@ export function ShipmentCard({
           </button>
         )}
       </CardHeader>
-      <CardContent className="space-y-7 pt-5" aria-invalid={Boolean(error)} tabIndex={-1}>
+      <CardContent className="space-y-7 pt-5" aria-invalid={Boolean(error) && !itemsError} tabIndex={-1}>
         <Section title="Recipient">
           <div className="grid gap-4 sm:grid-cols-2">
             <SavedRecipients
@@ -274,6 +278,7 @@ export function ShipmentCard({
             onSavedItemsChange={onSavedItemsChange}
             libraryBase={savedItemsBase}
             client={savedItemsClient}
+            error={itemsError}
           />
         </Section>
 
@@ -347,7 +352,7 @@ export function ShipmentCard({
           )}
         </Section>
 
-        {error && <FieldError>{error}</FieldError>}
+        {error && !itemsError && <FieldError>{error}</FieldError>}
       </CardContent>
     </Card>
   );

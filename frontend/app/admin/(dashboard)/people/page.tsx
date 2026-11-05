@@ -259,7 +259,7 @@ export default function AdminPeoplePage() {
                           `Role changed to ${ROLE_LABELS[e.target.value as ManagedAdminRole]}`,
                         )
                       }
-                      className="w-36"
+                      className="w-44"
                     >
                       {roleOptions.map((role) => (
                         <option key={role} value={role}>

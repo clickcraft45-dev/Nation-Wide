@@ -181,7 +181,7 @@ export function Calendar({
               moveFocus(today);
               if (!isDisabled(today)) onSelect?.(today);
             }}
-            className="shrink-0 rounded-full border border-border px-4 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="min-h-11 shrink-0 rounded-full border border-border px-4 py-1.5 text-sm sm:min-h-0 font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             Today
           </button>
@@ -239,7 +239,7 @@ export function Calendar({
                 onSelect?.(iso);
               }}
               className={cn(
-                "mx-auto flex h-10 w-10 flex-col items-center justify-center rounded-xl text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                "mx-auto flex h-11 w-11 flex-col items-center sm:h-10 sm:w-10 justify-center rounded-xl text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 inMonth ? "text-foreground" : "text-muted-foreground/50",
                 isSelected
                   ? "bg-primary font-semibold text-primary-foreground"
@@ -285,7 +285,7 @@ function NavButton({
       type="button"
       aria-label={label}
       onClick={onClick}
-      className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="flex h-11 w-11 items-center justify-center rounded-lg text-muted-foreground transition-colors sm:h-8 sm:w-8 hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       {children}
     </button>

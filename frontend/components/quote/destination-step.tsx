@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { SearchInput } from "@/components/ui/search-input";
 import { FieldError } from "@/components/ui/input";
 import { cn } from "@/lib/utils/cn";
-import { searchCountries } from "@/lib/country-search";
+import { normalizeQuery, searchCountries } from "@/lib/country-search";
 
 export function DestinationStep({
   countries,
@@ -29,11 +29,19 @@ export function DestinationStep({
   const filtered = useMemo(() => searchCountries(countries, search), [countries, search]);
 
   function handleContinue() {
-    if (!selected) {
+    // Typing "United States" and pressing Continue is a complete answer when the search leaves
+    // no doubt: one match, or the name or code typed in full. "united" still asks for a pick.
+    const q = normalizeQuery(search);
+    const typed =
+      q && (filtered.length === 1 || (filtered[0] && [filtered[0].code, filtered[0].name].some((v) => normalizeQuery(v) === q)))
+        ? filtered[0]
+        : null;
+    const country = typed ?? selected;
+    if (!country) {
       setError("Please select a destination country to continue.");
       return;
     }
-    onContinue(selected);
+    onContinue(country);
   }
 
   return (

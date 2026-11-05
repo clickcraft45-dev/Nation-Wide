@@ -23,7 +23,7 @@ export function TrackingLookupPanel({
   className,
   submitButtonClassName,
 }: TrackingLookupPanelProps) {
-  const { state, search } = useTrackingLookup();
+  const { state, search, reset } = useTrackingLookup();
   const hasAutoSearched = useRef(false);
   const celebrated = useRef<string | null>(null);
 
@@ -57,6 +57,7 @@ export function TrackingLookupPanel({
     <div className={cn("space-y-3", className)}>
       <TrackingSearchForm
         onSubmit={search}
+        onClear={() => (state.status === "not-found" || state.status === "error") && reset()}
         isLoading={state.status === "loading"}
         initialValue={initialTrackingId}
         submitButtonClassName={submitButtonClassName}
