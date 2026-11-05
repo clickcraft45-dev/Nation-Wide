@@ -322,6 +322,9 @@ export function detectRateTables(
  * "COUNTRY | Zone", "Destination | Zone" or "Countries & Territories | Zone", repeated across the
  * sheet in column pairs. "Afghanistan (AF) | 11" → Afghanistan, AF, Zone 11; "Aruba | J" → J.
  */
+// "(US)", or a region's "(PT-AZORES)" as the export writes it.
+const CODE = /\(([A-Z]{2}(?:-[A-Z0-9]+)?)\)\s*$/;
+
 function zoneMapOf(rows: string[][]): DetectedTable['countryMap'] {
   const entries: DetectedTable['countryMap'] = [];
   for (let r = 0; r < rows.length; r++) {
@@ -343,11 +346,8 @@ function zoneMapOf(rows: string[][]): DetectedTable['countryMap'] {
         const raw = text(data[c]);
         const zone = text(data[z]);
         if (!raw || !zone) continue;
-        const code = /\(([A-Z]{2})\)\s*$/.exec(raw)?.[1] ?? null;
-        const country = raw
-          .replace(/\(([A-Z]{2})\)\s*$/, '')
-          .replace(/\*+/g, '')
-          .trim();
+        const code = CODE.exec(raw)?.[1] ?? null;
+        const country = raw.replace(CODE, '').replace(/\*+/g, '').trim();
         entries.push({
           country,
           code,
