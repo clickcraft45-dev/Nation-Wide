@@ -5,7 +5,7 @@ import { DateField } from "@/components/ui/date-field";
 import { addDaysIso, fromIso, todayIso } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils/cn";
 
-export interface RangePreset {
+interface RangePreset {
   label: string;
   /** The `from` this preset sets; `to` is always today. */
   from: () => string;
@@ -98,6 +98,3 @@ export function percentChange(now: number, before: number): number | null {
 
 export const inr = (value: number) => `₹${Math.round(value).toLocaleString("en-IN")}`;
 
-/** SHOUTING_SNAKE status codes as English: "OUT_FOR_DELIVERY" → "Out for delivery". */
-export const humanise = (code: string) =>
-  code.charAt(0) + code.slice(1).toLowerCase().replaceAll("_", " ");

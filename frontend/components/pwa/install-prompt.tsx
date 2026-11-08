@@ -57,7 +57,7 @@ function isIos(): boolean {
   return (
     /iphone|ipad|ipod/i.test(window.navigator.userAgent) ||
     // iPadOS 13+ reports itself as a Mac; a touch screen is what gives it away.
-    (window.navigator.platform === "MacIntel" && window.navigator.maxTouchPoints > 1)
+    (/macintosh/i.test(window.navigator.userAgent) && window.navigator.maxTouchPoints > 1)
   );
 }
 

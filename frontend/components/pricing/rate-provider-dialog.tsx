@@ -33,7 +33,7 @@ export function RateProviderDialog({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { showToast } = useToast();
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.SubmitEvent) {
     e.preventDefault();
     if (!name.trim() || (!provider && !code.trim())) {
       setError("Code and name are required.");

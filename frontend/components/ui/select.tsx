@@ -293,7 +293,7 @@ export const NativeSelect = forwardRef<
               className="glass-raised z-70 flex flex-col overflow-hidden rounded-xl text-sm animate-in fade-in-0 zoom-in-95"
             >
               {searchable && (
-                <div className="border-b border-[color:var(--glass-edge)] p-1.5">
+                <div className="border-b border-(--glass-edge) p-1.5">
                   <div className="relative">
                     <Search className="pointer-events-none absolute left-2.5 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
                     <input

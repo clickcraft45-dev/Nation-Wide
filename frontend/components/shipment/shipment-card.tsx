@@ -182,7 +182,7 @@ export function ShipmentCard({
 
   return (
     <Card>
-      <CardHeader className="flex-row items-center justify-between gap-3 border-b border-[color:var(--glass-edge)] pb-4">
+      <CardHeader className="flex-row items-center justify-between gap-3 border-b border-(--glass-edge) pb-4">
         <div className="flex min-w-0 items-center gap-3">
           <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-foreground text-sm font-semibold tabular-nums text-background">
             {index + 1}
@@ -305,7 +305,7 @@ export function ShipmentCard({
                   <label key={o.rateProviderId} className={CHOICE}>
                     <input
                       type="radio"
-                      className="h-4 w-4 shrink-0 accent-[var(--foreground)]"
+                      className="h-4 w-4 shrink-0 accent-(--foreground)"
                       name={`carrier-${draft.key}`}
                       checked={draft.rateProviderId === o.rateProviderId}
                       onChange={() =>
@@ -330,7 +330,7 @@ export function ShipmentCard({
             <label className={CHOICE}>
               <input
                 type="radio"
-                className="h-4 w-4 shrink-0 accent-[var(--foreground)]"
+                className="h-4 w-4 shrink-0 accent-(--foreground)"
                 name={`carrier-${draft.key}`}
                 checked={draft.rateProviderId === null}
                 onChange={() => onChange({ rateProviderId: null, estimate: null })}
@@ -360,7 +360,7 @@ export function ShipmentCard({
 
 // A selectable card around a radio: the whole card is the hit area, the picked one is inked.
 const CHOICE =
-  "flex cursor-pointer items-center gap-3 rounded-xl border border-border bg-white/50 px-4 py-3 text-sm transition-colors hover:border-foreground/30 has-[:checked]:border-foreground has-[:checked]:bg-white has-[:checked]:shadow-sm has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring";
+  "flex cursor-pointer items-center gap-3 rounded-xl border border-border bg-white/50 px-4 py-3 text-sm transition-colors hover:border-foreground/30 has-checked:border-foreground has-checked:bg-white has-checked:shadow-sm has-focus-visible:ring-2 has-focus-visible:ring-ring";
 
 const money = (value: number, currency: string) =>
   `${currency === "INR" ? "₹" : `${currency} `}${Math.round(value).toLocaleString("en-IN")}`;

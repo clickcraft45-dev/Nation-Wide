@@ -10,7 +10,7 @@ const CHECKLIST = [
 export function QuoteLoading() {
   return (
     <div className="mx-auto flex max-w-lg flex-col items-center gap-6 py-10 text-center">
-      <Spinner size="lg" className="text-[color:var(--brand-red)]" />
+      <Spinner size="lg" className="text-(--brand-red)" />
       <div>
         <p className="text-base font-medium text-foreground">
           Finding the best shipping options for you…

@@ -74,7 +74,7 @@ export function AddCountryDialog({
   const current = linked.find((l) => l.countryId === countryId);
   const provider = providers.find((p) => p.id === providerId);
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.SubmitEvent) {
     e.preventDefault();
     if (!providerId) return setError("Choose a provider.");
     if (newZone ? !zoneName.trim() : !zoneId) return setError("Choose a zone, or name a new one.");

@@ -42,7 +42,7 @@ export function CreateCustomerDialog({
     return Object.keys(next).length === 0;
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.SubmitEvent) {
     e.preventDefault();
     setApiError(null);
     if (!validate()) return;

@@ -270,7 +270,7 @@ export function RateCardsTab() {
         </div>
 
         {selected.length > 0 && (
-          <div className="space-y-2 rounded-xl border border-[color:var(--glass-edge)] bg-white/35 p-3">
+          <div className="space-y-2 rounded-xl border border-(--glass-edge) bg-white/35 p-3">
             <Label>Transit Time per Country (optional)</Label>
             <div className="space-y-1.5">
               {selected.map((c) => (
@@ -342,7 +342,7 @@ export function RateCardsTab() {
             {recent.map((doc) => (
               <li
                 key={doc.id}
-                className="glass-interactive flex flex-col justify-between gap-3 rounded-xl border border-[color:var(--glass-edge)] bg-white/35 p-4 text-sm sm:flex-row sm:items-center"
+                className="glass-interactive flex flex-col justify-between gap-3 rounded-xl border border-(--glass-edge) bg-white/35 p-4 text-sm sm:flex-row sm:items-center"
               >
                 <div>
                   <p className="font-mono text-xs font-semibold text-foreground">RATE CARD · v{doc.version}</p>
@@ -372,7 +372,7 @@ export function RateCardsTab() {
       >
         {previewUrl && (
           <DialogContent title="Rate Card Preview" description="Review the document before saving a version." className="max-w-5xl">
-            <iframe src={previewUrl} title="Rate card preview" className="h-[72vh] w-full rounded-xl border border-[color:var(--glass-edge)] bg-white" />
+            <iframe src={previewUrl} title="Rate card preview" className="h-[72vh] w-full rounded-xl border border-(--glass-edge) bg-white" />
           </DialogContent>
         )}
       </Dialog>

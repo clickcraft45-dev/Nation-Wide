@@ -37,7 +37,7 @@ export function AdminUserDialog({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { showToast } = useToast();
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.SubmitEvent) {
     e.preventDefault();
     // Mirrors the DTO's own @MinLength(10) so the common mistake is caught without a round trip.
     if (!email.trim() || password.length < 10) {

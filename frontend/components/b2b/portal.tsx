@@ -212,7 +212,7 @@ export function B2bPortal({ client, onSignOut }: { client: B2bClient; onSignOut?
     );
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.SubmitEvent) {
     e.preventDefault();
     setSubmitError(null);
     if (!validate()) {
@@ -408,7 +408,7 @@ export function B2bPortal({ client, onSignOut }: { client: B2bClient; onSignOut?
             </div>
 
             <Card>
-              <CardHeader className="flex-row items-center justify-between gap-3 border-b border-[color:var(--glass-edge)] pb-4">
+              <CardHeader className="flex-row items-center justify-between gap-3 border-b border-(--glass-edge) pb-4">
                 <div className="flex items-center gap-3">
                   <span className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-foreground">
                     <MapPin className="h-4 w-4" aria-hidden />

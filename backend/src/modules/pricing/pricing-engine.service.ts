@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client';
 import type { ShipmentTypeCode } from '@nationwide/shared-types';
 import { PrismaService } from '../../database/prisma.service';
 
-export interface ComputeQuotesInput {
+interface ComputeQuotesInput {
   destinationCountryName: string;
   weightKg: number;
   shipmentType: ShipmentTypeCode;
@@ -26,7 +26,7 @@ export interface ComputedRateOption {
   finalPrice: number;
 }
 
-export interface PriceCalculationInput {
+interface PriceCalculationInput {
   baseRate: number;
   /** FLAT when omitted, so every existing caller keeps its current behaviour. */
   rateType?: 'FLAT' | 'PER_KG';
@@ -42,7 +42,7 @@ export interface PriceCalculationInput {
   nationwideCut: number;
 }
 
-export type PriceBreakdown = Omit<
+type PriceBreakdown = Omit<
   ComputedRateOption,
   | 'rateProviderId'
   | 'rateProviderName'
@@ -144,7 +144,7 @@ export function calculateFinalPrice(
  * 1500 at 15 kg. No band covering the weight means no margin from this ladder at all, which is
  * what an unconfigured provider looks like.
  */
-export function marginFromBands(
+function marginFromBands(
   bands: {
     fromKg: number;
     toKg: number | null;

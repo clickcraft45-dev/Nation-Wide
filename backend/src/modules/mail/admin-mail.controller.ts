@@ -24,7 +24,7 @@ import type { JwtPayload } from '../auth/types/jwt-payload.type';
 import { MailService } from './mail.service';
 import { manualMessage } from './mail.templates';
 
-export class SendManualEmailDto {
+class SendManualEmailDto {
   @IsEmail()
   to!: string;
 

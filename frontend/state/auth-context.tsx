@@ -13,7 +13,7 @@ import { ApiError, apiClient, setAccessToken, setUnauthorizedHandler } from "@/l
 import { decodeAccessToken } from "@/lib/auth/jwt";
 import { readSessionHint, writeSessionHint } from "@/lib/auth/session-hint";
 
-export interface RegisterInput {
+interface RegisterInput {
   name: string;
   phone: string;
   email: string;

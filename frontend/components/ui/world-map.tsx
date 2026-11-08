@@ -53,7 +53,7 @@ export function WorldMap({ routes = [], lineColor = "#d4d4d8", className }: Worl
     <div
       aria-hidden
       className={cn(
-        "pointer-events-none relative aspect-[265/100] w-full select-none",
+        "pointer-events-none relative aspect-265/100 w-full select-none",
         className,
       )}
     >

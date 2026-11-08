@@ -34,7 +34,7 @@ export function MobileTabBar({ items }: { items: NavItem[] }) {
     >
       <nav
         aria-label="Primary"
-        className="glass-raised pointer-events-auto mx-auto flex max-w-md items-stretch gap-1 rounded-[1.75rem] p-1.5"
+        className="glass-raised pointer-events-auto mx-auto flex max-w-md items-stretch gap-1 rounded-3xl p-1.5"
       >
         {items.map((item) => {
           const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);

@@ -43,7 +43,7 @@ export function KpiCard({
                   "glass-pill inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium",
                   // Direction is spelled by the arrow and the sign, not by colour alone — up is
                   // not automatically "good" here (rising exceptions or pending payments aren't).
-                  "border-[color:var(--glass-edge)] bg-white/60 text-muted-foreground",
+                  "border-(--glass-edge) bg-white/60 text-muted-foreground",
                 )}
               >
                 {isUp ? (

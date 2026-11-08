@@ -81,7 +81,7 @@ export default function PrivacyPage() {
 
         <Section id="what-we-collect" title="2. What we collect, why, and for how long">
           <div className="-mx-6 overflow-x-auto px-6 sm:mx-0 sm:px-0">
-            <table className="w-full min-w-[34rem] border-collapse text-left text-sm">
+            <table className="w-full min-w-136 border-collapse text-left text-sm">
               <thead>
                 <tr className="border-b border-border">
                   <th className="pb-2 pr-4 font-semibold text-foreground">Data</th>

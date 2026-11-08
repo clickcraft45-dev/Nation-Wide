@@ -5,7 +5,7 @@ import {
 } from '@nationwide/shared-types';
 
 const PICKUP_RANGES = ['today', 'tomorrow', 'next7'] as const;
-export type PickupRange = (typeof PICKUP_RANGES)[number];
+type PickupRange = (typeof PICKUP_RANGES)[number];
 
 export class QueryPickupsDto {
   @IsOptional()

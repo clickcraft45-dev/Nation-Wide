@@ -68,7 +68,7 @@ export function PeriodBarChart({
                     <p className="text-xs font-medium text-foreground">{String(label)}</p>
                     {payload.map((entry) => (
                       <p key={String(entry.dataKey)} className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
-                        <span aria-hidden className="h-2 w-2 rounded-[2px]" style={{ backgroundColor: entry.color }} />
+                        <span aria-hidden className="h-2 w-2 rounded-xs" style={{ backgroundColor: entry.color }} />
                         {series.find((s) => s.key === entry.dataKey)?.label}:{" "}
                         <span className="font-medium tabular-nums text-foreground">
                           {valueFormatter(Number(entry.value ?? 0))}

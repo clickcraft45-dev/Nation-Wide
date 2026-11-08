@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { aliasCode } from './rate-sheet-import.service';
 
-export interface PricingDashboardSummary {
+interface PricingDashboardSummary {
   totalProviders: number;
   activeCountries: number;
   totalZones: number;
@@ -12,7 +12,7 @@ export interface PricingDashboardSummary {
   lastGeneratedPdf: { rateProviderName: string; createdAt: string } | null;
 }
 
-export interface PricingSearchResult {
+interface PricingSearchResult {
   rateProviderId: string;
   rateProviderName: string;
   countryId: string;

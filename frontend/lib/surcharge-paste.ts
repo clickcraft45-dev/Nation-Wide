@@ -15,7 +15,7 @@ export interface SurchargeCandidate {
   suggested: boolean;
 }
 
-export interface PastedSurcharges {
+interface PastedSurcharges {
   fuel: SurchargeCandidate[];
   /** Per-kg peak or demand surcharges in rupees, the unit PSS is stored in. */
   pss: SurchargeCandidate[];

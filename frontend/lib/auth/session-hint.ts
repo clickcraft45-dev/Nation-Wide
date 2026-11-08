@@ -10,7 +10,7 @@
 const NAME = "nw_session";
 const ONE_YEAR_SECONDS = 60 * 60 * 24 * 365;
 
-export type SessionHint = "1" | "0" | null;
+type SessionHint = "1" | "0" | null;
 
 export function readSessionHint(): SessionHint {
   if (typeof document === "undefined") return null;

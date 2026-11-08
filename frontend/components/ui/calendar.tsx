@@ -39,14 +39,6 @@ export function formatIsoLong(iso: string): string {
   });
 }
 
-export function formatIsoShort(iso: string): string {
-  return fromIso(iso).toLocaleDateString("en-IN", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-}
-
 const TONE_DOT = {
   default: "bg-primary",
   success: "bg-success",

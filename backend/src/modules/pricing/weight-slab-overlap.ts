@@ -1,4 +1,4 @@
-export interface WeightSlabRange {
+interface WeightSlabRange {
   weightFromKg: number;
   weightToKg: number;
 }

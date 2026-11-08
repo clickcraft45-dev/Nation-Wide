@@ -12,7 +12,7 @@ export const MILESTONE_SEQUENCE = [
   { status: "DELIVERED", label: "Delivered" },
 ] as const satisfies readonly { status: TrackingStatusCode; label: string }[];
 
-export interface DerivedMilestone {
+interface DerivedMilestone {
   label: string;
   /** The event time that reached this milestone, or null if it has not been reached. */
   reachedAt: string | null;

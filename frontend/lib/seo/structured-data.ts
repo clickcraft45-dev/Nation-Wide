@@ -146,20 +146,6 @@ export function faqSchema(faqs: ReadonlyArray<{ question: string; answer: string
   };
 }
 
-/** Breadcrumbs for the legal and guideline pages, so results show a path rather than a bare URL. */
-export function breadcrumbSchema(trail: ReadonlyArray<{ name: string; path: string }>) {
-  return {
-    "@context": "https://schema.org",
-    "@type": "BreadcrumbList",
-    itemListElement: trail.map((crumb, index) => ({
-      "@type": "ListItem",
-      position: index + 1,
-      name: crumb.name,
-      item: `${SITE_URL}${crumb.path}`,
-    })),
-  };
-}
-
 /** The site itself, which is what enables a sitelinks search box in results. */
 export function websiteSchema() {
   return {

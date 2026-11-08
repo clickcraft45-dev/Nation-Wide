@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type SubmitEvent } from "react";
 import type { CustomerDto } from "@nationwide/shared-types";
 import { apiClient } from "@/lib/api-client";
 import { useToast } from "@/components/ui/toast";
@@ -36,7 +36,7 @@ export default function CustomerProfilePage() {
       .finally(() => setIsLoading(false));
   }, []);
 
-  async function handleSave(e: FormEvent) {
+  async function handleSave(e: SubmitEvent) {
     e.preventDefault();
     setIsSaving(true);
     try {

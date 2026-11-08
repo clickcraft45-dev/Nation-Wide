@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type SubmitEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -65,7 +65,7 @@ export default function RegisterPage() {
     return Object.keys(next).length === 0;
   }
 
-  async function handleSubmit(e: FormEvent) {
+  async function handleSubmit(e: SubmitEvent) {
     e.preventDefault();
     setApiError(null);
     if (!validate()) return;

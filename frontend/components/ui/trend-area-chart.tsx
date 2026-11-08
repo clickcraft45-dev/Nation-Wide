@@ -114,7 +114,7 @@ export function TrendAreaChart({
                       <p key={String(entry.dataKey)} className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
                         <span
                           aria-hidden
-                          className="h-2 w-2 rounded-[2px]"
+                          className="h-2 w-2 rounded-xs"
                           style={{ backgroundColor: entry.color }}
                         />
                         {series.find((s) => s.key === entry.dataKey)?.label ?? String(entry.dataKey)}:{" "}

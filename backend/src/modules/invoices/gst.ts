@@ -48,7 +48,7 @@ export function formatInvoiceNumber(
 // CGST/SGST vs IGST
 // ---------------------------------------------------------------------------
 
-export interface GstSplit {
+interface GstSplit {
   cgstRate: number;
   cgstAmount: number;
   sgstRate: number;
@@ -125,10 +125,10 @@ export const BREAKDOWN_SOURCES = {
   CUSTOM: 'CUSTOM',
 } as const;
 
-export type BreakdownSource =
+type BreakdownSource =
   (typeof BREAKDOWN_SOURCES)[keyof typeof BREAKDOWN_SOURCES];
 
-export interface ChargedBreakdown {
+interface ChargedBreakdown {
   taxableValue: number;
   gstAmount: number;
   /** NationWide Cut and anything else the engine adds AFTER tax, so never part of the tax base. */
@@ -138,7 +138,7 @@ export interface ChargedBreakdown {
 }
 
 /** What a caller can offer up about an order; every field may legitimately be missing. */
-export interface BreakdownCandidates {
+interface BreakdownCandidates {
   verified?: {
     taxableSubtotal: number | null;
     gstAmount: number | null;

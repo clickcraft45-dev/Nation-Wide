@@ -303,7 +303,7 @@ export default function AdminNewOrderPage() {
     return ok;
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.SubmitEvent) {
     e.preventDefault();
     if (!customer || !validate() || !partnerId) return;
     setSubmitError(null);

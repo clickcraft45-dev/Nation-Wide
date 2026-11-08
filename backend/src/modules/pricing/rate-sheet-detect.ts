@@ -69,7 +69,7 @@ export interface DetectedTable {
 }
 
 /** Bands above the last stated weight run to here: the engine refuses a parcel over 1000 kg. */
-export const OPEN_ENDED_KG = 1000;
+const OPEN_ENDED_KG = 1000;
 
 /** The carriers whose own grids this importer updates. A service of the same name in a country list is kept apart from them. */
 const CARRIERS: { pattern: RegExp; code: string; name: string }[] = [
@@ -84,14 +84,14 @@ const text = (cell: string | undefined) =>
   (cell ?? '').replace(/\s+/g, ' ').trim();
 
 /** A price cell: "1,825", "₹ 1825", "1825.50". Notes ("**", "Service Suspended") are not prices. */
-export function priceOf(cell: string | undefined): number | null {
+function priceOf(cell: string | undefined): number | null {
   const t = text(cell).replace(/[₹,\s]/g, '');
   if (!/^\d+(\.\d+)?$/.test(t)) return null;
   const n = Number(t);
   return n > 0 ? n : null;
 }
 
-export type WeightLabel =
+type WeightLabel =
   | { kind: 'first' }
   | { kind: 'add' }
   | { kind: 'at'; kg: number }
@@ -236,7 +236,7 @@ const nonEmpty = (row: string[] | undefined) =>
 const ZONE_HEADER = /^(zone\s*[a-z0-9]{1,3}|[a-z])$/i;
 // Our own export's grid header (RateSheetImportService.export): a grid whatever its zones are
 // called, since a consolidator's zones are destinations ("Cambodia", "UK ECONOMY").
-export const EXPORT_HEADER = /^weight \(kg\)$/i;
+const EXPORT_HEADER = /^weight \(kg\)$/i;
 
 /**
  * A country-list header: at least two headings only a header has ("500 gms", "ADD 500", "6+") and
@@ -599,10 +599,10 @@ function listAt(
     lastRow = r + 1;
 
     let service = text(row[serviceCol]).toUpperCase();
-    let vendor = text(row[vendorCol]).toUpperCase();
+    const vendor = text(row[vendorCol]).toUpperCase();
     // Some sections swap the two columns (ROW: "AGT | TC1 | SELF").
     if (VENDOR_CODE.test(service) && !VENDOR_CODE.test(vendor)) {
-      [service, vendor] = [vendor, service];
+      service = vendor;
       [serviceCol, vendorCol] = [vendorCol, serviceCol];
     }
     const destination = text(row[destCol]);

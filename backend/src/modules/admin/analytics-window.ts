@@ -28,7 +28,7 @@ function istMidnight(day: string): Date {
   return new Date(Date.parse(`${day}T00:00:00Z`) - IST_MS);
 }
 
-export interface AnalyticsWindow {
+interface AnalyticsWindow {
   from: string;
   to: string;
   bucket: AnalyticsBucket;

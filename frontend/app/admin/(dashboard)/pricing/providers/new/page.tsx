@@ -172,7 +172,7 @@ function CarrierStep({
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
-  async function save(e: React.FormEvent) {
+  async function save(e: React.SubmitEvent) {
     e.preventDefault();
     if (!/^[A-Z0-9_]{2,32}$/.test(code)) {
       setError("Code is 2 to 32 capital letters, digits or underscores, e.g. FEDEX or DHL_EXPRESS.");

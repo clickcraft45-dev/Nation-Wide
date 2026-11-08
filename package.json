@@ -21,6 +21,7 @@
   "overrides": {
     "deepmerge-ts": "^8.0.2",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "multer": "^2.5.0"
   }
 }

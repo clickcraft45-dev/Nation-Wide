@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState, type SubmitEvent } from "react";
 import { Send } from "lucide-react";
 import { apiClient, errorMessage } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
@@ -43,7 +43,7 @@ export default function AdminMailPage() {
     return Object.keys(next).length === 0;
   }
 
-  async function handleSubmit(e: FormEvent) {
+  async function handleSubmit(e: SubmitEvent) {
     e.preventDefault();
     if (!validate()) return;
 

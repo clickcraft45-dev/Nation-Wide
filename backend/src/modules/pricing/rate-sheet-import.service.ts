@@ -970,7 +970,7 @@ export function aliasCode(value: string): string | null {
   return ALIASES[normalizeCountry(value)] ?? null;
 }
 
-export function normalizeCountry(value: string): string {
+function normalizeCountry(value: string): string {
   return (
     value
       .normalize('NFD')

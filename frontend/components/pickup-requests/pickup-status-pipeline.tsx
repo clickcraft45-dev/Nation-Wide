@@ -43,7 +43,7 @@ function slot(pickup: PickupRequestDto): string {
 }
 
 /** Where the pickup stands right now, in the customer's words. Checked latest-first. */
-export function pickupStage(pickup: PickupRequestDto): { icon: LucideIcon; title: string; body: string } {
+function pickupStage(pickup: PickupRequestDto): { icon: LucideIcon; title: string; body: string } {
   const amount = money(pickup.verifiedPrice ?? pickup.estimatedPrice, pickup.currency);
   if (pickup.orderId || pickup.status === "COMPLETED") {
     return {
@@ -88,7 +88,7 @@ export function pickupStage(pickup: PickupRequestDto): { icon: LucideIcon; title
   };
 }
 
-export function pickupMilestones(pickup: PickupRequestDto): ProgressMilestone[] {
+function pickupMilestones(pickup: PickupRequestDto): ProgressMilestone[] {
   const verified = pickup.verifiedAt
     ? `${when(pickup.verifiedAt)} · ${pickup.verifiedWeightKg ?? pickup.estimatedWeightKg}kg`
     : null;
