@@ -123,6 +123,22 @@ enum PaymentStatus {
   REFUNDED
 }
 
+/// Where one online payment attempt stands. The gateway's own words (OBSERVED, RECONCILED,
+/// MANUAL_REVIEW) are kept apart from the office's decision (CONFIRMED, REJECTED) on purpose:
+/// YouPI reads bank SMS alerts, so nothing it says is proof of money. Only an admin who has
+/// looked at the bank account moves an attempt to CONFIRMED, and that is what marks the order paid.
+enum OnlinePaymentStatus {
+  CREATED
+  OBSERVED
+  RECONCILED
+  MANUAL_REVIEW
+  FAILED
+  EXPIRED
+  CANCELLED
+  CONFIRMED
+  REJECTED
+}
+
 // An invoice is a statutory document: once ISSUED its numbers are frozen and it may never be
 // edited or deleted, only CANCELLED (which keeps the number consumed, as GST requires — a gap in
 // the series is what an auditor asks about).
@@ -197,6 +213,7 @@ model Customer {
   reviews           Review[]
   savedItems        SavedItem[]
   b2bLinks          B2bLink[]
+  onlinePayments    OnlinePayment[]
 
   @@map("customers")
 }
@@ -268,6 +285,7 @@ model Order {
   /// consolidated path only picks up orders that have neither.
   invoiceLine     InvoiceLine?
   receipts        Receipt[]
+  onlinePayments  OnlinePayment[]
   paymentMarkedBy AdminUser?     @relation("OrderPaymentMarkedBy", fields: [paymentMarkedByAdminId], references: [id])
 
   @@index([customerId])
@@ -277,6 +295,64 @@ model Order {
   @@index([createdAt])
   @@index([status])
   @@map("orders")
+}
+
+/// One attempt by a customer to pay what an order owes through the online gateway (YouPI, a
+/// self-hosted UPI checkout). A ledger beside Order rather than more columns on it: an order can
+/// be tried several times, and an attempt the gateway reports as paid is still only a claim until
+/// an admin confirms it against the bank.
+model OnlinePayment {
+  /// Also the order id the gateway is given, so each attempt is its own session there and a
+  /// webhook names exactly one row here.
+  id         String @id @default(uuid())
+  orderId    String @map("order_id")
+  customerId String @map("customer_id")
+  provider   String @default("YOUPI")
+
+  /// Paise, as the gateway counts it. Frozen at creation: the order's due can change afterwards,
+  /// and a webhook for any other amount is not this payment.
+  amountPaise Int                 @map("amount_paise")
+  status      OnlinePaymentStatus @default(CREATED)
+
+  gatewayPaymentId String? @unique @map("gateway_payment_id")
+  checkoutUrl      String? @map("checkout_url")
+  /// The 12-digit bank reference the gateway read off the alert. What the admin looks for in the
+  /// bank statement before confirming.
+  utr              String?
+  /// Why the gateway call failed, or why a webhook was held for review.
+  note             String?
+
+  reviewedByAdminId String?   @map("reviewed_by_admin_id")
+  reviewedAt        DateTime? @map("reviewed_at")
+  reviewNote        String?   @map("review_note")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  order      Order                @relation(fields: [orderId], references: [id])
+  customer   Customer             @relation(fields: [customerId], references: [id])
+  reviewedBy AdminUser?           @relation("OnlinePaymentReviewedBy", fields: [reviewedByAdminId], references: [id])
+  events     OnlinePaymentEvent[]
+
+  @@index([orderId])
+  @@index([customerId])
+  @@index([status])
+  @@map("online_payments")
+}
+
+/// Every webhook the gateway delivered, kept verbatim. The id is the gateway's delivery id, so a
+/// retried delivery collides on the primary key and is dropped rather than applied twice.
+model OnlinePaymentEvent {
+  id              String   @id
+  onlinePaymentId String   @map("online_payment_id")
+  event           String
+  payload         Json
+  receivedAt      DateTime @default(now()) @map("received_at")
+
+  onlinePayment OnlinePayment @relation(fields: [onlinePaymentId], references: [id], onDelete: Cascade)
+
+  @@index([onlinePaymentId])
+  @@map("online_payment_events")
 }
 
 /// A customer's shipment request and its pricing/approval lifecycle, from submission through
@@ -882,6 +958,7 @@ model AdminUser {
   assignedPickups            Pickup[]              @relation("PickupAssignedStaff")
   confirmedPickups           Pickup[]              @relation("PickupConfirmedByAdmin")
   paymentMarkedOrders        Order[]               @relation("OrderPaymentMarkedBy")
+  reviewedOnlinePayments     OnlinePayment[]       @relation("OnlinePaymentReviewedBy")
   createdRateCards           RateCard[]            @relation("RateCardCreatedBy")
   createdRates               WeightSlab[]          @relation("WeightSlabCreatedBy")
   updatedRates               WeightSlab[]          @relation("WeightSlabUpdatedBy")

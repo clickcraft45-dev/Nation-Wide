@@ -27,6 +27,10 @@
 | `ICL_API_USER_ID` | No (until ICL is live) | `changeme` | Real value must come from ICL directly — never commit a real value here |
 | `ICL_API_PASSWORD` | No (until ICL is live) | `changeme` | Same as above |
 | `ROUTING_URL` | No | OSRM public demo server | The OSRM instance that measures the driving distance behind a cancellation fee. Self-host for production — the demo server is rate-limited. Unreachable means the fee falls back to straight-line distance, labelled as such to the customer |
+| `YOUPI_API_URL` | No | — | Public address of the self-hosted YouPI PG gateway behind "Pay now", e.g. `https://pay.nationwidelogistics.co`. Online payment is off unless all four `YOUPI_*` variables are set. See `docs/ONLINE_PAYMENTS.md` |
+| `YOUPI_MERCHANT_ID` | No | — | The merchant's UUID or slug from the gateway's Merchant Admin, sent as `X-Merchant-Id` |
+| `YOUPI_MERCHANT_API_KEY` | No | — | Server-side merchant API key (`mk_live_...`), sent as `X-Merchant-Key`. A secret, and not the same value as the webhook secret |
+| `YOUPI_WEBHOOK_SECRET` | No | — | The merchant's webhook secret. Verifies the `X-Gateway-Signature` HMAC on every POST to `/api/v1/webhooks/youpi`; the route rejects everything while this is unset |
 | `SEED_ADMIN_EMAIL` | No | `admin@nationwide.dev` | Seed script only — override before seeding anything beyond local dev |
 | `SEED_ADMIN_PASSWORD` | No | `ChangeMe123!` | Seed script only — **must** be overridden outside local dev |
 | `SEED_PICKUP_PARTNER_EMAIL` | No | `partner@nationwide.dev` | Seed script only |

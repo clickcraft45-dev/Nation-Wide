@@ -21,6 +21,7 @@ import { useToast } from "@/components/ui/toast";
 import { PaymentStatusBadge } from "@/components/ui/status-badge";
 import { MarkPaidDialog, type MarkPaidDetails } from "@/components/payments/mark-paid-dialog";
 import { RefundDialog } from "@/components/payments/refund-dialog";
+import { OnlinePaymentsReview } from "@/components/payments/online-payments-review";
 
 // The four states a payment can be in, as one row of choices rather than a dropdown: there are
 // only ever these five options, and the count of each is what an admin is scanning for.
@@ -113,10 +114,12 @@ export default function AdminPaymentsPage() {
       <div>
         <h1 className="text-xl font-semibold text-foreground">Payments</h1>
         <p className="text-sm text-muted-foreground">
-          Payment status per order. No online payment gateway yet. Mark payments received
-          manually.
+          Payment status per order. UPI payments made from the customer portal wait here for
+          you to confirm against the bank. Everything else is marked received manually.
         </p>
       </div>
+
+      <OnlinePaymentsReview onChanged={load} />
 
       <div className="flex flex-col gap-3 sm:flex-row">
         <div className="sm:w-72">

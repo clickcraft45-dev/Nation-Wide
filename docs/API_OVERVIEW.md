@@ -28,6 +28,15 @@ Public. `POST /register` (customer self-signup), `POST /login`, `POST /refresh`,
 - `STAFF`, `ADMIN` (via `admin/orders`): `PATCH /admin/orders/:id/payment` — separate from the
   lifecycle-status PATCH above so payment and status can't cross-write on one body
 
+## Online payments — `/api/v1/online-payments` (see `docs/ONLINE_PAYMENTS.md`)
+
+- `CUSTOMER`: `GET /me` — whether paying online is offered, and the latest attempt per order;
+  `POST /me/orders/:orderId/checkout` — opens a YouPI UPI checkout for the order's due amount
+  and returns its URL (empty body: the amount is read from the order)
+- `ADMIN` (via `admin/online-payments`): `GET /` (payments awaiting a decision; `?scope=all` for
+  the whole ledger), `POST /:id/confirm` (marks the order paid through the same path as
+  `PATCH /admin/orders/:id/payment`), `POST /:id/reject` (requires a `note`)
+
 ## Quotes — `/api/v1/quotes` (customer-facing) and `/api/v1/admin/quotes` (staff-facing)
 
 Customer quote flow: `POST /quotes` (create + auto-price via the pricing engine), `GET /preview`,
@@ -68,6 +77,8 @@ operations.
   internal tracking numbers are sequential (`NW-<yy>-<seq>`), so this endpoint is enumerable —
   see the Production Readiness Report's security findings.
 - `GET/POST /api/v1/webhooks/whatsapp` — Meta's verification handshake + delivery-status callbacks
+- `POST /api/v1/webhooks/youpi` — the YouPI gateway's payment events, authenticated by the
+  `X-Gateway-Signature` HMAC. Records what the gateway reports; never marks an order paid
 - `GET /api/v1/health` — liveness/readiness probe (Postgres + Redis checks)
 - `GET /api/v1/countries` — active countries list, used by the public quote wizard
 

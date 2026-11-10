@@ -139,6 +139,26 @@ class EnvironmentVariables {
   @IsString()
   WHATSAPP_APP_SECRET?: string;
 
+  // YouPI PG, the self-hosted UPI checkout behind "Pay now" (see YoupiClient). Optional as a
+  // group: online payment is simply not offered unless all four are set. The API key
+  // (mk_live_...) and the webhook secret are two different secrets on the gateway.
+  @IsOptional()
+  @IsString()
+  YOUPI_API_URL?: string;
+
+  @IsOptional()
+  @IsString()
+  YOUPI_MERCHANT_ID?: string;
+
+  @IsOptional()
+  @IsString()
+  YOUPI_MERCHANT_API_KEY?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(16)
+  YOUPI_WEBHOOK_SECRET?: string;
+
   // Optional so the app still boots when ICL isn't the active adapter (e.g. local dev on the
   // stub). ICLShippingProviderAdapter itself throws a clear error if invoked without these set.
   @IsOptional()

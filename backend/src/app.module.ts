@@ -30,6 +30,7 @@ import { ReceiptsModule } from './modules/receipts/receipts.module';
 import { ExpensesModule } from './modules/expenses/expenses.module';
 import { CouponsModule } from './modules/coupons/coupons.module';
 import { AnnouncementsModule } from './modules/announcements/announcements.module';
+import { OnlinePaymentsModule } from './modules/online-payments/online-payments.module';
 import { RedisThrottlerStorage } from './common/throttler/redis-throttler.storage';
 
 @Module({
@@ -71,6 +72,7 @@ import { RedisThrottlerStorage } from './common/throttler/redis-throttler.storag
     ExpensesModule,
     CouponsModule,
     AnnouncementsModule,
+    OnlinePaymentsModule,
   ],
   controllers: [AppController, HealthController],
   providers: [
