@@ -1,5 +1,6 @@
 "use client";
 
+import { DetailLayout } from "@/components/ui/detail-layout";
 import { useEffect, useState, type SubmitEvent } from "react";
 import type { CustomerDto } from "@nationwide/shared-types";
 import { apiClient } from "@/lib/api-client";
@@ -55,7 +56,7 @@ export default function CustomerProfilePage() {
   }
 
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="space-y-6">
       <div>
         <h1 className="text-xl font-semibold text-foreground">Profile</h1>
         <p className="text-sm text-muted-foreground">Manage your account details.</p>
@@ -66,65 +67,72 @@ export default function CustomerProfilePage() {
 
       {!isLoading && !error && customer && (
         <>
-          <Card>
-            <CardHeader>
-              <CardTitle>Personal information</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={handleSave} className="max-w-sm space-y-4">
-                <div className="space-y-1.5">
-                  <Label htmlFor="name">Name</Label>
-                  <Input id="name" value={name} onChange={(e) => setName(e.target.value)} />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="phone">Phone</Label>
-                  <Input id="phone" value={customer.phone} disabled />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="address">Address</Label>
-                  <Input
-                    id="address"
-                    value={address}
-                    onChange={(e) => setAddress(e.target.value)}
-                  />
-                </div>
-                <Button type="submit" isLoading={isSaving}>
-                  Save changes
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Change password</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ChangePasswordForm />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Install the app</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <p className="text-sm text-muted-foreground">
-                Put NationWide on your Home Screen to book pickups and track shipments in one tap,
-                on iPhone, Android or desktop.
-              </p>
-              <InstallAppButton className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
-            </CardContent>
-          </Card>
+          <DetailLayout
+            aside={
+              <>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Change password</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ChangePasswordForm />
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Install the app</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <p className="text-sm text-muted-foreground">
+                    Put NationWide on your Home Screen to book pickups and track shipments in one tap,
+                    on iPhone, Android or desktop.
+                  </p>
+                  <InstallAppButton className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+                </CardContent>
+              </Card>
+              </>
+            }
+          >
+            <Card>
+              <CardHeader>
+                <CardTitle>Personal information</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <form onSubmit={handleSave} className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="name">Name</Label>
+                    <Input id="name" value={name} onChange={(e) => setName(e.target.value)} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="phone">Phone</Label>
+                    <Input id="phone" value={customer.phone} disabled />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="email">Email</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <Label htmlFor="address">Address</Label>
+                    <Input
+                      id="address"
+                      value={address}
+                      onChange={(e) => setAddress(e.target.value)}
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <Button type="submit" isLoading={isSaving}>
+                      Save changes
+                    </Button>
+                  </div>
+                </form>
+              </CardContent>
+            </Card>
+          </DetailLayout>
         </>
       )}
     </div>

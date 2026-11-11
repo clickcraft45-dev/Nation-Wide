@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Users } from "lucide-react";
 import type { AdminUserDto, CustomerDto, ManagedAdminRole } from "@nationwide/shared-types";
 import { apiClient, ApiError, errorMessage } from "@/lib/api-client";
@@ -129,6 +130,17 @@ export default function AdminPeoplePage() {
             ? err.message
             : "Couldn't update the account. Please try again.",
       });
+    }
+  }
+
+  async function removeCustomer(customer: CustomerDto) {
+    try {
+      await apiClient.delete(`/customers/${customer.id}`);
+      setCustomers((prev) => prev.filter((c) => c.id !== customer.id));
+      showToast({ variant: "success", title: `${customer.name} deleted` });
+    } catch (err) {
+      // A customer with orders, quotes or invoices is refused, with the reason to deactivate instead.
+      showToast({ variant: "error", title: errorMessage(err, "Couldn't delete the account.") });
     }
   }
 
@@ -364,6 +376,18 @@ export default function AdminPeoplePage() {
                     >
                       {c.isActive ? "Deactivate" : "Reactivate"}
                     </Button>
+                    <ConfirmDialog
+                      title={`Delete ${c.name}?`}
+                      description={`Permanent, and only possible while ${c.isB2b ? "the business" : "they"} have no orders, quotes or invoices. Otherwise the server refuses and you deactivate instead, which keeps the history.${c.isB2b ? " Their ordering links are removed with the account." : ""}`}
+                      confirmLabel="Delete"
+                      variant="danger"
+                      onConfirm={() => removeCustomer(c)}
+                      trigger={
+                        <Button variant="secondary" size="sm">
+                          Delete
+                        </Button>
+                      }
+                    />
                   </div>
                 </TableCell>
               </TableRow>
@@ -379,7 +403,7 @@ export default function AdminPeoplePage() {
  * The create button for whichever audience is on screen.
  *
  * Each kind keeps its own dialog because each asks for genuinely different things — a partner
- * gets emailed credentials, a business gets an ordering link, a customer gets neither.
+ * gets emailed credentials, a business gets a portal invitation, a customer gets neither.
  */
 function CreateFor({
   tab,
@@ -392,6 +416,7 @@ function CreateFor({
   onCustomer: () => void;
   onStaff: () => void;
 }) {
+  const router = useRouter();
   const customer = (
     <CreateCustomerDialog
       key="customer"
@@ -399,12 +424,15 @@ function CreateFor({
       onCreated={onCustomer}
     />
   );
-  // Businesses are created where their ordering link is issued — the link is the whole point of
-  // making one, and it is emailed the moment it exists.
+  // A business is invited by email the moment it is created, then lands on its own page, which is
+  // where the ordering links for its teams are issued.
   const business = (
-    <Link key="business" href="/admin/b2b-links" className={buttonVariants({ size: "sm" })}>
-      + New business
-    </Link>
+    <CreateCustomerDialog
+      key="business"
+      business
+      trigger={<Button size="sm">+ New business</Button>}
+      onCreated={(created) => router.push(`/admin/customers/${created.id}`)}
+    />
   );
   const partner = (
     <PickupPartnerDialog

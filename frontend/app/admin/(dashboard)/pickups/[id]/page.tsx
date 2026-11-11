@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { User, Truck } from "lucide-react";
+import { DetailLayout } from "@/components/ui/detail-layout";
 import { BackLink } from "@/components/ui/back-link";
 import type { PickupDto, PickupStatusCode } from "@nationwide/shared-types";
 import { apiClient, ApiError } from "@/lib/api-client";
@@ -55,7 +56,7 @@ export default function AdminPickupDetailPage() {
   }
 
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="space-y-6">
       <BackLink href="/admin/pickups">Back to pickups</BackLink>
 
       {isLoading && (
@@ -81,66 +82,70 @@ export default function AdminPickupDetailPage() {
             <PickupStatusBadge status={pickup.status} />
           </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <User className="h-4 w-4" aria-hidden />
-                Customer
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-1 text-sm">
-              <p className="font-medium text-foreground">{pickup.customerName}</p>
-              <p className="text-muted-foreground">{pickup.customerPhone}</p>
-            </CardContent>
-          </Card>
+          <DetailLayout
+            aside={
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <User className="h-4 w-4" aria-hidden />
+                    Customer
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-1 text-sm">
+                  <p className="font-medium text-foreground">{pickup.customerName}</p>
+                  <p className="text-muted-foreground">{pickup.customerPhone}</p>
+                </CardContent>
+              </Card>
+            }
+          >
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Truck className="h-4 w-4" aria-hidden />
+                  Details
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-1 text-sm">
+                {pickup.method === "PICKUP" && (
+                  <p>
+                    <span className="text-muted-foreground">Scheduled: </span>
+                    {pickup.scheduledDate} · {pickup.scheduledTimeSlot}
+                  </p>
+                )}
+                {pickup.assignedStaffEmail && (
+                  <p>
+                    <span className="text-muted-foreground">Assigned to: </span>
+                    {pickup.assignedStaffEmail}
+                  </p>
+                )}
+                {pickup.confirmedByAdminEmail && (
+                  <p>
+                    <span className="text-muted-foreground">Confirmed by: </span>
+                    {pickup.confirmedByAdminEmail}
+                    {pickup.confirmedAt && ` on ${new Date(pickup.confirmedAt).toLocaleString()}`}
+                  </p>
+                )}
+                {pickup.weightVerifiedKg != null && (
+                  <p>
+                    <span className="text-muted-foreground">Verified weight: </span>
+                    {pickup.weightVerifiedKg}kg
+                  </p>
+                )}
+                {pickup.notes && (
+                  <p>
+                    <span className="text-muted-foreground">Notes: </span>
+                    {pickup.notes}
+                  </p>
+                )}
+              </CardContent>
+            </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Truck className="h-4 w-4" aria-hidden />
-                Details
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-1 text-sm">
-              {pickup.method === "PICKUP" && (
-                <p>
-                  <span className="text-muted-foreground">Scheduled: </span>
-                  {pickup.scheduledDate} · {pickup.scheduledTimeSlot}
-                </p>
-              )}
-              {pickup.assignedStaffEmail && (
-                <p>
-                  <span className="text-muted-foreground">Assigned to: </span>
-                  {pickup.assignedStaffEmail}
-                </p>
-              )}
-              {pickup.confirmedByAdminEmail && (
-                <p>
-                  <span className="text-muted-foreground">Confirmed by: </span>
-                  {pickup.confirmedByAdminEmail}
-                  {pickup.confirmedAt && ` on ${new Date(pickup.confirmedAt).toLocaleString()}`}
-                </p>
-              )}
-              {pickup.weightVerifiedKg != null && (
-                <p>
-                  <span className="text-muted-foreground">Verified weight: </span>
-                  {pickup.weightVerifiedKg}kg
-                </p>
-              )}
-              {pickup.notes && (
-                <p>
-                  <span className="text-muted-foreground">Notes: </span>
-                  {pickup.notes}
-                </p>
-              )}
-            </CardContent>
-          </Card>
-
-          <ManagePickupDialog
-            pickup={pickup}
-            onSave={save}
-            trigger={<Button size="sm">Manage status</Button>}
-          />
+            <ManagePickupDialog
+              pickup={pickup}
+              onSave={save}
+              trigger={<Button size="sm">Manage status</Button>}
+            />
+          </DetailLayout>
         </>
       )}
     </div>

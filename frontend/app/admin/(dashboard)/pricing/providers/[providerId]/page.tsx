@@ -51,7 +51,7 @@ export default function ProviderDetailPage() {
   }, [params.providerId]);
 
   return (
-    <div className="max-w-4xl space-y-6">
+    <div className="space-y-6">
       <Link
         href="/admin/pricing/providers"
         className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
@@ -161,9 +161,9 @@ export default function ProviderDetailPage() {
                   description="Add a country to one of this provider's zones, or upload the provider's rate sheet: its country list links them for you."
                 />
               ) : (
-                <div className="divide-y divide-border">
+                <div className="grid gap-x-8 lg:grid-cols-2">
                   {countries.map((c) => (
-                    <div key={c.countryId} className="flex items-center justify-between py-3">
+                    <div key={c.countryId} className="flex items-center justify-between gap-3 border-b border-border py-3">
                       <div>
                         <p className="text-sm font-medium text-foreground">{c.countryName}</p>
                         <p className="text-xs text-muted-foreground">
