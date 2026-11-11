@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Users } from "lucide-react";
 import type { AdminUserDto, CustomerDto, ManagedAdminRole } from "@nationwide/shared-types";
 import { apiClient, ApiError, errorMessage } from "@/lib/api-client";
@@ -132,6 +133,17 @@ export default function AdminPeoplePage() {
     }
   }
 
+  async function removeCustomer(customer: CustomerDto) {
+    try {
+      await apiClient.delete(`/customers/${customer.id}`);
+      setCustomers((prev) => prev.filter((c) => c.id !== customer.id));
+      showToast({ variant: "success", title: `${customer.name} deleted` });
+    } catch (err) {
+      // A customer with orders, quotes or invoices is refused, with the reason to deactivate instead.
+      showToast({ variant: "error", title: errorMessage(err, "Couldn't delete the account.") });
+    }
+  }
+
   async function removeStaff(user: AdminUserDto) {
     try {
       await apiClient.delete(`/admin/users/${user.id}`);
@@ -175,7 +187,12 @@ export default function AdminPeoplePage() {
             follows it.
           </p>
         </div>
-        <CreateFor tab={tab} onCustomer={load} onStaff={load} />
+        <CreateFor
+          tab={tab}
+          canCreateSuperAdmin={currentUser?.role === "SUPER_ADMIN"}
+          onCustomer={load}
+          onStaff={load}
+        />
       </div>
 
       <SegmentedControl ariaLabel="Which people" value={tab} onChange={setTab} options={TABS} />
@@ -216,6 +233,12 @@ export default function AdminPeoplePage() {
               // The server enforces this too; disabling the controls just avoids offering an
               // action guaranteed to fail.
               const isSelf = u.id === currentUser?.id;
+              // Only a super admin may touch a super admin (AdminUsersService enforces it).
+              const superLocked = currentUser?.role !== "SUPER_ADMIN" && u.role === "SUPER_ADMIN";
+              const lockedReason = superLocked ? "Only a super admin can change a super admin" : undefined;
+              const roleOptions = ROLE_OPTIONS.filter(
+                (role) => role !== "SUPER_ADMIN" || currentUser?.role === "SUPER_ADMIN" || u.role === "SUPER_ADMIN",
+              );
               return (
                 <TableRow key={u.id}>
                   <TableCell className="font-medium text-foreground">
@@ -239,7 +262,8 @@ export default function AdminPeoplePage() {
                     <NativeSelect
                       aria-label={`Role for ${u.email}`}
                       value={u.role}
-                      disabled={isSelf}
+                      disabled={isSelf || superLocked}
+                      title={lockedReason}
                       onChange={(e) =>
                         patchStaff(
                           u.id,
@@ -247,9 +271,9 @@ export default function AdminPeoplePage() {
                           `Role changed to ${ROLE_LABELS[e.target.value as ManagedAdminRole]}`,
                         )
                       }
-                      className="w-36"
+                      className="w-44"
                     >
-                      {ROLE_OPTIONS.map((role) => (
+                      {roleOptions.map((role) => (
                         <option key={role} value={role}>
                           {ROLE_LABELS[role]}
                         </option>
@@ -263,21 +287,28 @@ export default function AdminPeoplePage() {
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-wrap gap-2">
-                      <EditAdminUserDialog
-                        user={u}
-                        onSaved={(updated) =>
-                          setStaff((prev) => prev.map((x) => (x.id === updated.id ? updated : x)))
-                        }
-                        trigger={
-                          <Button variant="secondary" size="sm">
-                            Edit
-                          </Button>
-                        }
-                      />
+                      {superLocked ? (
+                        <Button variant="secondary" size="sm" disabled title={lockedReason}>
+                          Edit
+                        </Button>
+                      ) : (
+                        <EditAdminUserDialog
+                          user={u}
+                          onSaved={(updated) =>
+                            setStaff((prev) => prev.map((x) => (x.id === updated.id ? updated : x)))
+                          }
+                          trigger={
+                            <Button variant="secondary" size="sm">
+                              Edit
+                            </Button>
+                          }
+                        />
+                      )}
                       <Button
                         variant="secondary"
                         size="sm"
-                        disabled={isSelf}
+                        disabled={isSelf || superLocked}
+                        title={lockedReason}
                         onClick={() =>
                           patchStaff(
                             u.id,
@@ -295,7 +326,7 @@ export default function AdminPeoplePage() {
                         variant="danger"
                         onConfirm={() => removeStaff(u)}
                         trigger={
-                          <Button variant="secondary" size="sm" disabled={isSelf}>
+                          <Button variant="secondary" size="sm" disabled={isSelf || superLocked} title={lockedReason}>
                             Delete
                           </Button>
                         }
@@ -345,6 +376,18 @@ export default function AdminPeoplePage() {
                     >
                       {c.isActive ? "Deactivate" : "Reactivate"}
                     </Button>
+                    <ConfirmDialog
+                      title={`Delete ${c.name}?`}
+                      description={`Permanent, and only possible while ${c.isB2b ? "the business" : "they"} have no orders, quotes or invoices. Otherwise the server refuses and you deactivate instead, which keeps the history.${c.isB2b ? " Their ordering links are removed with the account." : ""}`}
+                      confirmLabel="Delete"
+                      variant="danger"
+                      onConfirm={() => removeCustomer(c)}
+                      trigger={
+                        <Button variant="secondary" size="sm">
+                          Delete
+                        </Button>
+                      }
+                    />
                   </div>
                 </TableCell>
               </TableRow>
@@ -360,17 +403,20 @@ export default function AdminPeoplePage() {
  * The create button for whichever audience is on screen.
  *
  * Each kind keeps its own dialog because each asks for genuinely different things — a partner
- * gets emailed credentials, a business gets an ordering link, a customer gets neither.
+ * gets emailed credentials, a business gets a portal invitation, a customer gets neither.
  */
 function CreateFor({
   tab,
+  canCreateSuperAdmin,
   onCustomer,
   onStaff,
 }: {
   tab: Tab;
+  canCreateSuperAdmin: boolean;
   onCustomer: () => void;
   onStaff: () => void;
 }) {
+  const router = useRouter();
   const customer = (
     <CreateCustomerDialog
       key="customer"
@@ -378,12 +424,15 @@ function CreateFor({
       onCreated={onCustomer}
     />
   );
-  // Businesses are created where their ordering link is issued — the link is the whole point of
-  // making one, and it is emailed the moment it exists.
+  // A business is invited by email the moment it is created, then lands on its own page, which is
+  // where the ordering links for its teams are issued.
   const business = (
-    <Link key="business" href="/admin/b2b-links" className={buttonVariants({ size: "sm" })}>
-      + New business
-    </Link>
+    <CreateCustomerDialog
+      key="business"
+      business
+      trigger={<Button size="sm">+ New business</Button>}
+      onCreated={(created) => router.push(`/admin/customers/${created.id}`)}
+    />
   );
   const partner = (
     <PickupPartnerDialog
@@ -396,11 +445,12 @@ function CreateFor({
     <AdminUserDialog
       key="admin"
       defaultRole="ADMIN"
+      allowSuperAdmin={canCreateSuperAdmin}
       trigger={<Button size="sm">+ New admin</Button>}
       onSaved={onStaff}
     />
   );
-  const superAdmin = (
+  const superAdmin = canCreateSuperAdmin && (
     <AdminUserDialog
       key="super-admin"
       defaultRole="SUPER_ADMIN"

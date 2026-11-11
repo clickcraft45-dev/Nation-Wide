@@ -118,7 +118,7 @@ export function OrdersPanel({
 
   return (
     <div className="space-y-4">
-      <dl className="glass grid grid-cols-3 divide-x divide-[color:var(--glass-edge)] rounded-2xl">
+      <dl className="glass grid grid-cols-3 divide-x divide-(--glass-edge) rounded-2xl">
         {(
           [
             ["Orders", orders.length.toLocaleString("en-IN")],
@@ -192,13 +192,13 @@ export function OrdersPanel({
       ) : (
         <div className="glass overflow-hidden rounded-2xl">
           {/* Column heads for the desktop table; on a phone each row is its own card. */}
-          <div className="hidden grid-cols-[minmax(0,2fr)_minmax(0,1.1fr)_minmax(0,1.3fr)_7rem] gap-4 border-b border-[color:var(--glass-edge)] px-5 py-3 text-xs font-medium text-muted-foreground md:grid">
+          <div className="hidden grid-cols-[minmax(0,2fr)_minmax(0,1.1fr)_minmax(0,1.3fr)_7rem] gap-4 border-b border-(--glass-edge) px-5 py-3 text-xs font-medium text-muted-foreground md:grid">
             <span>Recipient</span>
             <span>Status</span>
             <span>Tracking</span>
             <span className="text-right">Amount</span>
           </div>
-          <ul className="divide-y divide-[color:var(--glass-edge)]">
+          <ul className="divide-y divide-(--glass-edge)">
             {filtered.slice(0, shown).map((row) => (
               <li
                 key={row.id}
@@ -248,7 +248,7 @@ export function OrdersPanel({
             ))}
           </ul>
           {filtered.length > shown && (
-            <div className="border-t border-[color:var(--glass-edge)] p-3 text-center">
+            <div className="border-t border-(--glass-edge) p-3 text-center">
               <Button variant="ghost" onClick={() => setShown((n) => n + PAGE)}>
                 Show more ({filtered.length - shown} left)
               </Button>
@@ -315,13 +315,13 @@ export function InvoicesPanel({ client }: { client: B2bClient }) {
 
   return (
     <div className="glass overflow-hidden rounded-2xl">
-      <div className="hidden grid-cols-[minmax(0,1.6fr)_minmax(0,1.4fr)_8rem_8rem] gap-4 border-b border-[color:var(--glass-edge)] px-5 py-3 text-xs font-medium text-muted-foreground md:grid">
+      <div className="hidden grid-cols-[minmax(0,1.6fr)_minmax(0,1.4fr)_8rem_8rem] gap-4 border-b border-(--glass-edge) px-5 py-3 text-xs font-medium text-muted-foreground md:grid">
         <span>Invoice</span>
         <span>Period</span>
         <span className="text-right">Total</span>
         <span className="sr-only">Download</span>
       </div>
-      <ul className="divide-y divide-[color:var(--glass-edge)]">
+      <ul className="divide-y divide-(--glass-edge)">
         {invoices.map((invoice) => {
           const isCancelled = invoice.status === "CANCELLED";
           return (

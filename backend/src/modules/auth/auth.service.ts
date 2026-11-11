@@ -18,7 +18,7 @@ import { MailService } from '../mail/mail.service';
 import { passwordReset } from '../mail/mail.templates';
 import type { GoogleProfile } from './strategies/google.strategy';
 
-export interface TokenPair {
+interface TokenPair {
   accessToken: string;
   refreshToken: string;
 }

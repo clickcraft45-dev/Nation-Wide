@@ -21,6 +21,7 @@ import { PickupPartnersService } from './pickup-partners.service';
 import { AdminPickupRequestsController } from './admin-pickup-requests.controller';
 import { AdminService } from './admin.service';
 import { CommandCentreService } from './command-centre.service';
+import { AnalyticsService } from './analytics.service';
 import { ShipmentsModule } from '../shipments/shipments.module';
 import { QuotesModule } from '../quotes/quotes.module';
 import { PickupsModule } from '../pickups/pickups.module';
@@ -65,6 +66,7 @@ import { MailModule } from '../mail/mail.module';
   providers: [
     AdminService,
     CommandCentreService,
+    AnalyticsService,
     PickupPartnersService,
     AdminUsersService,
   ],

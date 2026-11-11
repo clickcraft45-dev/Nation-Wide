@@ -1,4 +1,4 @@
-export interface DialCountry {
+interface DialCountry {
   /** ISO 3166-1 alpha-2. */
   code: string;
   name: string;
@@ -261,7 +261,7 @@ export const DIAL_COUNTRIES: DialCountry[] = [
   { code: "ZW", name: "Zimbabwe", dial: "+263" },
 ];
 
-export const DEFAULT_DIAL_COUNTRY = "IN";
+const DEFAULT_DIAL_COUNTRY = "IN";
 
 /** "+91" + "9876543210" -> "+919876543210". Non-digits in the national part are dropped. */
 export function toE164(dial: string, nationalNumber: string): string {

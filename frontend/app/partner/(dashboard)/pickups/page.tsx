@@ -150,7 +150,7 @@ function PartnerPickupsPageInner() {
         <button
           type="button"
           onClick={() => router.push("/partner/pickups")}
-          className="flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1.5 text-sm font-medium text-primary"
+          className="flex min-h-11 items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1.5 text-sm font-medium text-primary"
         >
           <X className="h-3.5 w-3.5" aria-hidden />
           Showing {formatDateHeading(dateParam)}
@@ -170,7 +170,7 @@ function PartnerPickupsPageInner() {
               type="button"
               onClick={() => setFilter(value)}
               className={cn(
-                "shrink-0 rounded-full px-4 py-2 text-sm font-medium",
+                "min-h-11 shrink-0 rounded-full px-4 py-2 text-sm font-medium",
                 filter === value
                   ? "bg-primary text-primary-foreground"
                   : "bg-muted text-muted-foreground",

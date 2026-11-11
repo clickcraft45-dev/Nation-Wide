@@ -78,7 +78,7 @@ export interface AddressComponent {
   types: string[];
 }
 
-export interface ParsedAddress {
+interface ParsedAddress {
   addressLine1: string;
   city: string;
   state: string;
@@ -139,7 +139,7 @@ export function distanceKm(a: { lat: number; lng: number }, b: { lat: number; ln
   return 6371 * 2 * Math.asin(Math.sqrt(h));
 }
 
-export type PostalLookup =
+type PostalLookup =
   | { kind: "found"; city: string; state: string; formatted: string }
   | { kind: "not-found" }
   | { kind: "unavailable" };

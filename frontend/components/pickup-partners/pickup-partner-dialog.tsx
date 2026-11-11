@@ -27,7 +27,7 @@ export function PickupPartnerDialog({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { showToast } = useToast();
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.SubmitEvent) {
     e.preventDefault();
     if (!email.trim()) {
       setError("An email address is required, it is where their sign-in details are sent.");

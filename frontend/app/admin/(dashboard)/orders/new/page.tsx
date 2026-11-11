@@ -303,7 +303,7 @@ export default function AdminNewOrderPage() {
     return ok;
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.SubmitEvent) {
     e.preventDefault();
     if (!customer || !validate() || !partnerId) return;
     setSubmitError(null);
@@ -373,7 +373,7 @@ export default function AdminNewOrderPage() {
   );
 
   return (
-    <div className="max-w-3xl space-y-6 pb-10">
+    <div className="mx-auto max-w-4xl space-y-6 pb-10">
       <Link
         href="/admin/orders"
         className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"

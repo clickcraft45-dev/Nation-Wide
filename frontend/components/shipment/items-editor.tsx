@@ -17,7 +17,7 @@ export interface ItemForm {
   hsCode: string;
 }
 
-export const emptyItem: ItemForm = {
+const emptyItem: ItemForm = {
   category: "",
   description: "",
   quantity: "1",

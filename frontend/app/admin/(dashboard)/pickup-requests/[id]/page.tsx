@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import { DetailLayout } from "@/components/ui/detail-layout";
 import { BackLink } from "@/components/ui/back-link";
 import type { PickupRequestDto, PaymentMethodCode } from "@nationwide/shared-types";
 import { apiClient, errorMessage } from "@/lib/api-client";
@@ -85,7 +86,7 @@ export default function AdminPickupRequestDetailPage() {
   }
 
   return (
-    <div className="max-w-3xl space-y-6">
+    <div className="space-y-6">
       <BackLink href="/admin/pickup-requests">Back to pickup requests</BackLink>
 
       <div className="flex items-center justify-between">
@@ -96,200 +97,206 @@ export default function AdminPickupRequestDetailPage() {
         <PickupRequestStatusBadge status={pickup.status} />
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Assignment</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <p className="text-sm text-muted-foreground">
-            Currently assigned to{" "}
-            <span className="font-medium text-foreground">
-              {pickup.assignedPartnerName ?? "no one yet"}
-            </span>
-            .
-          </p>
-          {pickup.arrivedAt && (
-            <p className="text-sm text-muted-foreground">
-              Partner arrived at pickup{" "}
-              <span className="font-medium text-foreground">
-                {new Date(pickup.arrivedAt).toLocaleString()}
-              </span>
-              .
-            </p>
-          )}
-          {/* Hand-assign or reassign until the partner is at the door. Warehouse drop-offs are
-              worked by staff, never a partner. */}
-          {!pickup.dropAtWarehouse && !pickup.arrivedAt && ["PENDING_ASSIGNMENT", "ASSIGNED", "SCHEDULED"].includes(pickup.status) && (
-            <div className="space-y-2 border-t border-border pt-3">
-              <p className="text-sm font-medium text-foreground">
-                {pickup.assignedPartnerId ? "Reassign" : "Assign"} partner
-              </p>
-              <PartnerPicker
-                value={reassignTo}
-                onChange={setReassignTo}
-                pickup={
-                  pickup.pickupLatitude != null && pickup.pickupLongitude != null
-                    ? { lat: pickup.pickupLatitude, lng: pickup.pickupLongitude }
-                    : null
-                }
-              />
-              <Button
-                size="sm"
-                onClick={assign}
-                isLoading={isAssigning}
-                disabled={!reassignTo || reassignTo === pickup.assignedPartnerId}
-              >
-                Assign
-              </Button>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <DetailLayout
+        aside={
+          <>
+            {pickup.status === "COMPLETED" && pickup.orderId && (
+              <Card>
+                <CardContent className="flex flex-wrap items-center justify-between gap-3 pt-5">
+                  <p className="text-sm font-medium text-success">
+                    Order generated and ready for carrier assignment / AWB mapping.
+                  </p>
+                  <Link href={`/admin/orders/${pickup.orderId}`}>
+                    <Button variant="secondary" size="sm">
+                      View Order
+                    </Button>
+                  </Link>
+                </CardContent>
+              </Card>
+            )}
+            {pickup.status === "REJECTED" && (
+              <Card>
+                <CardContent className="pt-5">
+                  <p className="text-sm font-medium text-danger">Rejected: {pickup.rejectionReason}</p>
+                </CardContent>
+              </Card>
+            )}
+            <Card>
+              <CardHeader>
+                <CardTitle>Assignment</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  Currently assigned to{" "}
+                  <span className="font-medium text-foreground">
+                    {pickup.assignedPartnerName ?? "no one yet"}
+                  </span>
+                  .
+                </p>
+                {pickup.arrivedAt && (
+                  <p className="text-sm text-muted-foreground">
+                    Partner arrived at pickup{" "}
+                    <span className="font-medium text-foreground">
+                      {new Date(pickup.arrivedAt).toLocaleString()}
+                    </span>
+                    .
+                  </p>
+                )}
+                {/* Hand-assign or reassign until the partner is at the door. Warehouse drop-offs are
+                    worked by staff, never a partner. */}
+                {!pickup.dropAtWarehouse && !pickup.arrivedAt && ["PENDING_ASSIGNMENT", "ASSIGNED", "SCHEDULED"].includes(pickup.status) && (
+                  <div className="space-y-2 border-t border-border pt-3">
+                    <p className="text-sm font-medium text-foreground">
+                      {pickup.assignedPartnerId ? "Reassign" : "Assign"} partner
+                    </p>
+                    <PartnerPicker
+                      value={reassignTo}
+                      onChange={setReassignTo}
+                      pickup={
+                        pickup.pickupLatitude != null && pickup.pickupLongitude != null
+                          ? { lat: pickup.pickupLatitude, lng: pickup.pickupLongitude }
+                          : null
+                      }
+                    />
+                    <Button
+                      size="sm"
+                      onClick={assign}
+                      isLoading={isAssigning}
+                      disabled={!reassignTo || reassignTo === pickup.assignedPartnerId}
+                    >
+                      Assign
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </>
+        }
+      >
+        <ParcelContentsCard pickup={pickup} onDocumentUploaded={load} />
 
-      <ParcelContentsCard pickup={pickup} onDocumentUploaded={load} />
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Pickup Details</CardTitle>
-        </CardHeader>
-        <CardContent className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
-          <div className="sm:col-span-2">
-            <p className="text-muted-foreground">Pickup Address</p>
-            <p className="font-medium text-foreground">
-              {pickup.dropAtWarehouse
-                ? "Warehouse drop-off"
-                : `${pickup.pickupAddressLine1}${pickup.pickupAddressLine2 ? `, ${pickup.pickupAddressLine2}` : ""}, ${pickup.pickupCity}, ${pickup.pickupState} ${pickup.pickupPostalCode}`}
-            </p>
-          </div>
-          {pickup.pickupMapsUrl && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Pickup Details</CardTitle>
+          </CardHeader>
+          <CardContent className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
             <div className="sm:col-span-2">
-              <p className="text-muted-foreground">Google Maps link</p>
-              <a
-                href={pickup.pickupMapsUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="break-all font-medium text-primary hover:underline"
-              >
-                {pickup.pickupMapsUrl}
-              </a>
-            </div>
-          )}
-          {!pickup.dropAtWarehouse && (
-            <div>
-              <p className="text-muted-foreground">Scheduled</p>
+              <p className="text-muted-foreground">Pickup Address</p>
               <p className="font-medium text-foreground">
-                {pickup.pickupDate ?? "—"} · {pickup.pickupTimeSlot ?? "—"}
+                {pickup.dropAtWarehouse
+                  ? "Warehouse drop-off"
+                  : `${pickup.pickupAddressLine1}${pickup.pickupAddressLine2 ? `, ${pickup.pickupAddressLine2}` : ""}, ${pickup.pickupCity}, ${pickup.pickupState} ${pickup.pickupPostalCode}`}
               </p>
             </div>
-          )}
-          <div>
-            <p className="text-muted-foreground">Destination</p>
-            <p className="font-medium text-foreground">
-              {[pickup.destCity, pickup.destState, pickup.destCountry].filter(Boolean).join(", ")}
-            </p>
-            {!pickup.recipient && (
-              <p className="text-xs text-muted-foreground">
-                Recipient address to be taken down by the partner at pickup.
-              </p>
-            )}
-          </div>
-          <div>
-            <p className="text-muted-foreground">Carrier</p>
-            <p className="font-medium text-foreground">{pickup.rateProviderName ?? "Manually quoted"}</p>
-          </div>
-          <div>
-            <p className="text-muted-foreground">Estimated Quote</p>
-            <p className="font-medium text-foreground">
-              {formatMoney(pickup.estimatedPrice, pickup.currency)}
-            </p>
-          </div>
-        </CardContent>
-      </Card>
-
-      {pickup.verifiedAt && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Verification History</CardTitle>
-          </CardHeader>
-          <CardContent className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
-            <div>
-              <p className="text-muted-foreground">Verified Weight</p>
-              <p className="font-medium text-foreground">{pickup.verifiedWeightKg}kg</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">Verified Quote</p>
-              <p className="font-medium text-foreground">
-                {pickup.verifiedPrice !== null ? formatMoney(pickup.verifiedPrice, pickup.currency) : "—"}
-              </p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">Verified At</p>
-              <p className="font-medium text-foreground">
-                {new Date(pickup.verifiedAt).toLocaleString()}
-              </p>
-            </div>
-            {pickup.verificationNotes && (
+            {pickup.pickupMapsUrl && (
               <div className="sm:col-span-2">
-                <p className="text-muted-foreground">Notes</p>
-                <p className="font-medium text-foreground">{pickup.verificationNotes}</p>
+                <p className="text-muted-foreground">Google Maps link</p>
+                <a
+                  href={pickup.pickupMapsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="break-all font-medium text-primary hover:underline"
+                >
+                  {pickup.pickupMapsUrl}
+                </a>
               </div>
             )}
-          </CardContent>
-        </Card>
-      )}
-
-      {pickup.paymentCollectedAt && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Collected Payment</CardTitle>
-          </CardHeader>
-          <CardContent className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
-            <div>
-              <p className="text-muted-foreground">Method</p>
-              <p className="font-medium text-foreground">
-                {pickup.paymentMethod ? PAYMENT_METHOD_LABEL[pickup.paymentMethod] : "—"}
-              </p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">Amount</p>
-              <p className="font-medium text-foreground">
-                {pickup.collectedAmount !== null
-                  ? formatMoney(pickup.collectedAmount, pickup.currency)
-                  : "—"}
-              </p>
-            </div>
-            {pickup.paymentReference && (
+            {!pickup.dropAtWarehouse && (
               <div>
-                <p className="text-muted-foreground">Reference</p>
-                <p className="font-medium text-foreground">{pickup.paymentReference}</p>
+                <p className="text-muted-foreground">Scheduled</p>
+                <p className="font-medium text-foreground">
+                  {pickup.pickupDate ?? "—"} · {pickup.pickupTimeSlot ?? "—"}
+                </p>
               </div>
             )}
+            <div>
+              <p className="text-muted-foreground">Destination</p>
+              <p className="font-medium text-foreground">
+                {[pickup.destCity, pickup.destState, pickup.destCountry].filter(Boolean).join(", ")}
+              </p>
+              {!pickup.recipient && (
+                <p className="text-xs text-muted-foreground">
+                  Recipient address to be taken down by the partner at pickup.
+                </p>
+              )}
+            </div>
+            <div>
+              <p className="text-muted-foreground">Carrier</p>
+              <p className="font-medium text-foreground">{pickup.rateProviderName ?? "Manually quoted"}</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground">Estimated Quote</p>
+              <p className="font-medium text-foreground">
+                {formatMoney(pickup.estimatedPrice, pickup.currency)}
+              </p>
+            </div>
           </CardContent>
         </Card>
-      )}
 
-      {pickup.status === "COMPLETED" && pickup.orderId && (
-        <Card>
-          <CardContent className="flex items-center justify-between pt-5">
-            <p className="text-sm font-medium text-success">
-              Order generated and ready for carrier assignment / AWB mapping.
-            </p>
-            <Link href={`/admin/orders/${pickup.orderId}`}>
-              <Button variant="secondary" size="sm">
-                View Order
-              </Button>
-            </Link>
-          </CardContent>
-        </Card>
-      )}
+        {pickup.verifiedAt && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Verification History</CardTitle>
+            </CardHeader>
+            <CardContent className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+              <div>
+                <p className="text-muted-foreground">Verified Weight</p>
+                <p className="font-medium text-foreground">{pickup.verifiedWeightKg}kg</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Verified Quote</p>
+                <p className="font-medium text-foreground">
+                  {pickup.verifiedPrice !== null ? formatMoney(pickup.verifiedPrice, pickup.currency) : "—"}
+                </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Verified At</p>
+                <p className="font-medium text-foreground">
+                  {new Date(pickup.verifiedAt).toLocaleString()}
+                </p>
+              </div>
+              {pickup.verificationNotes && (
+                <div className="sm:col-span-2">
+                  <p className="text-muted-foreground">Notes</p>
+                  <p className="font-medium text-foreground">{pickup.verificationNotes}</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
-      {pickup.status === "REJECTED" && (
-        <Card>
-          <CardContent className="pt-5">
-            <p className="text-sm font-medium text-danger">Rejected: {pickup.rejectionReason}</p>
-          </CardContent>
-        </Card>
-      )}
+        {pickup.paymentCollectedAt && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Collected Payment</CardTitle>
+            </CardHeader>
+            <CardContent className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+              <div>
+                <p className="text-muted-foreground">Method</p>
+                <p className="font-medium text-foreground">
+                  {pickup.paymentMethod ? PAYMENT_METHOD_LABEL[pickup.paymentMethod] : "—"}
+                </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Amount</p>
+                <p className="font-medium text-foreground">
+                  {pickup.collectedAmount !== null
+                    ? formatMoney(pickup.collectedAmount, pickup.currency)
+                    : "—"}
+                </p>
+              </div>
+              {pickup.paymentReference && (
+                <div>
+                  <p className="text-muted-foreground">Reference</p>
+                  <p className="font-medium text-foreground">{pickup.paymentReference}</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+
+      </DetailLayout>
     </div>
   );
 }

@@ -72,7 +72,7 @@ export function MarketingFaqs() {
     <section id="faqs" className="relative isolate overflow-hidden bg-background py-20">
       <JsonLd data={faqSchema(FAQS)} />
       <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
-        <div className="absolute -left-32 top-0 h-112 w-112 rounded-full bg-zinc-300/45 blur-[130px] animate-aurora-slow" />
+        <div className="absolute -left-32 top-0 h-112 w-md rounded-full bg-zinc-300/45 blur-[130px] animate-aurora-slow" />
         <div className="absolute -right-24 bottom-0 h-104 w-104 rounded-full bg-zinc-400/30 blur-[130px] animate-aurora-slower" />
         <div className="absolute inset-0 bg-hero-grid" />
       </div>

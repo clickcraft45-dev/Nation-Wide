@@ -34,9 +34,11 @@ import {
 import {
   ItemsEditor,
   itemsFrom,
+  validateItems,
   type ItemForm,
 } from "@/components/shipment/items-editor";
 import { SavedRecipients } from "@/components/shipment/saved-recipients";
+import { searchCountries } from "@/lib/country-search";
 
 const SHIPMENT_TYPES: { value: ShipmentTypeCode; label: string }[] = [
   { value: "PACKAGE", label: "Package" },
@@ -121,6 +123,9 @@ export function ShipmentCard({
   const [isPricing, setIsPricing] = useState(false);
 
   const boxProblem = validatePackages(draft.boxes, draft.shipmentType !== "DOCUMENT");
+  // A contents problem is shown under Contents, on the field to fix, not at the foot of the card.
+  const itemsProblem = error ? validateItems(draft.items) : null;
+  const itemsError = itemsProblem && error?.endsWith(itemsProblem) ? error : null;
   const chargeable = boxProblem ? 0 : chargeableWeightKg(shipmentPackages(draft));
   const debounced = useDebouncedValue(
     `${draft.destinationCountry}|${draft.shipmentType}|${chargeable}`,
@@ -177,7 +182,7 @@ export function ShipmentCard({
 
   return (
     <Card>
-      <CardHeader className="flex-row items-center justify-between gap-3 border-b border-[color:var(--glass-edge)] pb-4">
+      <CardHeader className="flex-row items-center justify-between gap-3 border-b border-(--glass-edge) pb-4">
         <div className="flex min-w-0 items-center gap-3">
           <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-foreground text-sm font-semibold tabular-nums text-background">
             {index + 1}
@@ -198,7 +203,7 @@ export function ShipmentCard({
           </button>
         )}
       </CardHeader>
-      <CardContent className="space-y-7 pt-5" aria-invalid={Boolean(error)} tabIndex={-1}>
+      <CardContent className="space-y-7 pt-5" aria-invalid={Boolean(error) && !itemsError} tabIndex={-1}>
         <Section title="Recipient">
           <div className="grid gap-4 sm:grid-cols-2">
             <SavedRecipients
@@ -219,6 +224,7 @@ export function ShipmentCard({
                 id={`country-${draft.key}`}
                 searchable
                 searchPlaceholder="Search countries"
+                rank={(q) => searchCountries(countries, q).map((c) => c.name)}
                 value={draft.destinationCountry}
                 onChange={(e) => onChange({ destinationCountry: e.target.value })}
               >
@@ -272,6 +278,7 @@ export function ShipmentCard({
             onSavedItemsChange={onSavedItemsChange}
             libraryBase={savedItemsBase}
             client={savedItemsClient}
+            error={itemsError}
           />
         </Section>
 
@@ -298,7 +305,7 @@ export function ShipmentCard({
                   <label key={o.rateProviderId} className={CHOICE}>
                     <input
                       type="radio"
-                      className="h-4 w-4 shrink-0 accent-[var(--foreground)]"
+                      className="h-4 w-4 shrink-0 accent-(--foreground)"
                       name={`carrier-${draft.key}`}
                       checked={draft.rateProviderId === o.rateProviderId}
                       onChange={() =>
@@ -323,7 +330,7 @@ export function ShipmentCard({
             <label className={CHOICE}>
               <input
                 type="radio"
-                className="h-4 w-4 shrink-0 accent-[var(--foreground)]"
+                className="h-4 w-4 shrink-0 accent-(--foreground)"
                 name={`carrier-${draft.key}`}
                 checked={draft.rateProviderId === null}
                 onChange={() => onChange({ rateProviderId: null, estimate: null })}
@@ -345,7 +352,7 @@ export function ShipmentCard({
           )}
         </Section>
 
-        {error && <FieldError>{error}</FieldError>}
+        {error && !itemsError && <FieldError>{error}</FieldError>}
       </CardContent>
     </Card>
   );
@@ -353,7 +360,7 @@ export function ShipmentCard({
 
 // A selectable card around a radio: the whole card is the hit area, the picked one is inked.
 const CHOICE =
-  "flex cursor-pointer items-center gap-3 rounded-xl border border-border bg-white/50 px-4 py-3 text-sm transition-colors hover:border-foreground/30 has-[:checked]:border-foreground has-[:checked]:bg-white has-[:checked]:shadow-sm has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring";
+  "flex cursor-pointer items-center gap-3 rounded-xl border border-border bg-white/50 px-4 py-3 text-sm transition-colors hover:border-foreground/30 has-checked:border-foreground has-checked:bg-white has-checked:shadow-sm has-focus-visible:ring-2 has-focus-visible:ring-ring";
 
 const money = (value: number, currency: string) =>
   `${currency === "INR" ? "₹" : `${currency} `}${Math.round(value).toLocaleString("en-IN")}`;

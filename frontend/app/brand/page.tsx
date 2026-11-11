@@ -256,7 +256,7 @@ export default function BrandKitPage() {
               </div>
             </Tile>
             <Tile label="✗ recoloured" note="Only the tokens in 04.">
-              <div className="[&_svg_*]:!stroke-emerald-500 [&_svg_rect]:!fill-emerald-100">
+              <div className="[&_svg_*]:stroke-emerald-500! [&_svg_rect]:fill-emerald-100!">
                 <Logo variant="icon" size="md" />
               </div>
             </Tile>

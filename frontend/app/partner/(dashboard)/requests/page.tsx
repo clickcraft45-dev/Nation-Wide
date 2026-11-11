@@ -44,7 +44,7 @@ export default function PartnerRequestsPage() {
         </div>
         <Link
           href="/partner/map"
-          className="glass flex shrink-0 items-center gap-1.5 rounded-full px-3 py-2 text-sm font-medium text-foreground active:bg-muted/60"
+          className="glass flex min-h-11 shrink-0 items-center gap-1.5 rounded-full px-3 py-2 text-sm font-medium text-foreground active:bg-muted/60"
         >
           <MapIcon className="h-4 w-4" aria-hidden />
           Map

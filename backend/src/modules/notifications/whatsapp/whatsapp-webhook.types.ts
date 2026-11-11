@@ -5,7 +5,7 @@
  * forbidNonWhitelisted. Parsed defensively at the call site instead of enforced by class shape.
  * https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks
  */
-export interface WhatsAppStatusUpdate {
+interface WhatsAppStatusUpdate {
   id: string; // wamid — our providerMessageId
   status: 'sent' | 'delivered' | 'read' | 'failed';
   timestamp: string;
@@ -13,7 +13,7 @@ export interface WhatsAppStatusUpdate {
   errors?: Array<{ code: number; title: string }>;
 }
 
-export interface WhatsAppWebhookPayload {
+interface WhatsAppWebhookPayload {
   entry?: Array<{
     changes?: Array<{
       value?: {

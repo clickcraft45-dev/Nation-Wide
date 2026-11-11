@@ -11,7 +11,7 @@ import type {
 } from '@nationwide/shared-types';
 import { PrismaService } from '../../database/prisma.service';
 
-export function toAnnouncementDto(a: Announcement): AnnouncementDto {
+function toAnnouncementDto(a: Announcement): AnnouncementDto {
   return {
     id: a.id,
     kind: a.kind,

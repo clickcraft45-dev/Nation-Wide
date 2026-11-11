@@ -67,9 +67,11 @@ export class CustomersService {
       search?: string;
       createdFrom?: string;
       createdTo?: string;
+      isB2b?: 'true';
     } = {},
   ): Promise<{ data: PublicCustomer[]; total: number | null }> {
     const where: Prisma.CustomerWhereInput = {};
+    if (params.isB2b === 'true') where.isB2b = true;
     if (params.search) {
       where.OR = [
         { name: { contains: params.search, mode: 'insensitive' } },

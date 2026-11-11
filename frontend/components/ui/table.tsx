@@ -15,7 +15,7 @@ export function Table({ className, ...props }: HTMLAttributes<HTMLTableElement>)
 export function TableHeader({ className, ...props }: HTMLAttributes<HTMLTableSectionElement>) {
   return <thead
       className={cn(
-        "border-b border-[color:var(--glass-edge)] bg-white/55 backdrop-saturate-150",
+        "border-b border-(--glass-edge) bg-white/55 backdrop-saturate-150",
         className,
       )}
       {...props}
@@ -24,7 +24,7 @@ export function TableHeader({ className, ...props }: HTMLAttributes<HTMLTableSec
 
 export function TableBody({ className, ...props }: HTMLAttributes<HTMLTableSectionElement>) {
   return <tbody
-      className={cn("divide-y divide-[color:var(--glass-edge)]", className)}
+      className={cn("divide-y divide-(--glass-edge)", className)}
       {...props}
     />;
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState, type FormEvent } from "react";
+import { Suspense, useEffect, useState, type SubmitEvent } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ShieldCheck, TrendingUp } from "lucide-react";
@@ -95,7 +95,7 @@ function LoginPageInner() {
     return Object.keys(errors).length === 0;
   }
 
-  async function handleSubmit(e: FormEvent) {
+  async function handleSubmit(e: SubmitEvent) {
     e.preventDefault();
     setApiError(null);
     if (!validate()) return;
@@ -146,7 +146,7 @@ function LoginPageInner() {
       <div className="relative hidden w-1/2 overflow-hidden bg-sidebar-bg lg:flex lg:flex-col lg:justify-between lg:p-12">
         {/* Decorative photo under a near-black scrim, so the white copy keeps its contrast. */}
         <AssetImage src={LOGIN_IMAGE.src} alt={LOGIN_IMAGE.alt} sizes="50vw" priority />
-        <div aria-hidden className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/80 to-black/60" />
+        <div aria-hidden className="absolute inset-0 bg-linear-to-t from-black/90 via-black/80 to-black/60" />
         <Link href="/" className="relative z-10">
           <Logo variant="reverse" size="md" />
         </Link>

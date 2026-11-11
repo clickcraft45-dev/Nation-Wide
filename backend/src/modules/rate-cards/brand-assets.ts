@@ -5,7 +5,7 @@ import { join } from 'node:path';
  * The NationWide artwork bundled for PDFs — the default when no company logo has been uploaded.
  * Lives in backend/assets/brand, which the Dockerfile copies into the image alongside the fonts.
  */
-export type BrandAsset = 'mark-black.png' | 'wordmark-white.png';
+type BrandAsset = 'mark-black.png' | 'wordmark-white.png';
 
 const cache = new Map<BrandAsset, Buffer>();
 
@@ -36,7 +36,7 @@ export function brandAsset(name: BrandAsset): Buffer | undefined {
  * while still leaving every figure on top of it legible, which is the whole constraint: these are
  * documents someone reads rates and tax amounts off.
  */
-export const WATERMARK_SIZE = 360;
+const WATERMARK_SIZE = 360;
 
 export const WATERMARK_STYLE = {
   position: 'absolute',

@@ -16,7 +16,7 @@ export function DropdownMenuContent({
         align="end"
         sideOffset={8}
         className={cn(
-          "glass-raised z-50 min-w-[12rem] rounded-xl p-1.5",
+          "glass-raised z-50 min-w-48 rounded-xl p-1.5",
           className,
         )}
         {...props}
@@ -32,7 +32,7 @@ export function DropdownMenuItem({
   return (
     <RadixDropdown.Item
       className={cn(
-        "flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-foreground outline-none transition-colors data-[highlighted]:bg-white/70",
+        "flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-foreground outline-none transition-colors data-highlighted:bg-white/70",
         className,
       )}
       {...props}
@@ -43,7 +43,7 @@ export function DropdownMenuItem({
 export function DropdownMenuSeparator({ className, ...props }: RadixDropdown.DropdownMenuSeparatorProps) {
   return (
     <RadixDropdown.Separator
-      className={cn("my-1 h-px bg-[color:var(--glass-edge)]", className)}
+      className={cn("my-1 h-px bg-(--glass-edge)", className)}
       {...props}
     />
   );

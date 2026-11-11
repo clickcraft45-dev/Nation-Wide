@@ -105,9 +105,17 @@ const SECURITY_HEADERS = [
     key: "Strict-Transport-Security",
     value: "max-age=63072000; includeSubDomains",
   },
+  // Only what the app uses: the camera for the partner's parcel photos, location for maps and
+  // pickup pins. Everything else is off for this site and anything it embeds.
+  {
+    key: "Permissions-Policy",
+    value: "camera=(self), geolocation=(self), microphone=(), usb=(), serial=(), browsing-topics=()",
+  },
 ];
 
 const nextConfig: NextConfig = {
+  // No "X-Powered-By: Next.js": it tells a scanner which framework's CVEs to try first.
+  poweredByHeader: false,
   // Produces a minimal frontend/.next/standalone/ tree with only the node_modules this app
   // actually needs traced in — what the Dockerfile's runtime stage copies, instead of shipping
   // the full monorepo node_modules into the production image.

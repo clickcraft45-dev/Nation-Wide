@@ -20,7 +20,7 @@ import { LOGO_MARK } from "@/lib/constants/assets";
  * on disk because Next.js requires them there — keep them in sync with this artwork.
  */
 
-export type LogoVariant =
+type LogoVariant =
   | "horizontal" // mark + "NationWide. / DELIVERING TRUST WORLDWIDE" side by side — navbars, sidebars
   | "icon" // mark only — compact spaces, app icon
   | "stacked" // mark above wordmark, centered — auth screens, splash
@@ -28,7 +28,7 @@ export type LogoVariant =
   | "mono" // single black ink — print, mono documents, anywhere colour is wrong
   | "reverse"; // single white ink — dark/near-black surfaces
 
-export type LogoSize = "sm" | "md" | "lg";
+type LogoSize = "sm" | "md" | "lg";
 
 /**
  * Ink of the mark. Defaults to the variant's own tone; pass it to retone any variant — `icon`
@@ -38,7 +38,7 @@ export type LogoSize = "sm" | "md" | "lg";
  * for identity and never carries operational meaning. `mono` is the black ink for print and for
  * anywhere colour would read as a status. `reverse` is white for the near-black panels.
  */
-export type LogoTone = "brand" | "mono" | "reverse";
+type LogoTone = "brand" | "mono" | "reverse";
 
 // The mark is a mask, so its ink is a background colour. Wordmark ink is matched to it below.
 const MARK_INK: Record<LogoTone, string> = {

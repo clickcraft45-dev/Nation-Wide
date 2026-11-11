@@ -110,7 +110,7 @@ function escapeHtml(value: string): string {
 // 0. Standing ordering link — sent to the business that will use it
 // ---------------------------------------------------------------------------
 
-export interface B2bLinkEmailInput {
+interface B2bLinkEmailInput {
   email: string;
   /** The business the shipments are billed to. */
   companyName: string;
@@ -165,7 +165,7 @@ goes astray and we will cancel it and issue another.`,
 // 1. B2B portal invitation — sent to the business by an admin
 // ---------------------------------------------------------------------------
 
-export interface B2bInviteEmailInput {
+interface B2bInviteEmailInput {
   companyName: string;
   email: string;
   setPasswordUrl: string;
@@ -303,7 +303,7 @@ This link is for your shipment only and works once.`,
 // 5. A pickup-partner account created for someone — their name and first password
 // ---------------------------------------------------------------------------
 
-export interface PartnerCredentialsEmailInput {
+interface PartnerCredentialsEmailInput {
   name: string;
   email: string;
   /** Plain text, on purpose: this is the one and only time it can be shown. */

@@ -77,7 +77,7 @@ export default function ContactPage() {
                       </p>
                       <a
                         href={channel.href}
-                        className="block [overflow-wrap:anywhere] text-lg font-semibold text-foreground hover:text-primary"
+                        className="block wrap-anywhere text-lg font-semibold text-foreground hover:text-primary"
                       >
                         {channel.value}
                       </a>
@@ -106,7 +106,7 @@ export default function ContactPage() {
             </div>
 
             <div className="space-y-4">
-              <div className="relative aspect-[3/2] overflow-hidden rounded-2xl">
+              <div className="relative aspect-3/2 overflow-hidden rounded-2xl">
                 <AssetImage
                   src={SUPPORT_IMAGE.src}
                   alt={SUPPORT_IMAGE.alt}

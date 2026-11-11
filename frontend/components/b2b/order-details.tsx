@@ -87,7 +87,7 @@ export function OrderDetailsDialog({
         title={`${row.recipientName ?? "Recipient at pickup"} · ${row.destinationCountry}`}
         description={`Booked ${day(row.createdAt)}`}
       >
-        <div className="divide-y divide-[color:var(--glass-edge)]">
+        <div className="divide-y divide-(--glass-edge)">
           {/* At a glance: always from the row, so it shows before the details arrive. */}
           <div className="flex flex-wrap items-center justify-between gap-3 py-4">
             <div className="flex flex-wrap items-center gap-2">

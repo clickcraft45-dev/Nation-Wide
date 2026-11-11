@@ -7,7 +7,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/types/jwt-payload.type';
 import { ReviewsService } from './reviews.service';
 
-export class SetApprovedDto {
+class SetApprovedDto {
   @IsBoolean()
   approved!: boolean;
 }

@@ -30,7 +30,7 @@ class PushKeysDto {
 }
 
 /** The subset of the browser's PushSubscription.toJSON() the server needs. */
-export class PushSubscriptionDto {
+class PushSubscriptionDto {
   @IsString()
   @MaxLength(1000)
   endpoint!: string;
@@ -40,7 +40,7 @@ export class PushSubscriptionDto {
   keys!: PushKeysDto;
 }
 
-export class PushUnsubscribeDto {
+class PushUnsubscribeDto {
   @IsString()
   @MaxLength(1000)
   endpoint!: string;

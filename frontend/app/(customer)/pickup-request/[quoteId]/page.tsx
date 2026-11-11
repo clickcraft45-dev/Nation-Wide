@@ -307,7 +307,7 @@ export default function PickupRequestPage() {
     });
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.SubmitEvent) {
     e.preventDefault();
     if (!quote) return;
     setSubmitError(null);

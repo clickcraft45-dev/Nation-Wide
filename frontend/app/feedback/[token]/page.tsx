@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useState, type FormEvent } from "react";
+import { use, useEffect, useState, type SubmitEvent } from "react";
 import Link from "next/link";
 import { CheckCircle2, Star } from "lucide-react";
 import { apiClient, errorMessage } from "@/lib/api-client";
@@ -46,7 +46,7 @@ export default function FeedbackPage({
       .finally(() => setIsLoading(false));
   }, [token]);
 
-  async function handleSubmit(e: FormEvent) {
+  async function handleSubmit(e: SubmitEvent) {
     e.preventDefault();
     if (rating === 0) {
       setFormError("Choose a rating from one to five stars.");
@@ -81,7 +81,7 @@ export default function FeedbackPage({
   if (isLoading) {
     return shell(
       <div className="flex justify-center py-10">
-        <Spinner size="lg" className="text-[color:var(--brand-red)]" />
+        <Spinner size="lg" className="text-(--brand-red)" />
       </div>,
     );
   }
