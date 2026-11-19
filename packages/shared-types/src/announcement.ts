@@ -1,4 +1,5 @@
-export type AnnouncementKind = "EVENT" | "OFFER";
+/** TICKER: a line of text that rolls across the homepage while it is live (title only). */
+export type AnnouncementKind = "EVENT" | "OFFER" | "TICKER";
 
 /** An event or sale offer shown on the public site (/events, /offers and the top banner). */
 export interface AnnouncementDto {

@@ -554,6 +554,28 @@ html.lenis body {
   animation: marquee 32s linear infinite;
 }
 
+/* Homepage rolling text: pauses while pointed at or focused so a line can be read in full. */
+.ticker-viewport:hover .animate-marquee,
+.ticker-viewport:focus-within .animate-marquee {
+  animation-play-state: paused;
+}
+
+/* No motion wanted: show the lines once, wrapped, instead of a frozen half-cut strip. */
+@media (prefers-reduced-motion: reduce) {
+  .ticker-viewport {
+    height: auto;
+    padding-block: 0.625rem;
+  }
+  .ticker-track {
+    flex-wrap: wrap;
+    flex-shrink: 1;
+    row-gap: 0.25rem;
+  }
+  .ticker-track[aria-hidden] {
+    display: none;
+  }
+}
+
 @keyframes scroll-cue {
   0%,
   100% {

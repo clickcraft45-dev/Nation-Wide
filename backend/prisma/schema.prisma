@@ -1665,6 +1665,8 @@ model FuelSurchargeUpdate {
 enum AnnouncementKind {
   EVENT
   OFFER
+  /// A line of text that rolls across the homepage while it is live. Only the title is shown.
+  TICKER
 }
 
 /// What the marketing site publishes besides its fixed pages: events (trade fairs, holiday

@@ -71,7 +71,8 @@ export class AnnouncementsService {
       where: {
         kind,
         isPublished: true,
-        ...(kind === 'OFFER' ? liveWhere(new Date()) : {}),
+        // Rolling text, like an offer, is only shown while its dates run.
+        ...(kind === 'OFFER' || kind === 'TICKER' ? liveWhere(new Date()) : {}),
       },
       orderBy: [{ startsAt: { sort: 'desc', nulls: 'first' } }],
       take: 100,
@@ -81,7 +82,7 @@ export class AnnouncementsService {
 
   async bySlug(slug: string): Promise<AnnouncementDto> {
     const row = await this.prisma.announcement.findFirst({
-      where: { slug, isPublished: true },
+      where: { slug, isPublished: true, kind: { not: 'TICKER' } },
     });
     if (!row) throw new NotFoundException('Not found');
     return toAnnouncementDto(row);
@@ -90,7 +91,12 @@ export class AnnouncementsService {
   /** The one strip across the top of the site: the most recently edited live banner. */
   async banner(): Promise<AnnouncementDto | null> {
     const row = await this.prisma.announcement.findFirst({
-      where: { isPublished: true, showBanner: true, ...liveWhere(new Date()) },
+      where: {
+        kind: { not: 'TICKER' },
+        isPublished: true,
+        showBanner: true,
+        ...liveWhere(new Date()),
+      },
       orderBy: { updatedAt: 'desc' },
     });
     return row ? toAnnouncementDto(row) : null;
@@ -156,6 +162,24 @@ export class AnnouncementsService {
 
 function toData(input: SaveAnnouncementDto) {
   const text = (v?: string | null) => v?.trim() || null;
+  if (input.kind === 'TICKER') {
+    // Only the text rolls. The slug is still unique across all rows, so give ticker lines their
+    // own namespace instead of letting one collide with an event that shares its wording.
+    const title = input.title.trim();
+    return {
+      kind: input.kind,
+      title,
+      slug: `ticker-${slugify(input.slug?.trim() || title).slice(0, 60)}`,
+      summary: title,
+      body: null,
+      location: null,
+      startsAt: input.startsAt ? new Date(input.startsAt) : null,
+      endsAt: input.endsAt ? new Date(input.endsAt) : null,
+      couponCode: null,
+      isPublished: input.isPublished ?? false,
+      showBanner: false,
+    };
+  }
   return {
     kind: input.kind,
     title: input.title.trim(),

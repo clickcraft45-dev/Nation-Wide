@@ -69,7 +69,25 @@ function toForm(a: AnnouncementDto): Form {
   };
 }
 
+const KIND_LABEL: Record<AnnouncementKind, string> = {
+  OFFER: "Offer",
+  EVENT: "Event",
+  TICKER: "Rolling text",
+};
+
 function toBody(f: Form): SaveAnnouncementDto {
+  if (f.kind === "TICKER") {
+    // Only the text rolls; the API fills the rest.
+    return {
+      kind: "TICKER",
+      title: f.title.trim(),
+      summary: f.title.trim(),
+      startsAt: f.startsAt ? new Date(`${f.startsAt}T00:00:00`).toISOString() : null,
+      endsAt: f.endsAt ? new Date(`${f.endsAt}T23:59:59`).toISOString() : null,
+      isPublished: f.isPublished,
+      showBanner: false,
+    };
+  }
   return {
     kind: f.kind,
     title: f.title.trim(),
@@ -89,7 +107,7 @@ function toBody(f: Form): SaveAnnouncementDto {
 
 function statusOf(a: AnnouncementDto): { label: string; variant: "success" | "warning" | "neutral" } {
   if (!a.isPublished) return { label: "Draft", variant: "neutral" };
-  if (!isAnnouncementLive(a)) return { label: a.kind === "OFFER" ? "Ended" : "Past", variant: "neutral" };
+  if (!isAnnouncementLive(a)) return { label: a.kind === "EVENT" ? "Past" : "Ended", variant: "neutral" };
   if (a.startsAt && new Date(a.startsAt) > new Date()) return { label: "Scheduled", variant: "warning" };
   return { label: "Live", variant: "success" };
 }
@@ -165,17 +183,19 @@ export default function AdminAnnouncementsPage() {
     }
   }
 
-  const canSave = form.title.trim().length >= 3 && form.summary.trim().length >= 3;
   const isOffer = form.kind === "OFFER";
+  const isTicker = form.kind === "TICKER";
+  const canSave = form.title.trim().length >= 3 && (isTicker || form.summary.trim().length >= 3);
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-xl font-semibold text-foreground">Events and offers</h1>
         <p className="text-sm text-muted-foreground">
-          Offers appear on /offers while their dates run; events on /events. Turn on Site banner to
-          show one in the strip at the top of the public site. Changes reach the site within about
-          five minutes.
+          Offers appear on /offers while their dates run; events on /events. Rolling text scrolls
+          across the homepage while it is published and inside its dates. Turn on Site banner to
+          show an offer or event in the strip at the top of the public site. Changes reach the site
+          within about five minutes.
         </p>
       </div>
 
@@ -183,7 +203,7 @@ export default function AdminAnnouncementsPage() {
         <CardContent className="space-y-4 pt-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-sm font-semibold text-foreground">
-              {editingId ? `Editing: ${form.title || "untitled"}` : "New event or offer"}
+              {editingId ? `Editing: ${form.title || "untitled"}` : "New event, offer or rolling text"}
             </h2>
             <SegmentedControl
               ariaLabel="Type"
@@ -192,10 +212,30 @@ export default function AdminAnnouncementsPage() {
               options={[
                 { value: "OFFER", label: "Offer" },
                 { value: "EVENT", label: "Event" },
+                { value: "TICKER", label: "Rolling text" },
               ]}
             />
           </div>
 
+          {isTicker && (
+            <div className="space-y-1.5">
+              <Label htmlFor="ann-ticker">Text that rolls on the homepage</Label>
+              <Input
+                id="ann-ticker"
+                maxLength={120}
+                placeholder="Diwali week: pickups run as usual across Hyderabad"
+                value={form.title}
+                onChange={(e) => set("title", e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Each published line scrolls in turn, right to left, just below the hero. It pauses
+                when a visitor points at it.
+              </p>
+            </div>
+          )}
+
+          {!isTicker && (
+          <>
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="ann-title">Title</Label>
@@ -242,6 +282,8 @@ export default function AdminAnnouncementsPage() {
               onChange={(e) => set("body", e.target.value)}
             />
           </div>
+          </>
+          )}
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <div className="space-y-1.5">
@@ -266,7 +308,7 @@ export default function AdminAnnouncementsPage() {
                 onChange={(v) => set("endsAt", v)}
               />
             </div>
-            {isOffer ? (
+            {isTicker ? null : isOffer ? (
               <div className="space-y-1.5">
                 <Label htmlFor="ann-code">Coupon code (optional)</Label>
                 <Input
@@ -302,15 +344,17 @@ export default function AdminAnnouncementsPage() {
               />
               Published
             </label>
-            <label className="flex min-h-11 items-center gap-2 text-sm text-foreground">
-              <input
-                type="checkbox"
-                className={CHECKBOX}
-                checked={form.showBanner}
-                onChange={(e) => set("showBanner", e.target.checked)}
-              />
-              Site banner
-            </label>
+            {!isTicker && (
+              <label className="flex min-h-11 items-center gap-2 text-sm text-foreground">
+                <input
+                  type="checkbox"
+                  className={CHECKBOX}
+                  checked={form.showBanner}
+                  onChange={(e) => set("showBanner", e.target.checked)}
+                />
+                Site banner
+              </label>
+            )}
             <div className="ml-auto flex gap-2">
               {editingId && (
                 <Button variant="secondary" onClick={reset} disabled={isSaving}>
@@ -358,7 +402,7 @@ export default function AdminAnnouncementsPage() {
                     {a.title}
                     {a.couponCode && <span className="ml-2 font-mono text-xs text-muted-foreground">{a.couponCode}</span>}
                   </TableCell>
-                  <TableCell>{a.kind === "OFFER" ? "Offer" : "Event"}</TableCell>
+                  <TableCell>{KIND_LABEL[a.kind]}</TableCell>
                   <TableCell>{formatAnnouncementDates(a) ?? "Always"}</TableCell>
                   <TableCell>
                     <Badge variant={status.variant}>{status.label}</Badge>
@@ -373,13 +417,17 @@ export default function AdminAnnouncementsPage() {
                     />
                   </TableCell>
                   <TableCell>
-                    <input
-                      type="checkbox"
-                      className={CHECKBOX}
-                      aria-label={`Site banner: ${a.title}`}
-                      checked={a.showBanner}
-                      onChange={(e) => setFlag(a, "showBanner", e.target.checked)}
-                    />
+                    {a.kind === "TICKER" ? (
+                      <span className="text-muted-foreground">Homepage</span>
+                    ) : (
+                      <input
+                        type="checkbox"
+                        className={CHECKBOX}
+                        aria-label={`Site banner: ${a.title}`}
+                        checked={a.showBanner}
+                        onChange={(e) => setFlag(a, "showBanner", e.target.checked)}
+                      />
+                    )}
                   </TableCell>
                   <TableCell className="space-x-2 text-right whitespace-nowrap">
                     <Button

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { MarketingNavbar } from "@/components/marketing/navbar";
 import { MarketingHero } from "@/components/marketing/hero";
 import { MarketingEventSpotlight } from "@/components/marketing/event-spotlight";
+import { MarketingTicker } from "@/components/marketing/ticker";
 import { MarketingServices } from "@/components/marketing/services";
 import { MarketingHowItWorks } from "@/components/marketing/how-it-works";
 import { MarketingAbout } from "@/components/marketing/about";
@@ -35,6 +36,8 @@ export default function HomePage() {
       <SmoothScroll />
       <MarketingNavbar />
       <MarketingHero />
+      {/* Renders only while an admin has live "Rolling text" published under Events and offers. */}
+      <MarketingTicker />
       {/* Renders only while an admin has a live offer or event marked "Site banner". */}
       <MarketingEventSpotlight />
       <Reveal from="fade">

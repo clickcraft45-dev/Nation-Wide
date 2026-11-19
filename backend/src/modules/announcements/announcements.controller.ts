@@ -34,7 +34,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { AnnouncementsService } from './announcements.service';
 
-const KINDS: AnnouncementKind[] = ['EVENT', 'OFFER'];
+const KINDS: AnnouncementKind[] = ['EVENT', 'OFFER', 'TICKER'];
 
 class SaveAnnouncementBody {
   @IsIn(KINDS)
