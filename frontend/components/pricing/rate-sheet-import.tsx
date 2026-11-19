@@ -490,16 +490,7 @@ function SheetView({ sheet, heading, busy }: { sheet: ProviderRateSheetDto; head
         </div>
       )}
 
-      {sheet.warnings.length > 0 && (
-        <ul className="space-y-1 rounded-xl border border-warning-border bg-warning-bg p-3 text-xs text-warning">
-          {sheet.warnings.map((w, i) => (
-            <li key={i} className="flex gap-1.5">
-              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
-              <span>{w}</span>
-            </li>
-          ))}
-        </ul>
-      )}
+      {sheet.warnings.length > 0 && <SheetWarnings warnings={sheet.warnings} />}
 
       <div className="flex flex-wrap items-center gap-3">
         {sheet.grids.length > 1 && (
@@ -531,6 +522,38 @@ function SheetView({ sheet, heading, busy }: { sheet: ProviderRateSheetDto; head
       </div>
 
       <Grid grid={grid} compare={sheet.compare} changesOnly={changesOnly} />
+    </div>
+  );
+}
+
+/** The importer's warnings, with a button to copy them all (to send to whoever fixes the sheet). */
+function SheetWarnings({ warnings }: { warnings: string[] }) {
+  const [state, setState] = useState<"idle" | "copied" | "failed">("idle");
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(warnings.map((w) => `- ${w}`).join("\n"));
+      setState("copied");
+    } catch {
+      setState("failed");
+    }
+    setTimeout(() => setState("idle"), 2000);
+  }
+
+  return (
+    <div className="flex items-start gap-3 rounded-xl border border-warning-border bg-warning-bg p-3 text-xs text-warning">
+      <ul className="min-w-0 flex-1 space-y-1">
+        {warnings.map((w, i) => (
+          <li key={i} className="flex gap-1.5">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+            <span>{w}</span>
+          </li>
+        ))}
+      </ul>
+      <Button size="sm" variant="secondary" className="shrink-0" onClick={copy} aria-live="polite">
+        <Copy className="h-3.5 w-3.5" aria-hidden />
+        {state === "copied" ? "Copied" : state === "failed" ? "Couldn't copy" : `Copy ${warnings.length === 1 ? "error" : "errors"}`}
+      </Button>
     </div>
   );
 }

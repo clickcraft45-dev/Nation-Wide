@@ -44,6 +44,15 @@ export function SmoothScroll() {
       const id = sameDocumentHash(anchor.getAttribute("href"), window.location.pathname);
       if (!id) return;
 
+      // "#top" means the top of the page (HTML spec), not an element; lenis must do it, or the
+      // native jump fights lenis's own scroll position.
+      if (id === "top" && !document.getElementById("top")) {
+        event.preventDefault();
+        lenis.scrollTo(0);
+        history.pushState(null, "", window.location.pathname + window.location.search);
+        return;
+      }
+
       const target = document.getElementById(id);
       if (!target) return;
 

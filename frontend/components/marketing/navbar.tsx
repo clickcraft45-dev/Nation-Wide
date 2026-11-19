@@ -62,8 +62,9 @@ export function MarketingNavbar() {
           scrolling reaches it; `fixed` is out of flow from the first frame, so the bar is in the
           same place on every page at every scroll position. The homepage wanted a negative margin
           to pull its hero up under the glass — out of flow, that happens on its own. */}
+      {/* No id="top" here: "#top" links scroll to an element, and a fixed one is always in view,
+          so "Back to top" went nowhere. Without the id, browsers scroll #top to the page top. */}
       <header
-        id="top"
         className={cn(
           "fixed inset-x-0 top-0 z-40 border-b",
           "border-border/60 bg-card/70 backdrop-blur-xl supports-[backdrop-filter]:bg-card/55",
