@@ -29,7 +29,45 @@ import {
 } from './gst';
 import { gstStateCode, isIntraStateSupply } from './indian-states';
 import { InvoicePdfService } from './invoice-pdf.service';
+import { dialablePhone } from '../../common/utils/phone.util';
 import type { InvoiceBranding } from './templates/tax-invoice-template';
+
+/**
+ * Who the invoice is from and to, frozen onto the row at issue. One place, so every kind of
+ * invoice (per order, consolidated, custom) prints the same header, and a Google sign-up's
+ * "google:<id>" phone placeholder is never printed as a number.
+ */
+function invoiceParties(
+  settings: {
+    legalName: string | null;
+    gstin: string | null;
+    address: string | null;
+    stateName: string | null;
+    stateCode: string | null;
+    supportEmail: string | null;
+    supportPhone: string | null;
+  },
+  customer: {
+    name: string;
+    phone: string;
+    gstin: string | null;
+    address: string | null;
+  },
+) {
+  return {
+    supplierName: settings.legalName!,
+    supplierGstin: settings.gstin!,
+    supplierAddress: settings.address!,
+    supplierStateName: settings.stateName!,
+    supplierStateCode: settings.stateCode!,
+    supplierEmail: settings.supportEmail,
+    supplierPhone: settings.supportPhone,
+    recipientName: customer.name,
+    recipientPhone: dialablePhone(customer.phone) ?? '',
+    recipientGstin: customer.gstin,
+    recipientAddress: customer.address,
+  };
+}
 
 /** Used only to back-derive a manual quote's tax; see resolveChargedBreakdown. */
 const DEFAULT_GST_PERCENT = 18;
@@ -182,18 +220,7 @@ export class InvoicesService {
         periodFrom: from,
         periodTo: to,
 
-        supplierName: settings.legalName!,
-        supplierGstin: settings.gstin!,
-        supplierAddress: settings.address!,
-        supplierStateName: settings.stateName!,
-        supplierStateCode: settings.stateCode!,
-        supplierEmail: settings.supportEmail,
-        supplierPhone: settings.supportPhone,
-
-        recipientName: customer.name,
-        recipientPhone: customer.phone,
-        recipientGstin: customer.gstin,
-        recipientAddress: customer.address,
+        ...invoiceParties(settings, customer),
 
         placeOfSupplyState,
         placeOfSupplyCode,
@@ -605,18 +632,7 @@ export class InvoicesService {
             : Prisma.DbNull,
         invoiceDate,
 
-        supplierName: settings.legalName!,
-        supplierGstin: settings.gstin!,
-        supplierAddress: settings.address!,
-        supplierStateName: settings.stateName!,
-        supplierStateCode: settings.stateCode!,
-        supplierEmail: settings.supportEmail,
-        supplierPhone: settings.supportPhone,
-
-        recipientName: customer.name,
-        recipientPhone: customer.phone,
-        recipientGstin: customer.gstin,
-        recipientAddress: customer.address,
+        ...invoiceParties(settings, customer),
 
         placeOfSupplyState,
         placeOfSupplyCode,
@@ -752,18 +768,7 @@ export class InvoicesService {
         customerId: order.customerId,
         invoiceDate,
 
-        supplierName: settings.legalName!,
-        supplierGstin: settings.gstin!,
-        supplierAddress: settings.address!,
-        supplierStateName: settings.stateName!,
-        supplierStateCode: settings.stateCode!,
-        supplierEmail: settings.supportEmail,
-        supplierPhone: settings.supportPhone,
-
-        recipientName: order.customer.name,
-        recipientPhone: order.customer.phone,
-        recipientGstin: order.customer.gstin,
-        recipientAddress: order.customer.address,
+        ...invoiceParties(settings, order.customer),
 
         placeOfSupplyState,
         placeOfSupplyCode,

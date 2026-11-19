@@ -14,6 +14,7 @@ import type {
   ShipmentTypeCode,
 } from "@nationwide/shared-types";
 import { apiClient } from "@/lib/api-client";
+import { fetchQuotePreview } from "@/lib/quote-preview";
 import { useToast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
 import { SearchInput } from "@/components/ui/search-input";
@@ -140,9 +141,7 @@ export default function AdminNewQuotePage() {
     setStep("loading");
     setLoadError(null);
     try {
-      const result = await apiClient.get<QuotePreviewResultDto>(
-        `/quotes/preview?destinationCountry=${encodeURIComponent(destination.name)}&weightKg=${value}&shipmentType=${type}`,
-      );
+      const result = await fetchQuotePreview(destination.name, value, type);
       setPreview(result);
       setStep(result.status === "RATED" ? "compare" : "manual-review");
     } catch {

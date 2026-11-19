@@ -1,6 +1,7 @@
 import { createElement as h } from 'react';
 import type { Receipt } from '@prisma/client';
 import { brandAsset } from '../../rate-cards/brand-assets';
+import { dialablePhone } from '../../../common/utils/phone.util';
 
 // Plain React.createElement and a dynamic ESM import of @react-pdf/renderer at the service
 // layer — the same constraint tax-invoice-template.ts documents, followed here rather than
@@ -331,7 +332,9 @@ export async function renderReceipt(
         h(View, { key: 'to', style: s.col }, [
           h(Text, { key: 'h', style: s.h }, 'Received from'),
           h(Text, { key: 'n', style: s.strong }, receipt.recipientName),
-          h(Text, { key: 'p' }, receipt.recipientPhone),
+          dialablePhone(receipt.recipientPhone)
+            ? h(Text, { key: 'p' }, receipt.recipientPhone)
+            : null,
         ]),
       ]),
 

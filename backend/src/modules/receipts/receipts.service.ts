@@ -15,6 +15,7 @@ import { CompanySettingsService } from '../rate-cards/company-settings.service';
 import { nextSequenceNumber } from '../shipments/sequence';
 import { formatInvoiceNumber, indianFinancialYear } from '../invoices/gst';
 import { ReceiptPdfService } from './receipt-pdf.service';
+import { dialablePhone } from '../../common/utils/phone.util';
 
 /**
  * Payment receipts — the acknowledgement that money arrived.
@@ -100,7 +101,7 @@ export class ReceiptsService {
       paymentMethod: order.paymentMethod ?? 'CASH',
       receivedAt: order.paidAt ?? new Date(),
       recipientName: order.customer.name,
-      recipientPhone: order.customer.phone,
+      recipientPhone: dialablePhone(order.customer.phone) ?? '',
       settings,
       actorId,
       extras: {

@@ -10,6 +10,7 @@ import {
   watermarkImage,
   WATERMARK_STYLE,
 } from '../../rate-cards/brand-assets';
+import { dialablePhone } from '../../../common/utils/phone.util';
 
 // Plain React.createElement, not JSX, and a dynamic ESM import of @react-pdf/renderer — both for
 // exactly the reasons spelled out at the top of rate-cards/templates/classic-template.ts. This
@@ -575,7 +576,9 @@ export async function renderTaxInvoice(
           invoice.recipientAddress
             ? h(Text, { key: 'a', style: s.muted }, invoice.recipientAddress)
             : null,
-          h(Text, { key: 'p', style: s.muted }, invoice.recipientPhone),
+          dialablePhone(invoice.recipientPhone)
+            ? h(Text, { key: 'p', style: s.muted }, invoice.recipientPhone)
+            : null,
           h(
             Text,
             { key: 'g' },

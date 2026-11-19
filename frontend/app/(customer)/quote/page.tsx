@@ -14,6 +14,7 @@ import type {
   ShipmentTypeCode,
 } from "@nationwide/shared-types";
 import { apiClient } from "@/lib/api-client";
+import { fetchQuotePreview } from "@/lib/quote-preview";
 import { useToast } from "@/components/ui/toast";
 import { QuoteStepper } from "@/components/quote/quote-stepper";
 import { DestinationStep } from "@/components/quote/destination-step";
@@ -108,9 +109,7 @@ export default function GetQuotePage() {
     setStep("loading");
     setLoadError(null);
     try {
-      const result = await apiClient.get<QuotePreviewResultDto>(
-        `/quotes/preview?destinationCountry=${encodeURIComponent(destination.name)}&weightKg=${value}&shipmentType=${type}`,
-      );
+      const result = await fetchQuotePreview(destination.name, value, type);
       setPreview(result);
       // Three outcomes now, not two. PENDING_PICKUP_REQUEST means no rate card covers this
       // route, so there is no price to compare — but the shipment still goes ahead and is priced
