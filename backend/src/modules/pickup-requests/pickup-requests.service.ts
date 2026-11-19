@@ -1599,7 +1599,12 @@ export class PickupRequestsService {
     // company's GSTIN is not filled in yet. Both calls are idempotent, so the admin screens
     // remain the retry path.
     try {
-      await this.invoicesService.generateForOrder(order.id, partnerId);
+      const invoice = await this.invoicesService.generateForOrder(
+        order.id,
+        partnerId,
+      );
+      // Generating alone never reached the customer; they only ever saw "invoice will follow".
+      if (!invoice.sentAt) await this.invoicesService.sendToWhatsApp(invoice.id);
     } catch (error) {
       this.logger.warn(
         `Order ${order.id} was created paid from pickup ${id} but could not be invoiced: ${
