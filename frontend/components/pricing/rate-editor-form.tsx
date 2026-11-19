@@ -133,7 +133,7 @@ export function RateEditorForm({
     return null;
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.SubmitEvent) {
     e.preventDefault();
     const validationError = validate();
     if (validationError) {

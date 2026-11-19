@@ -2,15 +2,14 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Tag, Upload } from "lucide-react";
+import { Download, Tag } from "lucide-react";
 import type { RateProviderDto } from "@nationwide/shared-types";
 import { apiClient, errorMessage } from "@/lib/api-client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import { EmptyState, ErrorState } from "@/components/ui/page-state";
 import { Skeleton } from "@/components/ui/skeleton";
-import { RateProviderDialog } from "@/components/pricing/rate-provider-dialog";
 import { ExportRateSheetButton } from "@/components/pricing/rate-sheet-actions";
 import { cn } from "@/lib/utils/cn";
 import { BackLink } from "@/components/ui/back-link";
@@ -40,13 +39,16 @@ export default function PricingProvidersPage() {
   return (
     <div className="space-y-4">
       <BackLink href="/admin/pricing/dashboard">Back to pricing</BackLink>
-      <h1 className="text-xl font-semibold text-foreground">Providers &amp; rates</h1>
+      <h1 className="text-xl font-semibold text-foreground">Providers and rates</h1>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">
           Pick a provider to manage its countries, weight categories, and rates.
         </p>
         <div className="flex flex-wrap items-center gap-2">
-          <RateProviderDialog onSaved={() => load()} trigger={<Button size="sm">New provider</Button>} />
+          {/* The full onboarding: carrier, fuel and PSS, countries, zones and prices, margins. */}
+          <Link href="/admin/pricing/providers/new" className={buttonVariants({ size: "sm" })}>
+            New provider
+          </Link>
         </div>
       </div>
 
@@ -97,7 +99,7 @@ export default function PricingProvidersPage() {
                     className={buttonVariants({ variant: "secondary", size: "sm" })}
                     aria-label={`Import a rate sheet for ${p.name}`}
                   >
-                    <Upload className="h-4 w-4" aria-hidden />
+                    <Download className="h-4 w-4" aria-hidden />
                     Import
                   </Link>
                 </div>

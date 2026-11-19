@@ -159,7 +159,7 @@ export default function PartnerDashboardHomePage() {
       {!isLoading && upcomingDates.length > 0 && (
         <div className="space-y-2">
           <h2 className="text-sm font-semibold text-foreground">Upcoming</h2>
-          <div className="glass divide-y divide-[color:var(--glass-edge)] rounded-2xl">
+          <div className="glass divide-y divide-(--glass-edge) rounded-2xl">
             {upcomingDates.map(([date, count]) => (
               <Link
                 key={date}

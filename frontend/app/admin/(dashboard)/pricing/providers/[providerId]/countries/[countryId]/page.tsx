@@ -89,7 +89,7 @@ export default function CountryDetailPage() {
   }, [detail]);
 
   return (
-    <div className="max-w-4xl space-y-6">
+    <div className="space-y-6">
       <Link
         href={`/admin/pricing/providers/${params.providerId}`}
         className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"

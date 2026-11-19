@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState, type SubmitEvent } from "react";
 import type {
   CountryDto,
   CustomerDto,
@@ -179,7 +179,7 @@ export function ShipmentDetailsForm({
     return Object.keys(next).length === 0;
   }
 
-  function handleSubmit(e: FormEvent) {
+  function handleSubmit(e: SubmitEvent) {
     e.preventDefault();
     // Contents are optional at the quote stage — a price enquiry does not need them — but a
     // half-filled row is a mistake, not an omission, so it is still checked.
@@ -416,7 +416,7 @@ export function ShipmentDetailsForm({
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-col gap-3 sm:flex-row">
-            <label className="flex flex-1 cursor-pointer items-start gap-3 rounded-md border border-border p-3 has-[:checked]:border-primary has-[:checked]:bg-primary/5">
+            <label className="flex flex-1 cursor-pointer items-start gap-3 rounded-md border border-border p-3 has-checked:border-primary has-checked:bg-primary/5">
               <input
                 type="radio"
                 name="fulfillment"
@@ -433,7 +433,7 @@ export function ShipmentDetailsForm({
                 </span>
               </span>
             </label>
-            <label className="flex flex-1 cursor-pointer items-start gap-3 rounded-md border border-border p-3 has-[:checked]:border-primary has-[:checked]:bg-primary/5">
+            <label className="flex flex-1 cursor-pointer items-start gap-3 rounded-md border border-border p-3 has-checked:border-primary has-checked:bg-primary/5">
               <input
                 type="radio"
                 name="fulfillment"

@@ -18,19 +18,19 @@ const HERO_PHOTOS = [
   {
     image: HERO_IMAGES.handover,
     label: "Pickup from your door",
-    className: "left-[max(2rem,calc(50%-36rem))] top-36 w-52 aspect-[4/5] -rotate-3",
+    className: "left-[max(2rem,calc(50%-36rem))] top-36 w-52 aspect-4/5 -rotate-3",
     delay: "560ms",
   },
   {
     image: HERO_IMAGES.air,
     label: "Flown to 240+ countries",
-    className: "right-[max(2rem,calc(50%-37rem))] top-32 w-60 aspect-[3/2] rotate-2",
+    className: "right-[max(2rem,calc(50%-37rem))] top-32 w-60 aspect-3/2 rotate-2",
     delay: "640ms",
   },
   {
     image: HERO_IMAGES.warehouse,
     label: "Packed and dispatched",
-    className: "right-[max(4rem,calc(50%-33rem))] top-[22rem] w-40 aspect-[2/3] -rotate-2",
+    className: "right-[max(4rem,calc(50%-33rem))] top-88 w-40 aspect-2/3 -rotate-2",
     delay: "720ms",
   },
 ] as const;
@@ -92,15 +92,15 @@ export function MarketingHero() {
       <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
         <motion.div
           style={{ y: auroraY }}
-          className="absolute -left-40 -top-40 h-[36rem] w-[36rem] rounded-full bg-zinc-300/45 blur-[130px] animate-aurora"
+          className="absolute -left-40 -top-40 h-144 w-xl rounded-full bg-zinc-300/45 blur-[130px] animate-aurora"
         />
         <motion.div
           style={{ y: auroraYSlow }}
-          className="absolute -right-32 top-1/4 h-[32rem] w-[32rem] rounded-full bg-zinc-400/35 blur-[130px] animate-aurora-slow"
+          className="absolute -right-32 top-1/4 h-128 w-lg rounded-full bg-zinc-400/35 blur-[130px] animate-aurora-slow"
         />
         <motion.div
           style={{ y: auroraY }}
-          className="absolute -bottom-48 left-1/3 h-[34rem] w-[34rem] rounded-full bg-zinc-200/60 blur-[140px] animate-aurora-slower"
+          className="absolute -bottom-48 left-1/3 h-136 w-136 rounded-full bg-zinc-200/60 blur-[140px] animate-aurora-slower"
         />
         <div className="absolute inset-0 bg-hero-grid" />
       </div>
@@ -120,14 +120,14 @@ export function MarketingHero() {
         style={{ scale: planetScale, y: planetY }}
         className="absolute inset-x-0 bottom-0 z-0 flex origin-bottom justify-center"
       >
-        <div className="aspect-square w-[110vw] max-w-[1200px] translate-y-[76%]">
+        <div className="aspect-square w-[110vw] max-w-300 translate-y-[76%]">
           <HeroGlobe className="h-full w-full" />
         </div>
       </motion.div>
 
       {/* Photo cards: decorative (the copy says the same thing), so hidden from assistive tech.
           Above the planet (z-0), below the copy (z-10). */}
-      <div aria-hidden className="pointer-events-none absolute inset-0 z-[5] hidden xl:block">
+      <div aria-hidden className="pointer-events-none absolute inset-0 z-5 hidden xl:block">
         {HERO_PHOTOS.map(({ image, label, className, delay }) => (
           <figure
             key={image.src}
@@ -180,7 +180,7 @@ export function MarketingHero() {
               <span className="mr-[0.25em] inline-block animate-rise-in [animation-delay:360ms]">
                 Delivered
               </span>
-              <span className="block animate-rise-in bg-gradient-to-r md:inline-block from-foreground via-zinc-600 to-zinc-400 bg-clip-text text-transparent [animation-delay:440ms]">
+              <span className="block animate-rise-in bg-linear-to-r md:inline-block from-foreground via-zinc-600 to-zinc-400 bg-clip-text text-transparent [animation-delay:440ms]">
                 <TypingText words={HEADLINE_WORDS} />
               </span>
             </span>
@@ -196,7 +196,7 @@ export function MarketingHero() {
               timeline inside it on the app's standard light tokens, and that has to stay
               readable whether it lands on white page or black planet. */}
           <div className="glass-panel w-full max-w-lg animate-slide-in-left overflow-hidden rounded-2xl bg-white/85 text-left backdrop-blur-2xl [animation-delay:520ms]">
-            <div className="flex items-center gap-3 border-b border-border/60 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent px-4 py-3">
+            <div className="flex items-center gap-3 border-b border-border/60 bg-linear-to-r from-primary/10 via-primary/5 to-transparent px-4 py-3">
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
                 <Radar className="h-4.5 w-4.5" aria-hidden />
               </span>

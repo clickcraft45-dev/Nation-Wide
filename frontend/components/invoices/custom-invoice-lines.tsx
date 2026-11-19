@@ -26,7 +26,7 @@ export interface CustomInvoiceLineForm {
   fsc: string;
 }
 
-export const emptyCustomInvoiceLine: CustomInvoiceLineForm = {
+const emptyCustomInvoiceLine: CustomInvoiceLineForm = {
   awbNumber: "",
   supplyDate: "",
   destination: "",
@@ -109,12 +109,12 @@ export function CustomInvoiceLines({
   return (
     <div className="space-y-3">
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[1000px] border-separate border-spacing-y-1 text-xs">
+        <table className="w-full min-w-250 border-separate border-spacing-y-1 text-xs">
           <thead>
             <tr className="text-left text-[11px] text-muted-foreground">
               <th className="w-8 px-1 font-medium">#</th>
               <th className="px-1 font-medium">AWB No.</th>
-              <th className="min-w-[150px] px-1 font-medium">Date</th>
+              <th className="min-w-37.5 px-1 font-medium">Date</th>
               <th className="px-1 font-medium">Destination</th>
               <th className="px-1 font-medium">Network</th>
               <th className="px-1 font-medium">D/S</th>

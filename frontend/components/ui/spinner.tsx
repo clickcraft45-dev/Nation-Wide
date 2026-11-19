@@ -1,5 +1,4 @@
 import { cn } from "@/lib/utils/cn";
-import { FullPageLoader } from "./prism-flux-loader";
 
 const SIZES = {
   sm: "h-4 w-4 nw-spinner-sm",
@@ -38,19 +37,3 @@ export function Spinner({
   );
 }
 
-/**
- * A centred wait for a whole page or panel. The label matters more than the animation: "Loading
- * your shipments" tells someone what is happening, where a bare spinner only says something is.
- */
-export function PageLoader({
-  label = "Loading…",
-  className,
-}: {
-  label?: string;
-  className?: string;
-}) {
-  // Delegates to the same treatment app/loading.tsx shows for route transitions, so a wait
-  // inside a client page and a wait between pages look like the same product. The small inline
-  // Spinner above stays as it is — a rotating cube does not belong inside a button.
-  return <FullPageLoader label={label} className={cn("flex-col gap-3", className)} />;
-}

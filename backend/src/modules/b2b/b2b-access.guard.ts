@@ -8,7 +8,7 @@ import type { Request } from 'express';
 import { B2bLinksService } from './b2b-links.service';
 import { B2bAccountsService } from './b2b-accounts.service';
 
-export const B2B_TOKEN_HEADER = 'x-b2b-token';
+const B2B_TOKEN_HEADER = 'x-b2b-token';
 
 /** What the caller resolved to, attached to the request for the controller to read. */
 export interface B2bSession {

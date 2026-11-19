@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CalendarClock, CheckCircle2, Clock, MapPin, Plus } from "lucide-react";
+import { CalendarClock, CheckCircle2, Clock, LogOut, MapPin, Plus } from "lucide-react";
 import type {
   B2bCreateOrdersDto,
   B2bOrderResultDto,
@@ -83,8 +83,11 @@ interface PickupForm {
  * business account (ordinary session, see app/b2b/page.tsx) or a standing link handed to a
  * despatch desk (the token is the credential, see app/b2b/[token]/page.tsx). Either way the server
  * resolves which business this is — nothing here names a customer.
+ *
+ * `onSignOut` only for the signed-in account: a standing link has no session to end.
  */
-export function B2bPortal({ client }: { client: B2bClient }) {
+export function B2bPortal({ client, onSignOut }: { client: B2bClient; onSignOut?: () => Promise<void> }) {
+  const [isSigningOut, setIsSigningOut] = useState(false);
 
   const [session, setSession] = useState<B2bSessionDto | null>(null);
   const [countries, setCountries] = useState<CountryDto[]>([]);
@@ -209,7 +212,7 @@ export function B2bPortal({ client }: { client: B2bClient }) {
     );
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.SubmitEvent) {
     e.preventDefault();
     setSubmitError(null);
     if (!validate()) {
@@ -302,6 +305,25 @@ export function B2bPortal({ client }: { client: B2bClient }) {
           >
             {session.customerName.trim().charAt(0).toUpperCase()}
           </span>
+          {onSignOut && (
+            <Button
+              variant="secondary"
+              size="sm"
+              className="min-h-11 sm:min-h-9"
+              isLoading={isSigningOut}
+              onClick={async () => {
+                setIsSigningOut(true);
+                try {
+                  await onSignOut();
+                } finally {
+                  setIsSigningOut(false);
+                }
+              }}
+            >
+              <LogOut className="h-4 w-4" aria-hidden />
+              Sign out
+            </Button>
+          )}
         </div>
       </header>
 
@@ -386,7 +408,7 @@ export function B2bPortal({ client }: { client: B2bClient }) {
             </div>
 
             <Card>
-              <CardHeader className="flex-row items-center justify-between gap-3 border-b border-[color:var(--glass-edge)] pb-4">
+              <CardHeader className="flex-row items-center justify-between gap-3 border-b border-(--glass-edge) pb-4">
                 <div className="flex items-center gap-3">
                   <span className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-foreground">
                     <MapPin className="h-4 w-4" aria-hidden />

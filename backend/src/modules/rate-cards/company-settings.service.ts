@@ -271,5 +271,3 @@ export class CompanySettingsService {
     });
   }
 }
-
-export { LOGO_PREFIX };

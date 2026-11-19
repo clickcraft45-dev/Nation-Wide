@@ -27,7 +27,7 @@ export function EditCustomerDialog({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { showToast } = useToast();
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.SubmitEvent) {
     e.preventDefault();
     if (!name.trim()) {
       setError("Name is required.");

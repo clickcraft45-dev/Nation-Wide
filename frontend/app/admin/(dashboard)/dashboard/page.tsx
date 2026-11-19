@@ -1,38 +1,47 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
-  Package,
-  Truck,
-  CheckCircle2,
-  Clock,
-  CreditCard,
-  CalendarClock,
-  Users,
-  FileQuestion,
   AlertTriangle,
   ArrowRight,
+  CheckCircle2,
+  ChevronRight,
+  Clock,
+  CreditCard,
+  FileQuestion,
+  IndianRupee,
+  Package,
+  Percent,
+  RefreshCw,
+  Truck,
+  UserX,
 } from "lucide-react";
 import type {
-  OrderDto,
+  AnalyticsDto,
   DashboardSummaryDto,
+  OrderDto,
   PickupRequestDto,
 } from "@nationwide/shared-types";
 import { apiClient, errorMessage } from "@/lib/api-client";
 import { formatDateTime } from "@/lib/utils/format-date-time";
 import { useAuth } from "@/state/auth-context";
 import { KpiCard } from "@/components/dashboard/kpi-card";
-import { QuickActions } from "@/components/dashboard/quick-actions";
-import { TrendAreaChart, type TrendPoint } from "@/components/ui/trend-area-chart";
+import { TrendAreaChart } from "@/components/ui/trend-area-chart";
 import { ShipmentStatusDonut, type ShipmentStatusSlice } from "@/components/dashboard/shipment-status-donut";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Calendar, addDaysIso, formatIsoLong, fromIso, todayIso } from "@/components/ui/calendar";
+import { Calendar, addDaysIso, formatIsoLong, todayIso } from "@/components/ui/calendar";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { OrderStatusBadge } from "@/components/ui/status-badge";
 import { EmptyState, ErrorState } from "@/components/ui/page-state";
 import { Skeleton } from "@/components/ui/skeleton";
-import { DateField } from "@/components/ui/date-field";
+import {
+  DateRangeControl,
+  inr,
+  lastDays,
+  percentChange,
+  periodLabel,
+} from "@/components/analytics/date-range-control";
 import { cn } from "@/lib/utils/cn";
 
 function displayName(email: string): string {
@@ -41,470 +50,395 @@ function displayName(email: string): string {
   return firstSegment.charAt(0).toUpperCase() + firstSegment.slice(1);
 }
 
-const IN_TRANSIT_STATUSES = new Set(["PICKED_UP", "IN_TRANSIT", "OUT_FOR_DELIVERY"]);
-// Pickups still on the board — cancelled/rejected/completed ones aren't workload any more.
-const NON_TERMINAL_PICKUP = new Set([
+const IN_TRANSIT = new Set(["PICKED_UP", "IN_TRANSIT", "OUT_FOR_DELIVERY"]);
+// Pickups still on the board; cancelled, rejected and completed ones aren't workload any more.
+const OPEN_PICKUP = new Set([
   "PENDING_ASSIGNMENT",
   "ASSIGNED",
   "SCHEDULED",
   "OUT_FOR_PICKUP",
   "VERIFICATION_PENDING",
 ]);
-const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const PRESETS = [lastDays(7), lastDays(30), lastDays(90)];
+// The board is watched, not just opened: it refreshes itself while the tab is in front.
+const REFRESH_MS = 60_000;
 
-// Shortcuts that just write into the from/to pair below — the two dates are the single source
-// of truth for the whole page, not a second filtering mode running alongside the presets.
-const RANGE_PRESETS = [
-  { days: 90, label: "3 months" },
-  { days: 30, label: "30 days" },
-  { days: 7, label: "7 days" },
-] as const;
-
-/** Whole days covered by an inclusive from..to pair, floored at 1. */
-function daysBetween(from: string, to: string): number {
-  const ms = fromIso(to).getTime() - fromIso(from).getTime();
-  return Math.max(1, Math.round(ms / 86_400_000) + 1);
+interface Board {
+  analytics: AnalyticsDto;
+  summary: DashboardSummaryDto;
+  pickups: PickupRequestDto[];
+  recent: OrderDto[];
 }
 
-const TREND_SERIES = [
-  { key: "orders", label: "In progress" },
-  { key: "delivered", label: "Delivered" },
-];
-
+/**
+ * The day-to-day operations board: what came in, what is moving, and what is waiting on someone.
+ * Deeper analysis (carriers, destinations, payment mix, CSV) lives in Reports; money against
+ * spend lives in the Command Centre.
+ */
 export default function AdminDashboardHomePage() {
   const { user } = useAuth();
-  const [orders, setOrders] = useState<OrderDto[] | null>(null);
-  const [summary, setSummary] = useState<DashboardSummaryDto | null>(null);
-  const [pickupRequests, setPickupRequests] = useState<PickupRequestDto[]>([]);
-  const [scheduleDay, setScheduleDay] = useState(todayIso);
-  // The page-wide reporting window. Everything derived from orders below — KPIs, their deltas,
-  // the trend chart and the recent-orders table — reads these two dates and nothing else.
+  const [from, setFrom] = useState(() => addDaysIso(todayIso(), -29));
   const [to, setTo] = useState(todayIso);
-  const [from, setFrom] = useState(() => addDaysIso(todayIso(), -89));
+  const [scheduleDay, setScheduleDay] = useState(todayIso);
+  const [board, setBoard] = useState<Board | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
 
-  // The reporting window is a SERVER-side filter now, so this re-runs when the range changes
-  // rather than downloading every order once and slicing it in the browser. That old shape was
-  // not just slow: the unpaginated /orders response is capped at 1000 rows server-side, so any
-  // account past that quietly lost the older part of its own window and under-reported every
-  // KPI, the revenue total and the trend chart.
-  //
-  // It fetches one extra window's worth before `from`, because the delta badges compare the
-  // selected window against the equal-length one immediately preceding it (see trendDelta).
-  const fetchFrom = addDaysIso(from, -daysBetween(from, to));
-
-  useEffect(() => {
-    let cancelled = false;
-    // Fetching is a one-shot lookup keyed on the range, not a subscription to external state.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setIsLoading(true);
-    setError(null);
-
-    const range = `?createdFrom=${fetchFrom}&createdTo=${to}`;
-
-    Promise.all([
-      apiClient.get<OrderDto[]>(`/orders${range}`),
-      apiClient.get<DashboardSummaryDto>("/admin/dashboard-summary"),
-      apiClient.get<PickupRequestDto[]>("/admin/pickup-requests"),
-    ])
-      .then(([ordersRes, summaryRes, pickupsRes]) => {
-        if (cancelled) return;
-        setOrders(ordersRes);
-        setSummary(summaryRes);
-        setPickupRequests(pickupsRes);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setError(
-          errorMessage(err, "Failed to load dashboard data."),
-        );
-      })
-      .finally(() => {
-        if (!cancelled) setIsLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [fetchFrom, to]);
-
-  const rangeDays = daysBetween(from, to);
-
-  // Every KPI, delta and table below counts only what was placed inside the selected window.
-  // Filtering here rather than at each call site is what keeps the tiles and the chart agreeing
-  // with each other — they were previously all-time while the chart was windowed.
-  const rangeOrders = useMemo(
-    () => (orders ?? []).filter((o) => o.createdAt.slice(0, 10) >= from && o.createdAt.slice(0, 10) <= to),
-    [orders, from, to],
+  const load = useCallback(
+    async (quiet: boolean) => {
+      if (!quiet) setIsLoading(true);
+      try {
+        const [analytics, summary, pickups, recent] = await Promise.all([
+          apiClient.get<AnalyticsDto>(`/admin/analytics?from=${from}&to=${to}`),
+          apiClient.get<DashboardSummaryDto>("/admin/dashboard-summary"),
+          apiClient.get<PickupRequestDto[]>("/admin/pickup-requests"),
+          apiClient.get<OrderDto[]>("/orders?page=1&pageSize=6"),
+        ]);
+        setBoard({ analytics, summary, pickups, recent });
+        setError(null);
+        setUpdatedAt(new Date());
+      } catch (err) {
+        // A failed background refresh keeps the last good board on screen rather than blanking it.
+        if (!quiet) setError(errorMessage(err, "Failed to load dashboard data."));
+      } finally {
+        if (!quiet) setIsLoading(false);
+      }
+    },
+    [from, to],
   );
 
-  const primaryStatus = (order: OrderDto) => order.shipments[0]?.currentStatus ?? null;
-  const ordersInTransit = rangeOrders.filter((o) =>
-    IN_TRANSIT_STATUSES.has(primaryStatus(o) ?? ""),
-  ).length;
-  const ordersDelivered = rangeOrders.filter((o) => primaryStatus(o) === "DELIVERED").length;
-  const totalShipments = rangeOrders.reduce((sum, o) => sum + o.shipments.length, 0);
-  const totalRevenue = rangeOrders
-    .filter((o) => o.paymentStatus === "PAID")
-    .reduce((sum, o) => sum + (o.paidAmount ?? 0), 0);
+  useEffect(() => {
+    // A fetch keyed on the range, not a subscription to external state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void load(false);
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") void load(true);
+    }, REFRESH_MS);
+    return () => window.clearInterval(timer);
+  }, [load]);
 
-  // Two stacked series per day: what is still moving, and what already landed. "Delivered" is
-  // counted against the day the order was PLACED, not the day it arrived — the API carries no
-  // delivery timestamp, and dating both series the same way is what lets them stack honestly.
-  const ordersTrend: TrendPoint[] = useMemo(() => {
-    const placed = new Map<string, number>();
-    const delivered = new Map<string, number>();
-    for (const o of rangeOrders) {
-      const key = o.createdAt.slice(0, 10);
-      placed.set(key, (placed.get(key) ?? 0) + 1);
-      if (o.shipments[0]?.currentStatus === "DELIVERED") {
-        delivered.set(key, (delivered.get(key) ?? 0) + 1);
-      }
-    }
+  const a = board?.analytics;
+  const cur = a?.current;
+  const prev = a?.previous;
 
-    const points: TrendPoint[] = [];
-    for (let i = 0; i < rangeDays; i++) {
-      const key = addDaysIso(from, i);
-      const d = fromIso(key);
-      const deliveredCount = delivered.get(key) ?? 0;
-      points.push({
-        label:
-          rangeDays <= 7
-            ? WEEKDAY_LABELS[d.getDay()]
-            : d.toLocaleDateString("en-IN", { day: "numeric", month: "short" }),
-        orders: Math.max(0, (placed.get(key) ?? 0) - deliveredCount),
-        delivered: deliveredCount,
-      });
-    }
-    return points;
-  }, [rangeOrders, from, rangeDays]);
+  const trend = useMemo(
+    () =>
+      (a?.series ?? []).map((p) => ({
+        label: periodLabel(p.start, a!.bucket),
+        orders: p.orders - p.delivered,
+        delivered: p.delivered,
+      })),
+    [a],
+  );
 
-  // The selected window against the one immediately before it — the KPI tiles' delta badges.
-  const trendDelta = useMemo(() => {
-    // The window of equal length ending the day before `from`.
-    const previousTo = addDaysIso(from, -1);
-    const previousFrom = addDaysIso(from, -rangeDays);
-
-    const inWindow = (start: string, end: string) =>
-      (orders ?? []).filter(
-        (o) => o.createdAt.slice(0, 10) >= start && o.createdAt.slice(0, 10) <= end,
-      );
-
-    const current = rangeOrders;
-    const previous = inWindow(previousFrom, previousTo);
-    // No previous activity means no percentage exists — a bare "+100%" off zero is noise.
-    const percent = (now: number, before: number) =>
-      before === 0 ? null : Math.round(((now - before) / before) * 1000) / 10;
-    const revenueOf = (rows: OrderDto[]) =>
-      rows.filter((o) => o.paymentStatus === "PAID").reduce((sum, o) => sum + (o.paidAmount ?? 0), 0);
-
-    return {
-      orders: percent(current.length, previous.length),
-      revenue: percent(revenueOf(current), revenueOf(previous)),
-      shipments: percent(
-        current.reduce((sum, o) => sum + o.shipments.length, 0),
-        previous.reduce((sum, o) => sum + o.shipments.length, 0),
-      ),
-    };
-  }, [orders, rangeOrders, from, rangeDays]);
-
-  const shipmentStatusSlices: ShipmentStatusSlice[] = useMemo(() => {
-    let delivered = 0;
-    let inTransit = 0;
-    let exception = 0;
-    let pending = 0;
-    for (const o of rangeOrders) {
-      for (const s of o.shipments) {
-        if (s.currentStatus === "DELIVERED") delivered++;
-        else if (IN_TRANSIT_STATUSES.has(s.currentStatus ?? "")) inTransit++;
-        else if (s.currentStatus === "EXCEPTION") exception++;
-        else pending++;
-      }
-    }
-    // Ordered so the two brand status colors that sit too close for full CVD separation
-    // (Warning/Danger) are opposite each other on the ring, never touching — see the
-    // component's own comment for the underlying check.
+  const slices: ShipmentStatusSlice[] = useMemo(() => {
+    const sum = (match: (code: string) => boolean) =>
+      (a?.shipmentStatus ?? []).filter((r) => match(r.label)).reduce((n, r) => n + r.count, 0);
+    const delivered = sum((c) => c === "DELIVERED");
+    const inTransit = sum((c) => IN_TRANSIT.has(c));
+    const exception = sum((c) => c === "EXCEPTION");
+    const pending = sum((c) => c !== "DELIVERED" && c !== "EXCEPTION" && !IN_TRANSIT.has(c));
+    // Warning and danger sit opposite each other on the ring; see the donut's own note.
     return [
       { key: "delivered", label: "Delivered", value: delivered, colorVar: "--color-success", icon: CheckCircle2 },
       { key: "pending", label: "Pending", value: pending, colorVar: "--color-warning", icon: Clock },
-      { key: "in-transit", label: "In Transit", value: inTransit, colorVar: "--color-info", icon: Truck },
+      { key: "in-transit", label: "In transit", value: inTransit, colorVar: "--color-info", icon: Truck },
       { key: "exception", label: "Exception", value: exception, colorVar: "--color-danger", icon: AlertTriangle },
     ];
-  }, [rangeOrders]);
+  }, [a]);
+  const exceptions = slices.find((s) => s.key === "exception")?.value ?? 0;
 
-  const recentOrders = useMemo(
-    () => [...rangeOrders].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 6),
-    [rangeOrders],
-  );
-
-  // Pickup load per calendar day — the dots under each date, so dispatch can see a pile-up
-  // before it happens rather than after.
+  const pickups = useMemo(() => board?.pickups ?? [], [board]);
   const pickupsByDay = useMemo(() => {
     const counts: Record<string, number> = {};
-    for (const p of pickupRequests) {
-      if (p.pickupDate && NON_TERMINAL_PICKUP.has(p.status)) {
-        counts[p.pickupDate] = (counts[p.pickupDate] ?? 0) + 1;
-      }
+    for (const p of pickups) {
+      if (p.pickupDate && OPEN_PICKUP.has(p.status)) counts[p.pickupDate] = (counts[p.pickupDate] ?? 0) + 1;
     }
     return counts;
-  }, [pickupRequests]);
-
-  const dayPickups = useMemo(
-    () => pickupRequests.filter((p) => p.pickupDate === scheduleDay),
-    [pickupRequests, scheduleDay],
-  );
+  }, [pickups]);
+  const unassigned = pickups.filter((p) => p.status === "PENDING_ASSIGNMENT").length;
+  const dayPickups = pickups.filter((p) => p.pickupDate === scheduleDay && OPEN_PICKUP.has(p.status));
   const dayUnassigned = dayPickups.filter((p) => p.status === "PENDING_ASSIGNMENT").length;
-  const dayValue = dayPickups.reduce((sum, p) => sum + p.estimatedPrice, 0);
 
-  if (error) {
-    return <ErrorState message={error} onRetry={() => window.location.reload()} />;
-  }
+  if (error) return <ErrorState message={error} onRetry={() => void load(false)} />;
+
+  const liveOrders = cur ? cur.orders - cur.cancelled : 0;
+  const conversion = cur && cur.quotes > 0 ? Math.round((cur.convertedQuotes / cur.quotes) * 100) : null;
+  const previousConversion = prev && prev.quotes > 0 ? (prev.convertedQuotes / prev.quotes) * 100 : null;
 
   return (
-    <div className="space-y-8">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+    <div className="space-y-6">
+      <div className="space-y-4">
         <div>
           <h1 className="text-2xl font-semibold text-foreground">
             Welcome back, {user ? displayName(user.email) : "there"}.
           </h1>
-          <p className="text-sm text-muted-foreground">Here&apos;s what&apos;s happening today.</p>
+          <p className="flex items-center gap-2 text-sm text-muted-foreground">
+            {formatIsoLong(from)} to {formatIsoLong(to)}
+            {updatedAt && (
+              <button
+                type="button"
+                onClick={() => void load(true)}
+                className="inline-flex min-h-8 items-center gap-1 rounded-md px-1.5 text-xs hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                title="Refreshes every minute"
+              >
+                <RefreshCw className="h-3 w-3" aria-hidden />
+                Updated {updatedAt.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+              </button>
+            )}
+          </p>
         </div>
-
-        {/* The app's own calendar, not the browser's. The native control paints a system-styled
-            dialog that ignores the theme entirely, and it looked like a different application
-            every time it opened. */}
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="flex w-40 flex-col gap-1 text-xs font-medium text-muted-foreground">
-            From
-            <DateField
-              title="Report from"
-              value={from}
-              max={to}
-              onChange={(iso) => iso && setFrom(iso)}
-            />
-          </div>
-          <div className="flex w-40 flex-col gap-1 text-xs font-medium text-muted-foreground">
-            To
-            <DateField
-              title="Report to"
-              value={to}
-              min={from}
-              max={todayIso()}
-              onChange={(iso) => iso && setTo(iso)}
-            />
-          </div>
-          <div className="flex rounded-lg border border-border p-0.5">
-            {RANGE_PRESETS.map((preset) => {
-              const presetFrom = addDaysIso(todayIso(), -(preset.days - 1));
-              const isActive = from === presetFrom && to === todayIso();
-              return (
-                <button
-                  key={preset.days}
-                  type="button"
-                  onClick={() => {
-                    setFrom(presetFrom);
-                    setTo(todayIso());
-                  }}
-                  aria-pressed={isActive}
-                  className={cn(
-                    "rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors",
-                    isActive ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  {preset.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
+        <DateRangeControl
+          from={from}
+          to={to}
+          presets={PRESETS}
+          onChange={(f, t) => {
+            setFrom(f);
+            setTo(t);
+          }}
+        />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard
-          title="Total Orders"
-          value={rangeOrders.length}
+          title="Orders placed"
+          value={cur?.orders ?? 0}
           icon={Package}
           href="/admin/orders"
           isLoading={isLoading}
-          deltaPercent={trendDelta.orders}
+          deltaPercent={cur && prev ? percentChange(cur.orders, prev.orders) : null}
           deltaLabel="versus the previous period"
+          hint={cur?.cancelled ? `${cur.cancelled} cancelled` : undefined}
         />
         <KpiCard
-          title="Total Shipments"
-          value={totalShipments}
-          icon={Truck}
+          title="Revenue collected"
+          value={inr(cur?.revenue ?? 0)}
+          icon={IndianRupee}
+          href="/admin/payments"
+          isLoading={isLoading}
+          deltaPercent={cur && prev ? percentChange(cur.revenue, prev.revenue) : null}
+          deltaLabel="versus the previous period"
+          hint={cur ? `${cur.paidOrders} paid order${cur.paidOrders === 1 ? "" : "s"}` : undefined}
+        />
+        <KpiCard
+          title="Delivered"
+          value={cur?.delivered ?? 0}
+          icon={CheckCircle2}
           href="/admin/shipments"
           isLoading={isLoading}
-          deltaPercent={trendDelta.shipments}
+          hint={liveOrders > 0 ? `${Math.round(((cur?.delivered ?? 0) / liveOrders) * 100)}% of live orders` : undefined}
+        />
+        <KpiCard
+          title="Quote conversion"
+          value={conversion === null ? "No quotes" : `${conversion}%`}
+          icon={Percent}
+          href="/admin/quotes"
+          isLoading={isLoading}
+          deltaPercent={
+            conversion !== null && previousConversion ? percentChange(conversion, previousConversion) : null
+          }
           deltaLabel="versus the previous period"
-        />
-        <KpiCard
-          title="Total Revenue"
-          value={`₹${Math.round(totalRevenue).toLocaleString("en-IN")}`}
-          icon={CreditCard}
-          href="/admin/payments"
-          isLoading={isLoading}
-          deltaPercent={trendDelta.revenue}
-          deltaLabel="versus the previous period"
-        />
-        <KpiCard
-          title="Scheduled Pickups"
-          value={summary?.scheduledPickups ?? 0}
-          icon={Clock}
-          href="/admin/pickup-requests"
-          isLoading={isLoading}
-        />
-        <KpiCard
-          title="Pending Payments"
-          value={summary?.pendingPayments ?? 0}
-          icon={CreditCard}
-          href="/admin/payments"
-          isLoading={isLoading}
+          hint={cur && cur.quotes > 0 ? `${cur.convertedQuotes} of ${cur.quotes} quotes booked` : undefined}
         />
       </div>
 
-      <div>
-        <h2 className="mb-3 text-sm font-semibold text-foreground">Quick actions</h2>
-        <QuickActions />
+      <Card>
+        <CardHeader className="flex-row items-baseline justify-between">
+          <CardTitle>Needs attention</CardTitle>
+          <p className="text-xs text-muted-foreground">Live, whatever the date range</p>
+        </CardHeader>
+        <CardContent>
+          {isLoading || !board ? (
+            <Skeleton className="h-14 w-full" />
+          ) : (
+            <div className="grid gap-1 sm:grid-cols-2 xl:grid-cols-4">
+                <AttentionRow
+                  icon={FileQuestion}
+                  label="Quotes awaiting a price"
+                  count={board.summary.newQuotes}
+                  hint={board.summary.needsManualReview ? `${board.summary.needsManualReview} need manual review` : undefined}
+                  href="/admin/quotes"
+                />
+                <AttentionRow
+                  icon={UserX}
+                  label="Pickups without a partner"
+                  count={unassigned}
+                  href="/admin/pickup-requests"
+                />
+                <AttentionRow
+                  icon={CreditCard}
+                  label="Orders awaiting payment"
+                  count={board.summary.pendingPayments}
+                  href="/admin/payments"
+                />
+                <AttentionRow
+                  icon={AlertTriangle}
+                  label="Shipment exceptions"
+                  count={exceptions}
+                  hint="In this date range"
+                  href="/admin/shipments"
+                />
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle>Orders</CardTitle>
+            <p className="text-xs text-muted-foreground">Placed per {a?.bucket ?? "day"}, split by whether they have been delivered</p>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <Skeleton className="h-64 w-full" />
+            ) : (cur?.orders ?? 0) === 0 ? (
+              <p className="flex h-64 items-center justify-center text-sm text-muted-foreground">
+                No orders placed in this range.
+              </p>
+            ) : (
+              <TrendAreaChart
+                data={trend}
+                series={[
+                  { key: "orders", label: "In progress" },
+                  { key: "delivered", label: "Delivered" },
+                ]}
+                caption={`Orders in progress and delivered, per ${a?.bucket ?? "day"}`}
+              />
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Shipment status</CardTitle>
+            <p className="text-xs text-muted-foreground">Shipments on orders placed in this range</p>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? <Skeleton className="h-32 w-full" /> : <ShipmentStatusDonut slices={slices} />}
+          </CardContent>
+        </Card>
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="space-y-6 lg:col-span-2">
-          <Card>
-            <CardHeader>
-              <div>
-                <CardTitle>Orders Overview</CardTitle>
-                <p className="text-2xl font-semibold text-foreground">
-                  {ordersTrend.reduce((sum, p) => sum + Number(p.orders) + Number(p.delivered), 0)}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Orders placed, {formatIsoLong(from)} to {formatIsoLong(to)}
-                </p>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {isLoading ? (
-                <Skeleton className="h-64 w-full" />
-              ) : (
-                <TrendAreaChart
-                  data={ordersTrend}
-                  series={TREND_SERIES}
-                  caption="Orders in progress and delivered, per day"
-                />
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Recent Orders</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {isLoading ? (
-                <Skeleton className="h-48 w-full" />
-              ) : recentOrders.length === 0 ? (
-                <EmptyState icon={<Package className="h-8 w-8" aria-hidden />} title="No orders yet" />
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Order ID</TableHead>
-                      <TableHead>Customer</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Created</TableHead>
-                      <TableHead>Amount</TableHead>
+        <Card className="lg:col-span-2">
+          <CardHeader className="flex-row items-center justify-between">
+            <CardTitle>Latest orders</CardTitle>
+            <Link
+              href="/admin/orders"
+              className="inline-flex min-h-9 items-center gap-1 rounded-md text-xs font-medium text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              All orders <ArrowRight className="h-3 w-3" aria-hidden />
+            </Link>
+          </CardHeader>
+          <CardContent>
+            {isLoading || !board ? (
+              <Skeleton className="h-48 w-full" />
+            ) : board.recent.length === 0 ? (
+              <EmptyState icon={<Package className="h-8 w-8" aria-hidden />} title="No orders yet" />
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Order ID</TableHead>
+                    <TableHead>Customer</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Placed</TableHead>
+                    <TableHead className="text-right">Paid</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {board.recent.map((order) => (
+                    <TableRow key={order.id} href={`/admin/orders/${order.id}`}>
+                      <TableCell className="font-mono text-xs">{order.id.slice(0, 8)}</TableCell>
+                      <TableCell>{order.customerName ?? "Not recorded"}</TableCell>
+                      <TableCell>
+                        <OrderStatusBadge status={order.status} />
+                      </TableCell>
+                      <TableCell>{formatDateTime(order.createdAt)}</TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {order.paidAmount !== null ? inr(order.paidAmount) : "Unpaid"}
+                      </TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {recentOrders.map((order) => (
-                      <TableRow key={order.id} href={`/admin/orders/${order.id}`}>
-                        <TableCell className="font-mono text-xs">{order.id.slice(0, 8)}</TableCell>
-                        <TableCell>{order.customerName ?? "—"}</TableCell>
-                        <TableCell>
-                          <OrderStatusBadge status={order.status} />
-                        </TableCell>
-                        <TableCell>{formatDateTime(order.createdAt)}</TableCell>
-                        <TableCell>
-                          {order.paidAmount !== null ? `₹${Math.round(order.paidAmount).toLocaleString("en-IN")}` : "—"}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
 
-        <div className="space-y-6">
-          {isLoading ? (
-            <Skeleton className="h-104 w-full rounded-2xl" />
-          ) : (
-            <Calendar
-              title="Pickup Schedule"
-              subtitle="Dots show pickups booked that day"
-              markers={pickupsByDay}
-              markerLabel="pickups booked"
-              selected={scheduleDay}
-              onSelect={setScheduleDay}
-              className="max-w-none"
-              footer={
-                <div className="space-y-2">
-                  <p className="text-sm font-medium text-foreground">{formatIsoLong(scheduleDay)}</p>
-                  {dayPickups.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">No pickups booked for this day.</p>
-                  ) : (
-                    <>
-                      <p className="text-xs text-muted-foreground">
-                        {dayPickups.length} pickup{dayPickups.length === 1 ? "" : "s"} ·{" "}
-                        {dayUnassigned} awaiting a partner · ₹
-                        {Math.round(dayValue).toLocaleString("en-IN")} booked value
-                      </p>
-                      <Link
-                        href="/admin/pickup-requests"
-                        className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
-                      >
-                        Open pickup requests <ArrowRight className="h-3 w-3" aria-hidden />
-                      </Link>
-                    </>
-                  )}
-                </div>
-              }
-            />
-          )}
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Shipment Status</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {isLoading ? <Skeleton className="h-32 w-full" /> : <ShipmentStatusDonut slices={shipmentStatusSlices} />}
-            </CardContent>
-          </Card>
-
-          <div className="grid grid-cols-2 gap-3">
-            <KpiCard title="Orders Delivered" value={ordersDelivered} icon={CheckCircle2} href="/admin/orders?status=delivered" isLoading={isLoading} />
-            <KpiCard title="Orders In Transit" value={ordersInTransit} icon={Truck} href="/admin/orders?status=in-transit" isLoading={isLoading} />
-            <KpiCard title="Total Customers" value={summary?.totalCustomers ?? 0} icon={Users} href="/admin/customers" isLoading={isLoading} />
-            <KpiCard
-              title="Warehouse Drop-offs"
-              value={summary?.dropOffs ?? 0}
-              icon={CalendarClock}
-              href="/admin/pickup-requests"
-              isLoading={isLoading}
-            />
-            <KpiCard
-              title="Quote Requests"
-              value={summary?.newQuotes ?? 0}
-              icon={FileQuestion}
-              href="/admin/quotes"
-              hint={summary?.needsManualReview ? `${summary.needsManualReview} need review` : undefined}
-              isLoading={isLoading}
-            />
-          </div>
-        </div>
+        {isLoading ? (
+          <Skeleton className="h-104 w-full rounded-2xl" />
+        ) : (
+          <Calendar
+            title="Pickup schedule"
+            subtitle="Dots show open pickups booked for that day"
+            markers={pickupsByDay}
+            markerLabel="pickups booked"
+            selected={scheduleDay}
+            onSelect={setScheduleDay}
+            className="max-w-none"
+            footer={
+              <div className="space-y-2">
+                <p className="text-sm font-medium text-foreground">{formatIsoLong(scheduleDay)}</p>
+                {dayPickups.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">No open pickups booked for this day.</p>
+                ) : (
+                  <>
+                    <p className="text-xs text-muted-foreground">
+                      {dayPickups.length} pickup{dayPickups.length === 1 ? "" : "s"} · {dayUnassigned} without a partner ·{" "}
+                      {inr(dayPickups.reduce((sum, p) => sum + p.estimatedPrice, 0))} booked value
+                    </p>
+                    <Link
+                      href="/admin/pickup-requests"
+                      className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                    >
+                      Open pickup requests <ArrowRight className="h-3 w-3" aria-hidden />
+                    </Link>
+                  </>
+                )}
+              </div>
+            }
+          />
+        )}
       </div>
     </div>
+  );
+}
+
+function AttentionRow({
+  icon: Icon,
+  label,
+  count,
+  hint,
+  href,
+}: {
+  icon: typeof Package;
+  label: string;
+  count: number;
+  hint?: string;
+  href: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className="flex min-h-14 items-center gap-3 rounded-lg px-2 py-2 text-sm transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <Icon className={cn("h-4 w-4 shrink-0", count > 0 ? "text-foreground" : "text-muted-foreground")} aria-hidden />
+      <span className="min-w-0 flex-1">
+        <span className="block text-foreground">{label}</span>
+        {hint && <span className="block truncate text-xs text-muted-foreground">{hint}</span>}
+      </span>
+      <span
+        className={cn(
+          "shrink-0 tabular-nums",
+          count > 0 ? "text-lg font-semibold text-foreground" : "text-xs text-muted-foreground",
+        )}
+      >
+        {count > 0 ? count : "None"}
+      </span>
+      <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+    </Link>
   );
 }

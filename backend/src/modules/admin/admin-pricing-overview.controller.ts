@@ -7,6 +7,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { PricingOverviewService } from '../pricing/pricing-overview.service';
+import { PricingSearchQueryDto } from './dto/pricing-search-query.dto';
 
 // ADMIN only — matches the rest of the pricing admin surface (AdminRateProvidersController etc.).
 @Controller('admin/pricing')
@@ -23,7 +24,9 @@ export class AdminPricingOverviewController {
   }
 
   @Get('search')
-  search(@Query('q') q: string): Promise<PricingSearchResultDto[]> {
-    return this.pricingOverviewService.search(q ?? '');
+  search(
+    @Query() query: PricingSearchQueryDto,
+  ): Promise<PricingSearchResultDto[]> {
+    return this.pricingOverviewService.search(query.q ?? '');
   }
 }

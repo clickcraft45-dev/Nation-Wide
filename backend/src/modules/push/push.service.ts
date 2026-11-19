@@ -4,7 +4,7 @@ import * as webpush from 'web-push';
 import { PrismaService } from '../../database/prisma.service';
 
 /** What the service worker (frontend/public/sw.js) receives and shows. */
-export interface PushPayload {
+interface PushPayload {
   title: string;
   body: string;
   /** Opened when the notification is tapped. Same-origin path, e.g. "/orders". */

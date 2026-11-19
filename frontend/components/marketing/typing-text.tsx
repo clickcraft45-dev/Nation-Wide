@@ -45,7 +45,7 @@ export function TypingText({ words, className }: { words: string[]; className?: 
       <span aria-hidden>{word.slice(0, state.len)}</span>
       <span
         aria-hidden
-        className="ml-1 inline-block h-[0.8em] w-[3px] translate-y-[0.05em] animate-pulse rounded-full bg-current align-middle motion-reduce:hidden"
+        className="ml-1 inline-block h-[0.8em] w-0.75 translate-y-[0.05em] animate-pulse rounded-full bg-current align-middle motion-reduce:hidden"
       />
     </span>
   );

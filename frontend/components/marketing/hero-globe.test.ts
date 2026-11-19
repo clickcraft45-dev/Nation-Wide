@@ -36,12 +36,23 @@ describe("isLand", () => {
     expect(isLand(51.5, -0.1)).toBe(true); // London
     expect(isLand(40.7, -74.0)).toBe(true); // New York
     expect(isLand(-33.9, 151.2)).toBe(true); // Sydney
+    expect(isLand(25.2, 55.3)).toBe(true); // Dubai
+    expect(isLand(50.1, 8.7)).toBe(true); // Frankfurt
+    expect(isLand(43.7, -79.4)).toBe(true); // Toronto
+    expect(isLand(1.35, 103.8)).toBe(true); // Singapore
+    expect(isLand(22.3, 114.2)).toBe(true); // Hong Kong
+  });
+
+  it("has the continents the old hand-drawn outlines left out", () => {
+    expect(isLand(-80, 0)).toBe(true); // Antarctica
+    expect(isLand(-1.3, 36.8)).toBe(true); // Nairobi
   });
 
   it("leaves the open ocean empty", () => {
     expect(isLand(0, -140)).toBe(false); // mid Pacific
     expect(isLand(-30, -20)).toBe(false); // south Atlantic
     expect(isLand(-20, 80)).toBe(false); // Indian Ocean
-    expect(isLand(-85, 0)).toBe(false); // south polar ocean
+    expect(isLand(-60, 0)).toBe(false); // Southern Ocean
+    expect(isLand(15, 65)).toBe(false); // Arabian Sea
   });
 });

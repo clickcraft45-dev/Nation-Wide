@@ -107,13 +107,13 @@ export function MarketingServices() {
                 onClick={() => gate("/quote")}
                 onPointerMove={trackPointer}
                 onPointerLeave={releasePointer}
-                className={`group relative flex h-full w-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#111113] p-5 text-left shadow-[0_20px_45px_-28px_rgba(0,0,0,0.95)] transition-transform duration-300 ease-out [transform:perspective(900px)_translateY(var(--ty,0px))_rotateX(var(--rx,0deg))_rotateY(var(--ry,0deg))] hover:shadow-[0_30px_60px_-28px_rgba(0,0,0,0.95)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 motion-reduce:[transform:none] ${service.hover} ${service.ring}`}
+                className={`group relative flex h-full w-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#111113] p-5 text-left shadow-[0_20px_45px_-28px_rgba(0,0,0,0.95)] transition-transform duration-300 ease-out transform-[perspective(900px)_translateY(var(--ty,0px))_rotateX(var(--rx,0deg))_rotateY(var(--ry,0deg))] hover:shadow-[0_30px_60px_-28px_rgba(0,0,0,0.95)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 motion-reduce:transform-none ${service.hover} ${service.ring}`}
               >
                 {/* The photo is the card header. Hover leans in on it: transform only, and still under
                     reduced motion. The fade at its foot hands over to the card body. */}
                 <span
                   aria-hidden
-                  className="relative -mx-5 -mt-5 block aspect-[16/10] overflow-hidden"
+                  className="relative -mx-5 -mt-5 block aspect-16/10 overflow-hidden"
                 >
                   <AssetImage
                     src={service.image.src}
@@ -121,7 +121,7 @@ export function MarketingServices() {
                     sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw"
                     className="transition-transform duration-700 ease-out group-hover:scale-[1.06] group-focus-visible:scale-[1.06] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
                   />
-                  <span className="absolute inset-0 bg-gradient-to-t from-[#111113] via-[#111113]/20 to-transparent" />
+                  <span className="absolute inset-0 bg-linear-to-t from-[#111113] via-[#111113]/20 to-transparent" />
                 </span>
                 {/* Glow that follows the cursor across the card. */}
                 <span

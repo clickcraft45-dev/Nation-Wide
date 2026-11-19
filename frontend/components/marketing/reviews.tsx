@@ -91,7 +91,7 @@ const REVIEWS: Review[] = [
 
 function ReviewCard({ review }: { review: Review }) {
   return (
-    <figure className="marquee-card flex w-[19rem] shrink-0 flex-col rounded-2xl border border-border bg-card p-6 sm:w-[22rem]">
+    <figure className="marquee-card flex w-76 shrink-0 flex-col rounded-2xl border border-border bg-card p-6 sm:w-88">
       {review.rating !== undefined && (
         // aria-hidden on the stars with a text label alongside: five identical icons announce as
         // nothing useful, so the rating is given to screen readers as words.

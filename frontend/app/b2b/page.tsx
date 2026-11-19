@@ -13,7 +13,7 @@ import { B2bPortal } from "@/components/b2b/portal";
  * is routing, not the access check.
  */
 export default function B2bPortalPage() {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, logout } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
@@ -30,5 +30,6 @@ export default function B2bPortalPage() {
     );
   }
 
-  return <B2bPortal client={sessionB2bClient} />;
+  // Signing out clears the user, and the effect above then sends them to /login?redirect=/b2b.
+  return <B2bPortal client={sessionB2bClient} onSignOut={logout} />;
 }

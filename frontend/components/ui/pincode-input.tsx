@@ -15,7 +15,7 @@ type VerifyState =
   | { kind: "invalid" }
   | { kind: "unavailable" };
 
-export interface PincodeInputProps extends Omit<InputProps, "onChange" | "value"> {
+interface PincodeInputProps extends Omit<InputProps, "onChange" | "value"> {
   value: string;
   onChange: (value: string) => void;
   /**

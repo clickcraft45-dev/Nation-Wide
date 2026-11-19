@@ -68,7 +68,8 @@ export function FuelSurchargePanel() {
             <p className="text-base font-semibold text-foreground">Carrier fuel surcharges</p>
             <p className="text-sm text-muted-foreground">
               DHL publishes its weekly figure in a readable page, so it is fetched. UPS and FedEx
-              serve theirs to browsers only. Open the link and enter the number.
+              serve theirs to browsers only: use &quot;Fuel and PSS from carrier page&quot; on
+              the provider below to paste the page in, or enter the number.
             </p>
           </div>
           <Button size="sm" variant="secondary" disabled={isLoading} onClick={check}>

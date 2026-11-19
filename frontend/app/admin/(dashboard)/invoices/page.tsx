@@ -391,7 +391,7 @@ export default function AdminInvoicesPage() {
         </div>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(22rem,0.85fr)]">
+      <div className="grid items-start gap-6 xl:grid-cols-[minmax(20rem,0.7fr)_minmax(0,1.3fr)]">
       <Card className="glass-sheen">
         <CardHeader>
           <div className="flex items-center gap-3">

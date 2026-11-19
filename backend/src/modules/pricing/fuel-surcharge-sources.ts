@@ -8,7 +8,7 @@
  * block automation, so they stay manual: the admin opens the page and types the number, and the
  * app records who did it and when.
  */
-export interface FuelSurchargeSource {
+interface FuelSurchargeSource {
   /** Matches RateProvider.code. */
   providerCode: string;
   url: string;
@@ -39,7 +39,7 @@ export const FUEL_SURCHARGE_SOURCES: FuelSurchargeSource[] = [
   },
 ];
 
-export interface ParsedSurcharge {
+interface ParsedSurcharge {
   percent: number;
   /** What the page called it, e.g. "CW 40" — recorded so a figure can be traced to its row. */
   label: string;

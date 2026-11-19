@@ -62,7 +62,7 @@ export function ShipmentStatusDonut({ slices }: { slices: ShipmentStatusSlice[] 
       ) : (
         <ChartContainer
           config={chartConfig}
-          className="mx-auto aspect-square max-h-[190px] w-full [&_.recharts-text]:fill-white"
+          className="mx-auto aspect-square max-h-47.5 w-full [&_.recharts-text]:fill-white"
         >
           <PieChart>
             <ChartTooltip content={<ChartTooltipContent nameKey="key" hideLabel />} />

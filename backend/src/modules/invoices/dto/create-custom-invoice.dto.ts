@@ -18,7 +18,7 @@ import {
  * Only `amount` is required. A row for a re-delivery fee or a correction has no AWB and no
  * weight, and a required placeholder would put invented figures on a tax document.
  */
-export class CustomInvoiceLineInput {
+class CustomInvoiceLineInput {
   @IsOptional()
   @IsString()
   @MaxLength(40)

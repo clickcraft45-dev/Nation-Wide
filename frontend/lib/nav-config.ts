@@ -27,7 +27,6 @@ import {
   TicketPercent,
   Megaphone,
   Receipt,
-  FileSpreadsheet,
   MapPinned,
   Fuel,
   Globe,
@@ -43,6 +42,8 @@ export interface NavItem {
   // Omitted means visible to every role that can reach this nav (i.e. all admin-panel roles
   // today). Pricing is the first ADMIN-only exception — see admin/(dashboard)/pricing/layout.tsx.
   roles?: Role[];
+  /** Other pages that belong to this item: it stays highlighted there and heads the breadcrumb. */
+  alsoMatches?: string[];
 }
 
 export interface NavGroup {
@@ -121,10 +122,17 @@ export const ADMIN_NAV_GROUPS: NavGroup[] = [
     // rates, the charges added on top, destinations, then publishing and the audit trail.
     items: [
       { label: "Overview", href: "/admin/pricing/dashboard", icon: Tag, roles: ["ADMIN"] },
-      { label: "Providers & rates", href: "/admin/pricing/providers", icon: Receipt, roles: ["ADMIN"] },
-      { label: "Rate sheets", href: "/admin/pricing/rate-sheets", icon: FileSpreadsheet, roles: ["ADMIN"] },
+      // Rate sheets is the bulk Excel route into the same provider rates, reached from each
+      // provider's Import and Export, so it is not a second item.
+      {
+        label: "Providers and rates",
+        href: "/admin/pricing/providers",
+        icon: Receipt,
+        roles: ["ADMIN"],
+        alsoMatches: ["/admin/pricing/rate-sheets"],
+      },
       { label: "Zones", href: "/admin/pricing/zones", icon: MapPinned, roles: ["ADMIN"] },
-      { label: "Charges & margins", href: "/admin/pricing/fuel-pss", icon: Fuel, roles: ["ADMIN"] },
+      { label: "Charges and margins", href: "/admin/pricing/fuel-pss", icon: Fuel, roles: ["ADMIN"] },
       { label: "Countries", href: "/admin/pricing/countries", icon: Globe, roles: ["ADMIN"] },
       { label: "Rate card PDFs", href: "/admin/pricing/pdf-generator", icon: FileText, roles: ["ADMIN"] },
       { label: "Rate history", href: "/admin/pricing/rate-history", icon: FileClock, roles: ["ADMIN"] },
@@ -202,8 +210,19 @@ export const CUSTOMER_TAB_ITEMS: NavItem[] = [
   { label: "Profile", href: "/profile", icon: User },
 ];
 
+/** The path of `item` (its href or one of alsoMatches) that `pathname` sits under, if any. */
+export function navItemMatch(item: NavItem, pathname: string): string | undefined {
+  return [item.href, ...(item.alsoMatches ?? [])].find(
+    (path) => pathname === path || pathname.startsWith(`${path}/`),
+  );
+}
+
 export function findNavItemForPath(pathname: string, items: NavItem[]): NavItem | undefined {
-  return [...items]
-    .sort((a, b) => b.href.length - a.href.length)
-    .find((item) => pathname === item.href || pathname.startsWith(`${item.href}/`));
+  // The most specific match wins: /admin/pricing/providers over a shorter /admin/pricing.
+  let best: { item: NavItem; length: number } | undefined;
+  for (const item of items) {
+    const match = navItemMatch(item, pathname);
+    if (match && (!best || match.length > best.length)) best = { item, length: match.length };
+  }
+  return best?.item;
 }

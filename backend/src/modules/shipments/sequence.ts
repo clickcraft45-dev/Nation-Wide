@@ -10,7 +10,7 @@
  * Not a Postgres SEQUENCE: invoice numbering restarts each Indian financial year and the seed
  * scripts need to set a counter to a known value, neither of which a bare sequence gives us.
  */
-export interface SequenceRunner {
+interface SequenceRunner {
   $queryRawUnsafe<T = unknown>(query: string, ...values: unknown[]): Promise<T>;
 }
 

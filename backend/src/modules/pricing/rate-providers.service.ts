@@ -16,12 +16,12 @@ import { SetMarginBandsDto } from './dto/set-margin-bands.dto';
 // OTHER shipments never get a rate (see CreateRateDto) — never offered as a "service" here.
 const RATEABLE_SHIPMENT_TYPES = SHIPMENT_TYPES.filter((t) => t !== 'OTHER');
 
-export type RateProviderWithCount = RateProvider & {
+type RateProviderWithCount = RateProvider & {
   _count: { zoneCountries: number };
   marginBands?: ProviderMarginBand[];
 };
 
-export interface ProviderCountry {
+interface ProviderCountry {
   countryId: string;
   countryCode: string;
   countryName: string;
@@ -33,7 +33,7 @@ export interface ProviderCountry {
   lastUpdatedAt: string | null;
 }
 
-export interface CountryDetail {
+interface CountryDetail {
   countryId: string;
   countryCode: string;
   countryName: string;

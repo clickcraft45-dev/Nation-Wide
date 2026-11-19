@@ -65,11 +65,6 @@ export const HERO_IMAGES = {
   },
 } as const;
 
-export const WORLD_MAP_IMAGE = {
-  src: "/assets/images/world-map-placeholder.svg",
-  alt: "World map showing NationWide Logistics' global reach",
-};
-
 // The carrier networks NationWide actually quotes and books against — the same four rate
 // providers the pricing engine is seeded with (backend/prisma/seed.ts). Rendered as plain
 // text wordmarks, deliberately: reproducing a carrier's trademarked logo art needs their

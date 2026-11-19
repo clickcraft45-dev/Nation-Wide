@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, Globe, History, Upload } from "lucide-react";
+import { ArrowLeft, Download, Globe, History } from "lucide-react";
 import type { ProviderCountryDto, RateProviderDto } from "@nationwide/shared-types";
 import { apiClient, ApiError } from "@/lib/api-client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -51,7 +51,7 @@ export default function ProviderDetailPage() {
   }, [params.providerId]);
 
   return (
-    <div className="max-w-4xl space-y-6">
+    <div className="space-y-6">
       <Link
         href="/admin/pricing/providers"
         className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
@@ -137,7 +137,7 @@ export default function ProviderDetailPage() {
                   href={`/admin/pricing/rate-sheets?provider=${provider.id}`}
                   className={buttonVariants({ size: "sm" })}
                 >
-                  <Upload className="h-4 w-4" aria-hidden />
+                  <Download className="h-4 w-4" aria-hidden />
                   Import
                 </Link>
               </div>
@@ -161,9 +161,9 @@ export default function ProviderDetailPage() {
                   description="Add a country to one of this provider's zones, or upload the provider's rate sheet: its country list links them for you."
                 />
               ) : (
-                <div className="divide-y divide-border">
+                <div className="grid gap-x-8 lg:grid-cols-2">
                   {countries.map((c) => (
-                    <div key={c.countryId} className="flex items-center justify-between py-3">
+                    <div key={c.countryId} className="flex items-center justify-between gap-3 border-b border-border py-3">
                       <div>
                         <p className="text-sm font-medium text-foreground">{c.countryName}</p>
                         <p className="text-xs text-muted-foreground">

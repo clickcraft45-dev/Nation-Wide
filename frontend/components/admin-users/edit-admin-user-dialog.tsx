@@ -31,7 +31,7 @@ export function EditAdminUserDialog({
   const [isSaving, setIsSaving] = useState(false);
   const { showToast } = useToast();
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.SubmitEvent) {
     e.preventDefault();
     if (phone.trim() && !/^\+[1-9]\d{7,14}$/.test(phone.trim())) {
       setError("Phone must be in E.164 format, e.g. +919876543210.");

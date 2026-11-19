@@ -41,7 +41,9 @@ export class AdminUsersController {
     @Body() dto: CreateAdminUserDto,
     @CurrentUser() user: JwtPayload,
   ): Promise<AdminUserDto> {
-    return toAdminUserDto(await this.adminUsers.create(dto, user.sub));
+    return toAdminUserDto(
+      await this.adminUsers.create(dto, user.sub, user.role),
+    );
   }
 
   @Patch(':id')
@@ -50,7 +52,9 @@ export class AdminUsersController {
     @Body() dto: UpdateAdminUserDto,
     @CurrentUser() user: JwtPayload,
   ): Promise<AdminUserDto> {
-    return toAdminUserDto(await this.adminUsers.update(id, dto, user.sub));
+    return toAdminUserDto(
+      await this.adminUsers.update(id, dto, user.sub, user.role),
+    );
   }
 
   // Separate from PATCH so a password can never be changed by the same request that changes a
@@ -62,7 +66,12 @@ export class AdminUsersController {
     @CurrentUser() user: JwtPayload,
   ): Promise<AdminUserDto> {
     return toAdminUserDto(
-      await this.adminUsers.resetPassword(id, dto.password, user.sub),
+      await this.adminUsers.resetPassword(
+        id,
+        dto.password,
+        user.sub,
+        user.role,
+      ),
     );
   }
 
@@ -73,6 +82,6 @@ export class AdminUsersController {
     @Param('id') id: string,
     @CurrentUser() user: JwtPayload,
   ): Promise<void> {
-    await this.adminUsers.remove(id, user.sub);
+    await this.adminUsers.remove(id, user.sub, user.role);
   }
 }

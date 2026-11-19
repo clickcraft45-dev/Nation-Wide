@@ -44,7 +44,7 @@ const liquidButtonVariants = cva(
   },
 );
 
-export interface LiquidButtonProps
+interface LiquidButtonProps
   extends React.ComponentProps<"button">,
     VariantProps<typeof liquidButtonVariants> {
   asChild?: boolean;

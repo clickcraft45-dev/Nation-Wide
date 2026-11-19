@@ -16,7 +16,7 @@ import {
 import { B2bOrderDto, B2bPickupDto } from './b2b-create-orders.dto';
 
 /** One shipment of a staff booking: the portal's shape plus a price staff may set by hand. */
-export class AdminOrderDto extends B2bOrderDto {
+class AdminOrderDto extends B2bOrderDto {
   /**
    * What to charge when no rate card covers the route — the same escape hatch the single-shipment
    * screen had. Staff-only: the customer portal never names its own price.

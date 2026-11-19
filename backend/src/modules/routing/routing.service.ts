@@ -16,9 +16,9 @@ import { ConfigService } from '@nestjs/config';
 const DEFAULT_ROUTING_URL = 'https://router.project-osrm.org';
 const ROUTE_TIMEOUT_MS = 4000;
 
-export type DistanceSource = 'road' | 'straight-line';
+type DistanceSource = 'road' | 'straight-line';
 
-export interface DistanceResult {
+interface DistanceResult {
   km: number;
   source: DistanceSource;
 }
@@ -106,7 +106,7 @@ export class RoutingService {
 }
 
 /** Great-circle distance in km, rounded to 100 m — the fallback when there is no route. */
-export function haversineKm(
+function haversineKm(
   fromLat: number,
   fromLng: number,
   toLat: number,

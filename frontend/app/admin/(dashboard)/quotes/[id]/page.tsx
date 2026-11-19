@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { MapPin, Package, User, Truck, Receipt } from "lucide-react";
+import { DetailLayout } from "@/components/ui/detail-layout";
 import { BackLink } from "@/components/ui/back-link";
 import type { QuoteAdminDetailDto } from "@nationwide/shared-types";
 import { apiClient, ApiError } from "@/lib/api-client";
@@ -80,7 +81,7 @@ export default function AdminQuoteDetailPage() {
   }, [params.id]);
 
   return (
-    <div className="max-w-3xl space-y-6">
+    <div className="space-y-6">
       <BackLink href="/admin/quotes">Back to quote requests</BackLink>
 
       {isLoading && (
@@ -106,131 +107,136 @@ export default function AdminQuoteDetailPage() {
             <QuoteStatusBadge status={quote.status} />
           </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <User className="h-4 w-4" aria-hidden />
-                Customer
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-1 text-sm">
-              <p className="font-medium text-foreground">{quote.customerName}</p>
-              <p className="text-muted-foreground">{quote.customerPhone}</p>
-              {quote.customerEmail && (
-                <p className="text-muted-foreground">{quote.customerEmail}</p>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Package className="h-4 w-4" aria-hidden />
-                Shipment
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-1 text-sm">
-              <p>
-                <span className="text-muted-foreground">Type: </span>
-                {quote.shipmentType.charAt(0) + quote.shipmentType.slice(1).toLowerCase()}
-              </p>
-              <p>
-                <span className="text-muted-foreground">Weight: </span>
-                {quote.weightKg}kg
-              </p>
-              {quote.description && (
+          <DetailLayout
+            aside={
+              <>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Receipt className="h-4 w-4" aria-hidden />
+                      Quote
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-1 text-sm">
+                    <p>
+                      <span className="text-muted-foreground">Amount: </span>
+                      {quote.quotedAmount
+                        ? `${quote.quotedCurrency ?? "INR"} ${quote.quotedAmount.toLocaleString("en-IN")}`
+                        : "Not yet quoted"}
+                    </p>
+                    {quote.quotedByAdminEmail && (
+                      <p className="text-muted-foreground">Quoted by {quote.quotedByAdminEmail}</p>
+                    )}
+                    {quote.rejectionReason && (
+                      <p className="text-danger">Rejected: {quote.rejectionReason}</p>
+                    )}
+                    {quote.internalNotes && (
+                      <p className="text-muted-foreground">
+                        <span className="italic">Internal notes:</span> {quote.internalNotes}
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <User className="h-4 w-4" aria-hidden />
+                      Customer
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-1 text-sm">
+                    <p className="font-medium text-foreground">{quote.customerName}</p>
+                    <p className="text-muted-foreground">{quote.customerPhone}</p>
+                    {quote.customerEmail && (
+                      <p className="text-muted-foreground">{quote.customerEmail}</p>
+                    )}
+                  </CardContent>
+                </Card>
+              </>
+            }
+          >
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Package className="h-4 w-4" aria-hidden />
+                  Shipment
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-1 text-sm">
                 <p>
-                  <span className="text-muted-foreground">Contents: </span>
-                  {quote.description}
+                  <span className="text-muted-foreground">Type: </span>
+                  {quote.shipmentType.charAt(0) + quote.shipmentType.slice(1).toLowerCase()}
                 </p>
-              )}
-              {quote.reviewReason && (
-                <p className="text-warning">
-                  Flagged: {quote.reviewReason.replace(/_/g, " ").toLowerCase()}
+                <p>
+                  <span className="text-muted-foreground">Weight: </span>
+                  {quote.weightKg}kg
                 </p>
-              )}
-            </CardContent>
-          </Card>
+                {quote.description && (
+                  <p>
+                    <span className="text-muted-foreground">Contents: </span>
+                    {quote.description}
+                  </p>
+                )}
+                {quote.reviewReason && (
+                  <p className="text-warning">
+                    Flagged: {quote.reviewReason.replace(/_/g, " ").toLowerCase()}
+                  </p>
+                )}
+              </CardContent>
+            </Card>
 
-          <div className="grid gap-6 sm:grid-cols-2">
+            <div className="grid gap-6 sm:grid-cols-2">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <MapPin className="h-4 w-4" aria-hidden />
+                    Origin
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <AddressBlock address={quote.origin} />
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <MapPin className="h-4 w-4" aria-hidden />
+                    Destination
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <AddressBlock address={quote.destination} />
+                </CardContent>
+              </Card>
+            </div>
+
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <MapPin className="h-4 w-4" aria-hidden />
-                  Origin
+                  <Truck className="h-4 w-4" aria-hidden />
+                  Fulfillment
                 </CardTitle>
               </CardHeader>
-              <CardContent>
-                <AddressBlock address={quote.origin} />
+              <CardContent className="space-y-1 text-sm">
+                <p className="font-medium text-foreground">
+                  {quote.fulfillmentMethod === "PICKUP" ? "Pickup" : "Warehouse Drop-off"}
+                </p>
+                {quote.fulfillmentMethod === "PICKUP" && (
+                  <p className="text-muted-foreground">
+                    {quote.pickupDate} · {quote.pickupTimeSlot}
+                  </p>
+                )}
+                {quote.orderId && (
+                  <Link
+                    href={`/admin/orders/${quote.orderId}`}
+                    className="inline-block text-primary hover:underline"
+                  >
+                    View order →
+                  </Link>
+                )}
               </CardContent>
             </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <MapPin className="h-4 w-4" aria-hidden />
-                  Destination
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <AddressBlock address={quote.destination} />
-              </CardContent>
-            </Card>
-          </div>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Truck className="h-4 w-4" aria-hidden />
-                Fulfillment
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-1 text-sm">
-              <p className="font-medium text-foreground">
-                {quote.fulfillmentMethod === "PICKUP" ? "Pickup" : "Warehouse Drop-off"}
-              </p>
-              {quote.fulfillmentMethod === "PICKUP" && (
-                <p className="text-muted-foreground">
-                  {quote.pickupDate} · {quote.pickupTimeSlot}
-                </p>
-              )}
-              {quote.orderId && (
-                <Link
-                  href={`/admin/orders/${quote.orderId}`}
-                  className="inline-block text-primary hover:underline"
-                >
-                  View order →
-                </Link>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Receipt className="h-4 w-4" aria-hidden />
-                Quote
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-1 text-sm">
-              <p>
-                <span className="text-muted-foreground">Amount: </span>
-                {quote.quotedAmount
-                  ? `${quote.quotedCurrency ?? "INR"} ${quote.quotedAmount.toLocaleString("en-IN")}`
-                  : "Not yet quoted"}
-              </p>
-              {quote.quotedByAdminEmail && (
-                <p className="text-muted-foreground">Quoted by {quote.quotedByAdminEmail}</p>
-              )}
-              {quote.rejectionReason && (
-                <p className="text-danger">Rejected: {quote.rejectionReason}</p>
-              )}
-              {quote.internalNotes && (
-                <p className="text-muted-foreground">
-                  <span className="italic">Internal notes:</span> {quote.internalNotes}
-                </p>
-              )}
-            </CardContent>
-          </Card>
+          </DetailLayout>
         </>
       )}
     </div>

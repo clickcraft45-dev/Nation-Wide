@@ -19,7 +19,7 @@ export interface PackageForm {
   heightCm: string;
 }
 
-export const emptyPackage: PackageForm = { weightKg: "", lengthCm: "", widthCm: "", heightCm: "" };
+const emptyPackage: PackageForm = { weightKg: "", lengthCm: "", widthCm: "", heightCm: "" };
 
 export function packagesFrom(saved: ParcelPackageDto[] | null | undefined, fallbackWeightKg?: number): PackageForm[] {
   if (saved?.length) {
@@ -64,7 +64,7 @@ export function validatePackages(forms: PackageForm[], requireDimensions: boolea
 }
 
 /** Both chargeable and a breakdown for display; null while anything is unparseable. */
-export function packagesSummary(forms: PackageForm[]) {
+function packagesSummary(forms: PackageForm[]) {
   const payload = toPackagesPayload(forms);
   if (payload.some((p) => !(p.weightKg > 0))) return null;
   return {

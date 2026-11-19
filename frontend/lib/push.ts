@@ -10,7 +10,7 @@ import { apiClient } from "@/lib/api-client";
  */
 export type PushState = "unsupported" | "denied" | "enabled" | "disabled";
 
-export function pushSupported(): boolean {
+function pushSupported(): boolean {
   return (
     typeof window !== "undefined" &&
     "serviceWorker" in navigator &&

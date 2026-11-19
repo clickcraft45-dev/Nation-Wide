@@ -5,6 +5,7 @@ import { listSheets, readSheetFromBuffer } from '../../common/xlsx/xlsx-reader';
 import { detectRateTables } from './rate-sheet-detect';
 import { buildWorkbook } from '../../common/xlsx/xlsx-writer';
 import {
+  aliasCode,
   buildPlan,
   CountryMatcher,
   exportRows,
@@ -70,6 +71,30 @@ describe('buildPlan on the real rate book', () => {
 
   it('lists what it could not link instead of guessing', () => {
     expect(plan.unmatched.some((u) => /Scotland/i.test(u))).toBe(true);
+  });
+});
+
+describe('destinations the country list lacks', () => {
+  const added = new Map(plan.added.map((c) => [c.code, c.name]));
+
+  it('adds an ISO country the list is missing, under its usual name', () => {
+    expect(added.get('MF')).toBe('St. Martin');
+    expect(added.get('PS')).toBe('Palestinian Territories');
+    expect(zoneOf('FEDEX', 'new:MF')).toBeDefined();
+  });
+
+  it("adds a region the carrier prices apart, under its country's code", () => {
+    expect(added.get('PT-AZORES')).toBe('Azores (Portugal)');
+    expect(added.get('GB-SCOTLAND')).toBe('Scotland (United Kingdom)');
+    expect(zoneOf('UPS', 'new:PT-AZORES')).toBeDefined();
+    // Portugal itself stays where the list puts it.
+    expect(zoneOf('UPS', 'PT')).toBeDefined();
+  });
+
+  it('never adds a row of junk as a place', () => {
+    expect(
+      [...added.keys()].every((code) => /^[A-Z]{2}(-[A-Z0-9]+)?$/.test(code)),
+    ).toBe(true);
   });
 });
 
@@ -250,4 +275,124 @@ describe('a provider exported and uploaded back', () => {
       expect(zonesOf(after, code)).toEqual(zonesOf(before, code));
     },
   );
+});
+
+describe('a sheet laid out as the ChatGPT prompt in the import dialog asks', () => {
+  // Exactly the format conversionPrompt describes (frontend rate-sheet-import.tsx): rates
+  // blocks, then the zone list with countries, regions and zones named as in the header.
+  const rows = [
+    ['Aramex Package rates'],
+    ['Prices before fuel surcharge, PSS and GST'],
+    ['Weight (kg)', 'Zone A', 'Zone B'],
+    [0.5, 1200, 1500],
+    [1, 1400, 1750],
+    ['20.01-44', 310, 380],
+    [],
+    ['Aramex Document rates'],
+    ['Prices before fuel surcharge, PSS and GST'],
+    ['Weight (kg)', 'Zone A', 'Zone B'],
+    [0.5, 900, 1100],
+    [],
+    ['Country', 'Zone'],
+    ['United States (US)', 'Zone A'],
+    ['United Kingdom (GB)', 'Zone B'],
+    ['Azores (Portugal)', 'Zone B'],
+    ['Scotland (United Kingdom)', 'B'],
+    ['St. Martin (MF)', 'Zone A'],
+  ];
+  const file = buildWorkbook([{ name: 'ARAMEX', rows }]);
+  const read = listSheets(file).flatMap((sheet) =>
+    detectRateTables(sheet, readSheetFromBuffer(file, sheet)),
+  );
+  const picked = pickTables(read, { code: 'ARAMEX', name: 'Aramex' }, false);
+  // A fresh list, as on a new database, without St. Martin.
+  const matcher = new CountryMatcher(COUNTRIES.filter((c) => c.code !== 'MF'));
+  const result = buildPlan(picked.tables, matcher);
+  const zones = result.providers.get('ARAMEX')!.zones;
+  const codesIn = (zone: string) =>
+    [...zones.get(zone)!.countries.values()].map((c) => c.code).sort();
+
+  it('reads both blocks into package and document rates per zone', () => {
+    expect([...zones.keys()]).toEqual(['zone a', 'zone b']);
+    expect([...zones.get('zone a')!.cards.keys()]).toEqual([
+      'PACKAGE',
+      'DOCUMENT',
+    ]);
+    expect(zones.get('zone b')!.cards.get('PACKAGE')!.at(-1)).toMatchObject({
+      weightFromKg: 20.01,
+      weightToKg: 44,
+      rateType: 'PER_KG',
+      rate: 380,
+    });
+  });
+
+  it('links every destination in the zone list, adding what the list lacks', () => {
+    expect(codesIn('zone a')).toEqual(['MF', 'US']);
+    expect(codesIn('zone b')).toEqual(['GB', 'GB-SCOTLAND', 'PT-AZORES']);
+    expect(result.added.map((c) => c.name).sort()).toEqual([
+      'Azores (Portugal)',
+      'Scotland (United Kingdom)',
+      'St. Martin',
+    ]);
+    expect(result.unmatched).toEqual([]);
+    expect([...picked.warnings, ...result.warnings]).toEqual([]);
+  });
+
+  it('comes back the same from its own export, into a database without the regions', () => {
+    const live = [...zones.values()].flatMap((z) =>
+      [...z.cards].map(([shipmentType, bands]) => ({
+        shipmentType,
+        taxInclusive: false,
+        zone: { name: z.name },
+        weightSlabs: bands.map((band) => ({
+          weightFromKg: band.weightFromKg,
+          weightToKg: band.weightToKg,
+          baseRate: band.rate,
+          rateType: band.rateType,
+        })),
+      })),
+    );
+    const links = [...zones.values()].flatMap((z) =>
+      [...z.countries.values()].map((c) => ({
+        country: c.name,
+        code: c.code,
+        zone: z.name,
+      })),
+    );
+    const provider = { id: 'p', code: 'ARAMEX', name: 'Aramex' };
+    const view = sheetView(provider, live, null, [], []);
+    const exported = buildWorkbook([
+      {
+        name: 'ARAMEX',
+        rows: exportRows('Aramex', view.grids, 'Exported', links),
+      },
+    ]);
+    const back = buildPlan(
+      pickTables(
+        detectRateTables('ARAMEX', readSheetFromBuffer(exported, 'ARAMEX')),
+        provider,
+        false,
+      ).tables,
+      new CountryMatcher(COUNTRIES.filter((c) => c.code !== 'MF')),
+    );
+    const again = back.providers.get('ARAMEX')!.zones;
+    expect(
+      [...again.get('zone b')!.countries.values()].map((c) => c.code).sort(),
+    ).toEqual(['GB', 'GB-SCOTLAND', 'PT-AZORES']);
+    expect(back.added.map((c) => c.code).sort()).toEqual([
+      'GB-SCOTLAND',
+      'MF',
+      'PT-AZORES',
+    ]);
+    expect(back.unmatched).toEqual([]);
+  });
+});
+
+describe('aliasCode', () => {
+  it('reads the names people search by', () => {
+    expect(aliasCode('USA')).toBe('US');
+    expect(aliasCode('U.S.A')).toBe('US');
+    expect(aliasCode('uk')).toBe('GB');
+    expect(aliasCode('Portugal')).toBeNull();
+  });
 });

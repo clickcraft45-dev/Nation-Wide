@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, ArrowDown, ArrowUp, CheckCircle2, Copy, ExternalLink, Upload } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, CheckCircle2, Copy, Download, ExternalLink } from "lucide-react";
 import type {
   ProviderRateSheetDto,
   RateGridCellDto,
@@ -61,9 +61,13 @@ export function conversionPrompt(provider: { code: string; name: string }, kind:
     `3. Row 3, the header: "Weight (kg)", then one column per zone, named as in my sheet (for example Zone 1, Zone 2, or A, B, C).`,
     "4. One row per weight. For a flat price, put the upper weight in kg in the first column (0.5, 1, 1.5 ...). For a price charged per kg over a range, write the range as from-to (for example 21-44) and put the per-kg price in the zone columns.",
     `5. An empty row, then the same block for documents (title "${provider.name} Document rates", the same label, the same header), only if my sheet has document rates.`,
-    `6. An empty row, then a header row "Country" | "Zone" and one row per country: the country name with its 2-letter ISO code in brackets, for example "United States (US)", and its zone as the zone column is named, without the word Zone (1 for Zone 1, A for A).`,
+    `6. An empty row, then the zone list on the same sheet: a header row "Country" | "Zone", then one row for every destination in my sheet's zone list. Leave none out, and include every region and territory the list names, not only countries.`,
+    `   - A country: its name with its 2-letter ISO code in brackets, for example "United States (US)", "United Kingdom (GB)".`,
+    `   - A region the carrier prices apart from its country: "Region (Country)", for example "Azores (Portugal)", "Scotland (United Kingdom)", "Saipan (Northern Mariana Islands)".`,
+    `   - Zone: the zone exactly as its column is named in the header row of step 3 (Zone 1, or A).`,
+    `   - One zone per destination. If my sheet lists a destination under two zones, keep the first and tell me which.`,
     "",
-    "Rules: prices are plain numbers in INR, no currency symbols or thousands separators. Weights are in kg (500 gms = 0.5). Weight bands must not overlap. Leave a cell empty when a zone has no price for that weight. Copy every price exactly, never estimate or round. Do not merge cells. After the file, list any rows you could not read.",
+    "Rules: prices are plain numbers in INR, no currency symbols or thousands separators. Weights are in kg (500 gms = 0.5). Weight bands must not overlap. Leave a cell empty when a zone has no price for that weight. Copy every price exactly, never estimate or round. Do not merge cells. Every zone in the header must have at least one destination in the zone list, and every zone in the list must be a column in the header. After the file, list any rows you could not read and any destination you could not place in a zone.",
     "",
     "My raw rate sheet is attached.",
   ].join("\n");
@@ -80,7 +84,9 @@ function LayoutExample({ provider, kind }: { provider: { code: string; name: str
     ["30.1-50", "538", "514", "573"],
     [],
     ["Country", "Zone"],
-    ["United States (US)", "1"],
+    ["United States (US)", "Zone 1"],
+    ["United Kingdom (GB)", "Zone 2"],
+    ["Azores (Portugal)", "Zone 3"],
   ];
   return (
     <div className="space-y-1.5">
@@ -124,7 +130,8 @@ function LayoutExample({ provider, kind }: { provider: { code: string; name: str
       </div>
       <p className="text-xs text-muted-foreground">
         Row 6 is a per-kg range: that price is charged for every kg from 30.1 to 50. Add a Document block the same way
-        if the carrier prices documents separately.
+        if the carrier prices documents separately. From row 9, every destination in the carrier&apos;s zone list with its
+        zone, regions included (row 8 is the header). A country or region the app does not list yet is added when you apply the sheet.
       </p>
     </div>
   );
@@ -135,10 +142,17 @@ function LayoutExample({ provider, kind }: { provider: { code: string; name: str
  * new workbook, compare old and new cell by cell, apply. The file is sent again on apply, so
  * nothing is held on the server between the two steps.
  */
-export function RateSheetImport() {
+export function RateSheetImport({
+  providerId: lockedProviderId,
+  onApplied,
+}: {
+  /** Fixes the import to one provider and hides the picker: the new-provider onboarding. */
+  providerId?: string;
+  onApplied?: (result: RateSheetApplyResultDto) => void;
+} = {}) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [providers, setProviders] = useState<RateProviderDto[] | null>(null);
-  const [providerId, setProviderId] = useState("");
+  const [providerId, setProviderId] = useState(lockedProviderId ?? "");
   const [kind, setKind] = useState<Kind>("normal");
   const [sheet, setSheet] = useState<ProviderRateSheetDto | null>(null);
   const [file, setFile] = useState<File | null>(null);
@@ -161,7 +175,8 @@ export function RateSheetImport() {
         // ?provider= from a provider card's Import button.
         const wanted = new URLSearchParams(window.location.search).get("provider");
         setProviderId(
-          (current) => current || list.find((p) => p.id === wanted)?.id || list[0]?.id || "",
+          (current) =>
+            lockedProviderId || current || list.find((p) => p.id === wanted)?.id || list[0]?.id || "",
         );
         if (list.length === 0) setIsLoading(false);
       })
@@ -169,7 +184,7 @@ export function RateSheetImport() {
         setError(errorMessage(err, "Couldn't load providers."));
         setIsLoading(false);
       });
-  }, []);
+  }, [lockedProviderId]);
 
   useEffect(() => {
     if (!providerId) return;
@@ -204,6 +219,8 @@ export function RateSheetImport() {
   }
 
   async function compare(upload: File, as: Kind) {
+    // A file picked before the provider list has loaded would post to ".../providers//...".
+    if (!providerId) return;
     setFile(upload);
     setApplied(null);
     setAppliedFrom(null);
@@ -234,6 +251,7 @@ export function RateSheetImport() {
         form(file, kind),
       );
       setApplied(result);
+      onApplied?.(result);
       // The comparison on screen is exactly what was applied: keep it as the record, minus Apply.
       setAppliedFrom(file.name);
       setFile(null);
@@ -264,7 +282,7 @@ export function RateSheetImport() {
 
       <Card>
         <CardContent className="flex flex-wrap items-end gap-4 pt-5">
-          <div className="w-full space-y-1.5 sm:w-64">
+          <div className={cn("w-full space-y-1.5 sm:w-64", lockedProviderId && "hidden")}>
             <Label htmlFor="rate-sheet-provider">Provider</Label>
             <NativeSelect
               id="rate-sheet-provider"
@@ -337,7 +355,7 @@ export function RateSheetImport() {
                   }}
                   disabled={!providerId || isLoading}
                 >
-                  <Upload className="h-4 w-4" aria-hidden />
+                  <Download className="h-4 w-4" aria-hidden />
                   Import new sheet
                 </Button>
               </>
@@ -407,7 +425,7 @@ export function RateSheetImport() {
                     inputRef.current?.click();
                   }}
                 >
-                  <Upload className="h-4 w-4" aria-hidden />
+                  <Download className="h-4 w-4" aria-hidden />
                   Choose .xlsx file
                 </Button>
               </div>

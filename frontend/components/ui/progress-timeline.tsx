@@ -40,7 +40,7 @@ export function ProgressTimeline({
             {!isLast && (
               <span
                 className={cn(
-                  "absolute left-[15px] top-8 h-[calc(100%-2rem)] w-px",
+                  "absolute left-3.75 top-8 h-[calc(100%-2rem)] w-px",
                   isConnectorComplete ? "bg-primary" : "bg-border",
                 )}
                 aria-hidden

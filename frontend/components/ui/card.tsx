@@ -44,17 +44,3 @@ export function CardContent({
   return <div className={cn("px-5 pb-5", className)} {...props} />;
 }
 
-export function CardFooter({
-  className,
-  ...props
-}: HTMLAttributes<HTMLDivElement>) {
-  return (
-    <div
-      className={cn(
-        "flex items-center border-t border-[color:var(--glass-edge)] px-5 py-3",
-        className,
-      )}
-      {...props}
-    />
-  );
-}

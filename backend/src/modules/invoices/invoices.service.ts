@@ -51,7 +51,7 @@ const ORDER_FOR_INVOICE = {
 
 type OrderForInvoice = Prisma.OrderGetPayload<typeof ORDER_FOR_INVOICE>;
 
-export interface GenerateSummary {
+interface GenerateSummary {
   created: string[];
   /** Orders that already had an invoice — generation is idempotent, not an error. */
   skipped: { orderId: string; invoiceId: string }[];

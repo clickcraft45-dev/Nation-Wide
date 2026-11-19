@@ -146,6 +146,7 @@ export function faqSchema(faqs: ReadonlyArray<{ question: string; answer: string
   };
 }
 
+
 /** Breadcrumbs for the legal and guideline pages, so results show a path rather than a bare URL. */
 export function breadcrumbSchema(trail: ReadonlyArray<{ name: string; path: string }>) {
   return {

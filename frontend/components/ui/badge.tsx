@@ -7,7 +7,7 @@ export const badgeVariants = cva(
   {
     variants: {
       variant: {
-        neutral: "border-[color:var(--glass-edge)] bg-white/60 text-muted-foreground",
+        neutral: "border-(--glass-edge) bg-white/60 text-muted-foreground",
         success: "border-success-border bg-success-bg text-success",
         warning: "border-warning-border bg-warning-bg text-warning",
         danger: "border-danger-border bg-danger-bg text-danger",

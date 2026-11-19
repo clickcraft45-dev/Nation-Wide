@@ -1,12 +1,14 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import { ExternalLink } from "lucide-react";
 import type { RateProviderDto } from "@nationwide/shared-types";
 import { apiClient, ApiError } from "@/lib/api-client";
 import { useToast } from "@/components/ui/toast";
 import { Dialog, DialogContent, DialogClose } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input, Label, FieldError } from "@/components/ui/input";
+import { surchargePagesFor } from "@/lib/carrier-surcharge-pages";
 
 // Combined create/edit — pass `provider` to edit an existing row (code becomes read-only since
 // it's the natural key used by the pricing engine's lookups), omit it to create a new one.
@@ -31,7 +33,7 @@ export function RateProviderDialog({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { showToast } = useToast();
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.SubmitEvent) {
     e.preventDefault();
     if (!name.trim() || (!provider && !code.trim())) {
       setError("Code and name are required.");
@@ -50,6 +52,8 @@ export function RateProviderDialog({
         : await apiClient.post<RateProviderDto>("/admin/rate-providers", {
             code: code.trim(),
             name: name.trim(),
+            fuelChargePercent: Number(fuelChargePercent) || 0,
+            pssPerKg: Number(pssPerKg) || 0,
           });
       showToast({ variant: "success", title: provider ? "Provider updated" : "Provider created" });
       onSaved(saved);
@@ -101,13 +105,15 @@ export function RateProviderDialog({
                   />
                   Active (eligible for new quotes)
                 </label>
+              </>
+            )}
 
                 <div className="space-y-3 rounded-md border border-border p-3">
                   <p className="text-sm font-medium text-foreground">Provider Configuration</p>
                   <p className="text-xs text-muted-foreground">
-                    Applies to every quotation for {provider.name}: no need to re-enter these
-                    per country or weight. Past quotes keep the values that were active when they
-                    were generated.
+                    Applies to every quotation for {provider?.name ?? "this provider"}: no need to
+                    re-enter these per country or weight. Past quotes keep the values that were
+                    active when they were generated.
                   </p>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
@@ -133,12 +139,11 @@ export function RateProviderDialog({
                       />
                     </div>
                   </div>
+                  <SurchargeLinks code={code} />
                   <p className="text-xs text-muted-foreground">
                     Margin is set by weight under Margins, not here.
                   </p>
                 </div>
-              </>
-            )}
 
             {error && <FieldError>{error}</FieldError>}
 
@@ -156,5 +161,31 @@ export function RateProviderDialog({
         </DialogContent>
       )}
     </Dialog>
+  );
+}
+
+function SurchargeLinks({ code }: { code: string }) {
+  const pages = surchargePagesFor(code);
+  if (!pages) {
+    return (
+      <p className="text-xs text-muted-foreground">
+        Take both figures from the carrier&apos;s surcharges page.
+      </p>
+    );
+  }
+  const link =
+    "inline-flex min-h-8 items-center gap-1 rounded text-xs font-medium text-foreground underline underline-offset-2 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  return (
+    <p className="flex flex-wrap items-center gap-x-4 text-xs text-muted-foreground">
+      Current figures:
+      <a href={pages.fuel} target="_blank" rel="noopener noreferrer" className={link}>
+        Fuel surcharge page
+        <ExternalLink className="h-3 w-3" aria-hidden />
+      </a>
+      <a href={pages.pss} target="_blank" rel="noopener noreferrer" className={link}>
+        PSS (demand surcharge) page
+        <ExternalLink className="h-3 w-3" aria-hidden />
+      </a>
+    </p>
   );
 }

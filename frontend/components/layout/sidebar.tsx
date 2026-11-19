@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
-import type { NavItem, NavGroup } from "@/lib/nav-config";
+import { navItemMatch, type NavItem, type NavGroup } from "@/lib/nav-config";
 import { Logo } from "@/components/brand/logo";
 import { cn } from "@/lib/utils/cn";
 
@@ -111,7 +111,7 @@ function SectionItems({
   return (
     <div className={cn("space-y-0.5", className)}>
       {section.items.map((item) => {
-        const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
+        const isActive = navItemMatch(item, pathname) !== undefined;
         const ItemIcon = item.icon;
         return (
           <Link
@@ -141,9 +141,7 @@ export function Sidebar({ items, groups }: { items: NavItem[]; groups?: NavGroup
   const activeSection = Math.max(
     0,
     sections.findIndex((section) =>
-      section.items.some(
-        (item) => pathname === item.href || pathname.startsWith(`${item.href}/`),
-      ),
+      section.items.some((item) => navItemMatch(item, pathname) !== undefined),
     ),
   );
 

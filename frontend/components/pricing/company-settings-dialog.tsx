@@ -179,7 +179,7 @@ export function CompanySettingsDialog({
     }
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.SubmitEvent) {
     e.preventDefault();
     if (!form || !settings) return;
     if (!form.name.trim()) {

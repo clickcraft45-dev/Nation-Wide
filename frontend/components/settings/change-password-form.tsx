@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState, type SubmitEvent } from "react";
 import { apiClient, ApiError } from "@/lib/api-client";
 import { useAuth } from "@/state/auth-context";
 import { useToast } from "@/components/ui/toast";
@@ -17,7 +17,7 @@ export function ChangePasswordForm() {
   const { showToast } = useToast();
   const { logout } = useAuth();
 
-  async function handleSubmit(e: FormEvent) {
+  async function handleSubmit(e: SubmitEvent) {
     e.preventDefault();
     setError(null);
 

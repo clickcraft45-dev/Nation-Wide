@@ -49,5 +49,7 @@ export interface RateSheetApplyResultDto {
   /** Bands the new sheet no longer has: switched off, not deleted. */
   bandsDeactivated: number;
   countriesLinked: number;
+  /** Destinations the sheet priced that the country list lacked, now added to it. */
+  countriesAdded?: number;
   warnings: string[];
 }

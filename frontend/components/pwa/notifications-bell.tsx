@@ -148,7 +148,7 @@ export function NotificationsBell({ className }: { className?: string }) {
         aria-pressed={state === "enabled"}
         title={label}
         className={cn(
-          "relative flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60",
+          "relative flex h-11 w-11 shrink-0 sm:h-9 sm:w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60",
           state === "enabled" && "text-foreground",
           className,
         )}
@@ -166,7 +166,10 @@ export function NotificationsBell({ className }: { className?: string }) {
           <div
             role="dialog"
             aria-label="Turn on notifications"
-            className="glass-raised fixed inset-x-3 top-16 z-50 mx-auto max-w-md rounded-2xl p-4 sm:left-auto sm:right-4"
+            // On a phone, above the bottom nav: under the header it covered the page's own controls
+            // (the partner Map link) until dismissed. On a wide screen the top-right corner is free,
+            // and the bottom-right belongs to toasts.
+            className="glass-raised fixed inset-x-3 bottom-[calc(6rem+env(safe-area-inset-bottom))] z-50 mx-auto max-w-md rounded-2xl p-4 sm:bottom-auto sm:left-auto sm:right-4 sm:top-16"
           >
             <div className="flex items-start gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">

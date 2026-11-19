@@ -1,27 +1,31 @@
 import { CommandCentreService } from './command-centre.service';
+import { istDay } from './analytics-window';
 
 /**
  * The numbers on this screen are the ones a business makes decisions on, so the arithmetic is
- * what is pinned here: profit, margin, and the month buckets that must not silently drop a month
- * with no activity.
+ * what is pinned here: profit, margin, the change against the window before, and the buckets that
+ * must not silently drop a period with no activity.
  */
 describe('CommandCentreService', () => {
   const thisMonth = new Date();
-  const monthKey = thisMonth.toISOString().slice(0, 7);
+  const longAgo = new Date(Date.now() - 200 * 86_400_000);
 
   function harness(overrides: Record<string, unknown> = {}) {
     const prisma = {
-      receipt: {
+      order: {
         findMany: jest.fn().mockResolvedValue([
-          { amount: 1000, receivedAt: thisMonth },
-          { amount: 500, receivedAt: thisMonth },
+          { paidAmount: 1000, paidAt: thisMonth },
+          { paidAmount: 500, paidAt: thisMonth },
+          { paidAmount: 300, paidAt: longAgo },
         ]),
-        aggregate: jest.fn().mockResolvedValue({ _sum: { amount: 250 } }),
+        aggregate: jest.fn().mockResolvedValue({ _sum: { paidAmount: 250 } }),
+        count: jest.fn().mockResolvedValue(4),
       },
       expense: {
-        findMany: jest
-          .fn()
-          .mockResolvedValue([{ amount: 600, expenseDate: thisMonth }]),
+        findMany: jest.fn().mockResolvedValue([
+          { amount: 600, expenseDate: thisMonth },
+          { amount: 50, expenseDate: longAgo },
+        ]),
         groupBy: jest.fn().mockResolvedValue([
           { categoryId: 'cat-salary', _sum: { amount: 400 } },
           { categoryId: 'cat-fuel', _sum: { amount: 200 } },
@@ -46,31 +50,14 @@ describe('CommandCentreService', () => {
           .fn()
           .mockResolvedValue([{ id: 'p1', name: 'Ravi', email: 'r@n.dev' }]),
       },
-      order: {
-        groupBy: jest
-          .fn()
-          .mockResolvedValue([{ status: 'PENDING', _count: { _all: 4 } }]),
-        count: jest.fn().mockResolvedValue(4),
-      },
       pickupRequest: {
-        groupBy: jest
-          .fn()
-          .mockResolvedValueOnce([{ status: 'ASSIGNED', _count: { _all: 2 } }])
-          .mockResolvedValueOnce([
-            {
-              assignedPartnerId: 'p1',
-              _count: { _all: 9 },
-              _sum: { collectedAmount: 8100 },
-            },
-          ]),
-      },
-      quote: {
-        count: jest.fn().mockResolvedValue(5),
-        groupBy: jest
-          .fn()
-          .mockResolvedValue([
-            { destCountry: 'United States', _count: { _all: 12 } },
-          ]),
+        groupBy: jest.fn().mockResolvedValue([
+          {
+            assignedPartnerId: 'p1',
+            _count: { _all: 9 },
+            _sum: { collectedAmount: 8100 },
+          },
+        ]),
       },
       ...overrides,
     };
@@ -90,11 +77,22 @@ describe('CommandCentreService', () => {
     expect(result.money.spentToday).toBe(100);
   });
 
+  it('keeps the window before apart, for the change badges', async () => {
+    const { service } = harness();
+
+    const result = await service.get();
+
+    // The default window is 180 days; 200 days ago falls in the one before it.
+    expect(result.money.previousRevenue).toBe(300);
+    expect(result.money.previousExpenses).toBe(50);
+  });
+
   it('leaves the margin undefined when nothing came in, rather than calling it zero', async () => {
     const { service } = harness({
-      receipt: {
+      order: {
         findMany: jest.fn().mockResolvedValue([]),
-        aggregate: jest.fn().mockResolvedValue({ _sum: { amount: null } }),
+        aggregate: jest.fn().mockResolvedValue({ _sum: { paidAmount: null } }),
+        count: jest.fn().mockResolvedValue(0),
       },
     });
 
@@ -105,17 +103,24 @@ describe('CommandCentreService', () => {
     expect(result.money.profit).toBe(-600);
   });
 
-  it('returns six months, oldest first, including the quiet ones', async () => {
+  it('returns every bucket of the chosen range, oldest first, including the quiet ones', async () => {
     const { service } = harness();
+    const today = istDay(new Date());
+    const from = istDay(new Date(Date.now() - 29 * 86_400_000));
 
-    const result = await service.get();
+    const result = await service.get(from, today);
 
-    expect(result.months).toHaveLength(6);
-    expect(result.months.at(-1)!.month).toBe(monthKey);
-    expect(result.months.at(-1)!.revenue).toBe(1500);
-    // A month with no receipts and no expenses is a zero, not a gap — otherwise the chart draws
-    // a straight line across it and lies about the shape of the business.
-    expect(result.months[0]).toMatchObject({
+    expect(result.bucket).toBe('day');
+    expect(result.series).toHaveLength(30);
+    expect(result.series.at(-1)).toMatchObject({
+      start: today,
+      revenue: 1500,
+      expenses: 600,
+    });
+    // A day with no money in or out is a zero, not a gap; otherwise the chart draws straight
+    // across it and lies about the shape of the business.
+    expect(result.series[0]).toMatchObject({
+      start: from,
       revenue: 0,
       expenses: 0,
       profit: 0,

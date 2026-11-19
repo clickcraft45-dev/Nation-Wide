@@ -7,6 +7,8 @@ import { cn } from "@/lib/utils/cn";
 
 interface TrackingSearchFormProps {
   onSubmit: (trackingNumber: string) => void;
+  /** Called when the box is emptied, so a stale "not found" goes with the text that caused it. */
+  onClear?: () => void;
   isLoading?: boolean;
   initialValue?: string;
   /** Override for the submit button — needed when the form sits on a colored surface (e.g. the
@@ -20,6 +22,7 @@ interface TrackingSearchFormProps {
 // two controls to sit on one line without cramping the input.
 export function TrackingSearchForm({
   onSubmit,
+  onClear,
   isLoading,
   initialValue,
   submitButtonClassName,
@@ -37,7 +40,10 @@ export function TrackingSearchForm({
       <div className="flex-1">
         <SearchInput
           value={value}
-          onChange={(e) => setValue(e.target.value)}
+          onChange={(e) => {
+            setValue(e.target.value);
+            if (!e.target.value.trim()) onClear?.();
+          }}
           placeholder="Order ID / Tracking ID"
           aria-label="Order ID or tracking ID"
           className="h-11 pl-10 text-base"

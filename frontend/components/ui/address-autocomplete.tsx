@@ -18,7 +18,7 @@ interface Suggestion {
   prediction: google.maps.places.PlacePrediction;
 }
 
-export interface AddressAutocompleteProps extends Omit<InputProps, "onChange" | "value" | "onSelect"> {
+interface AddressAutocompleteProps extends Omit<InputProps, "onChange" | "value" | "onSelect"> {
   value: string;
   onChange: (value: string) => void;
   /** A suggestion was picked: the full address, with its coordinates. */

@@ -159,6 +159,16 @@ export class RateSheetImportService {
         const zonesInDb = await tx.zone.findMany({
           where: { rateProviderId: provider.id },
         });
+        const realId = new Map<string, string>();
+        for (const place of plan.added) {
+          const row = await tx.country.upsert({
+            where: { code: place.code },
+            create: { code: place.code, name: place.name },
+            update: {},
+          });
+          realId.set(place.id, row.id);
+          result.countriesAdded = (result.countriesAdded ?? 0) + 1;
+        }
 
         for (const z of planned.zones.values()) {
           let zone = zonesInDb.find(
@@ -256,7 +266,8 @@ export class RateSheetImportService {
             }
           }
 
-          for (const country of z.countries.values()) {
+          for (const planned of z.countries.values()) {
+            const country = { id: realId.get(planned.id) ?? planned.id };
             const link = await tx.zoneCountry.findUnique({
               where: {
                 rateProviderId_countryId: {
@@ -300,6 +311,7 @@ export class RateSheetImportService {
               bandsUpdated: result.bandsUpdated,
               bandsDeactivated: result.bandsDeactivated,
               countriesLinked: result.countriesLinked,
+              countriesAdded: result.countriesAdded ?? 0,
             },
           },
         });
@@ -357,11 +369,21 @@ export class RateSheetImportService {
     const matcher = new CountryMatcher(await this.prisma.country.findMany());
     const plan = buildPlan(picked.tables, matcher);
     const warnings = [...picked.warnings, ...plan.warnings];
+    if (plan.added.length > 0) {
+      const n = plan.added.length;
+      warnings.push(
+        `Adds ${n} destination${n === 1 ? '' : 's'} the country list did not have, so customers can pick ${n === 1 ? 'it' : 'them'}: ` +
+          `${plan.added
+            .slice(0, 10)
+            .map((c) => c.name)
+            .join(', ')}${n > 10 ? `, and ${n - 10} more` : ''}.`,
+      );
+    }
     if (plan.unmatched.length > 0) {
       const n = plan.unmatched.length;
       warnings.push(
         `${n} destination${n === 1 ? '' : 's'} in the sheet could not be matched to a country, so customers there won't get these rates: ` +
-          `${plan.unmatched.slice(0, 8).join(', ')}${n > 8 ? ', …' : ''}.`,
+          `${plan.unmatched.slice(0, 8).join(', ')}${n > 8 ? `, and ${n - 8} more` : ''}.`,
       );
     }
     return {
@@ -661,6 +683,8 @@ interface Plan {
   providers: Map<string, PlanProvider>;
   unmatched: string[];
   warnings: string[];
+  /** Destinations the sheet prices that the country list lacks; created when the sheet is applied. */
+  added: Country[];
 }
 
 /**
@@ -672,7 +696,12 @@ export function buildPlan(
   tables: DetectedTable[],
   matcher: CountryMatcher,
 ): Plan {
-  const plan: Plan = { providers: new Map(), unmatched: [], warnings: [] };
+  const plan: Plan = {
+    providers: new Map(),
+    unmatched: [],
+    warnings: [],
+    added: [],
+  };
 
   for (const table of tables) {
     for (const detected of table.providers) {
@@ -713,6 +742,11 @@ export function buildPlan(
     }
   }
   plan.unmatched = [...new Set(plan.unmatched)];
+  plan.added = matcher.added.filter((c) =>
+    [...plan.providers.values()].some((p) =>
+      [...p.zones.values()].some((z) => z.countries.has(c.id)),
+    ),
+  );
   return plan;
 }
 
@@ -770,22 +804,37 @@ function linkCountries(
 
   for (const detected of table.providers) {
     if (table.kind === 'zone-grid') {
-      const byName = new Map(
-        detected.zones.map((z) => [z.name.toLowerCase(), z]),
-      );
+      // The grid's "Zone A" is the list's "A".
+      const zoneKey = (name: string) =>
+        name
+          .toLowerCase()
+          .replace(/^zone\s*/, '')
+          .trim();
+      const byName = new Map(detected.zones.map((z) => [zoneKey(z.name), z]));
       const missingZones = new Set<string>();
       for (const entry of table.countryMap) {
-        const country = matcher.entry(entry.country, entry.code);
-        if (!country) {
-          plan.unmatched.push(entry.country);
+        const found =
+          matcher.entry(entry.country, entry.code) ??
+          matcher.place(entry.country);
+        // "St.Maarten, St. Martin": two places sharing one row.
+        const parts = found
+          ? []
+          : entry.country
+              .split(/\s*,\s*/)
+              .map((part) => matcher.entry(part, null) ?? matcher.place(part))
+              .filter((c): c is Country => c !== null);
+        const countries = found ? [found] : parts.length >= 2 ? parts : [];
+        if (countries.length === 0) {
+          if (/[a-z]/i.test(entry.country)) plan.unmatched.push(entry.country);
           continue;
         }
-        const zone = byName.get(entry.zone.toLowerCase());
+        const zone = byName.get(zoneKey(entry.zone));
         if (!zone) {
           missingZones.add(entry.zone);
           continue;
         }
-        assign(detected.code, zone, country, false);
+        for (const country of countries)
+          assign(detected.code, zone, country, false);
       }
       if (missingZones.size > 0) {
         plan.warnings.push(
@@ -912,23 +961,58 @@ const ALIASES: Record<string, string> = {
   'st maarten': 'SX',
   'bonaire st eustatius saba': 'BQ',
   'bonaire sint eustatius and saba': 'BQ',
+  // Plain "Congo" in a carrier list is the Republic; the DRC is always qualified.
+  congo: 'CG',
 };
 
-export function normalizeCountry(value: string): string {
-  return value
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase()
-    .replace(/&/g, ' and ')
-    .replace(/\bsaint\b/g, 'st')
-    .replace(/[’'`.]/g, '')
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim();
+/** The ISO code a carrier's or a person's other name stands for: "USA" is US, "Holland" NL. */
+export function aliasCode(value: string): string | null {
+  return ALIASES[normalizeCountry(value)] ?? null;
+}
+
+function normalizeCountry(value: string): string {
+  return (
+    value
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .toLowerCase()
+      .replace(/&/g, ' and ')
+      .replace(/\bsaint\b/g, 'st')
+      // "St.Maarten" is "St Maarten", not "stmaarten"; "U.S.A" still reads "usa".
+      .replace(/\.(?=[a-z]{2})/g, ' ')
+      .replace(/[’'`.]/g, '')
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim()
+  );
+}
+
+// Every ISO 3166-1 code with its English (CLDR) name, the names the country list was seeded from,
+// so a country a sheet prices but the list lacks ("St. Martin") is added under its usual name.
+const REGION_NAMES = new Intl.DisplayNames(['en'], { type: 'region' });
+const NOT_PLACES = new Set(['EU', 'EZ', 'UN', 'QO', 'XA', 'XB', 'ZZ']);
+const ISO_BY_NAME = new Map<string, string>();
+for (let a = 65; a <= 90; a++)
+  for (let b = 65; b <= 90; b++) {
+    const code = String.fromCharCode(a, b);
+    const name = REGION_NAMES.of(code);
+    if (name && name !== code && !NOT_PLACES.has(code))
+      ISO_BY_NAME.set(normalizeCountry(name), code);
+  }
+
+/**
+ * A region's code is its country's, then the region: "Azores (Portugal)" is PT-AZORES. Pricing
+ * reads the part before the dash to fall back to the country's zone for carriers that do not
+ * list the region on its own.
+ */
+export function regionCode(parentCode: string, region: string): string {
+  return `${parentCode}-${normalizeCountry(region).replace(/ /g, '').toUpperCase().slice(0, 16)}`;
 }
 
 export class CountryMatcher {
   private readonly byCode = new Map<string, Country>();
   private readonly names: { norm: string; country: Country }[] = [];
+  /** Places this sheet needs that the list lacks, with provisional ids ("new:PT-AZORES"). */
+  readonly added: Country[] = [];
 
   constructor(countries: Country[]) {
     for (const country of countries) {
@@ -960,6 +1044,45 @@ export class CountryMatcher {
   anywhere(text: string): Country | null {
     const t = ` ${normalizeCountry(text)} `;
     return this.names.find((n) => t.includes(` ${n.norm} `))?.country ?? null;
+  }
+
+  /**
+   * A destination the country list does not have yet: an ISO country missing from it
+   * ("St. Martin", "Palestinian Territory"), or a region the carrier prices apart from its
+   * country, "Azores (Portugal)", added under PT-AZORES.
+   */
+  place(name: string): Country | null {
+    const t = normalizeCountry(name);
+    if (!/[a-z]/.test(t)) return null;
+    const iso = ALIASES[t] ?? ISO_BY_NAME.get(t);
+    if (iso)
+      return this.byCode.get(iso) ?? this.add(iso, REGION_NAMES.of(iso)!);
+    const parts = /^(.+?)\s*\((.+)\)\s*$/.exec(name.trim());
+    if (!parts) return null;
+    const parent = this.entry(parts[2], null);
+    if (!parent || parent.code.includes('-')) return null;
+    const region = parts[1].replace(/\s+/g, ' ').trim();
+    if (!/[a-z]/i.test(region)) return null;
+    const code = regionCode(parent.code, region);
+    return (
+      this.byCode.get(code) ?? this.add(code, `${region} (${parent.name})`)
+    );
+  }
+
+  private add(code: string, name: string): Country {
+    const now = new Date();
+    const country: Country = {
+      id: `new:${code}`,
+      code,
+      name,
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.added.push(country);
+    this.byCode.set(code, country);
+    this.names.unshift({ norm: normalizeCountry(name), country });
+    return country;
   }
 
   /** An entry of a carrier's zone list: "Afghanistan (AF)", "Aland Island (Finland)", "Bahama". */

@@ -127,7 +127,7 @@ export function SpreadsheetActions({
   return (
     <div className="flex flex-wrap items-center gap-2">
       <Button size="sm" variant="secondary" onClick={() => download("export")} isLoading={busy === "export"}>
-        <Download className="h-4 w-4" aria-hidden />
+        <Upload className="h-4 w-4" aria-hidden />
         Export Excel
       </Button>
       <Button size="sm" variant="ghost" onClick={() => download("template")} isLoading={busy === "template"}>
@@ -140,7 +140,7 @@ export function SpreadsheetActions({
         onClick={() => fileInput.current?.click()}
         isLoading={busy === "preview"}
       >
-        <Upload className="h-4 w-4" aria-hidden />
+        <Download className="h-4 w-4" aria-hidden />
         Import Excel
       </Button>
       <input

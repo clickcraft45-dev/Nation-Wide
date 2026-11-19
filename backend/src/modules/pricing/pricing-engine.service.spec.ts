@@ -61,6 +61,7 @@ describe('PricingEngineService', () => {
   let prisma: {
     zoneCountry: { findMany: jest.Mock };
     rateCard: { findMany: jest.Mock };
+    country: { findFirst: jest.Mock };
   };
   let service: PricingEngineService;
 
@@ -70,8 +71,51 @@ describe('PricingEngineService', () => {
         findMany: jest.fn().mockResolvedValue([makeZoneCountry()]),
       },
       rateCard: { findMany: jest.fn().mockResolvedValue([]) },
+      country: { findFirst: jest.fn().mockResolvedValue(null) },
     };
     service = new PricingEngineService(prisma as never);
+  });
+
+  // UPS lists the Azores in a zone of its own; DHL prices it as Portugal. A customer shipping
+  // to "Azores (Portugal)" must see both, each from the right zone.
+  it('prices a region from its own zone where listed, and from its country zone elsewhere', async () => {
+    prisma.country.findFirst.mockResolvedValue({ code: 'PT-AZORES' });
+    prisma.zoneCountry.findMany
+      .mockResolvedValueOnce([
+        makeZoneCountry({
+          id: 'zc-ups',
+          zoneId: 'zone-ups-azores',
+          rateProviderId: 'ups',
+        }),
+      ])
+      .mockResolvedValueOnce([
+        makeZoneCountry({
+          id: 'zc-dhl',
+          zoneId: 'zone-dhl-pt',
+          rateProviderId: 'dhl',
+        }),
+      ]);
+
+    await service.computeQuotesForRequest({
+      destinationCountryName: 'Azores (Portugal)',
+      weightKg: 2,
+      shipmentType: 'DOCUMENT',
+    });
+
+    expect(prisma.zoneCountry.findMany).toHaveBeenLastCalledWith({
+      where: {
+        country: { isActive: true, code: 'PT' },
+        rateProvider: { isActive: true },
+        rateProviderId: { notIn: ['ups'] },
+      },
+    });
+    expect(prisma.rateCard.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          zoneId: { in: ['zone-ups-azores', 'zone-dhl-pt'] },
+        }),
+      }),
+    );
   });
 
   it("computes the exact 7-step calculation against the business spec's worked example", async () => {

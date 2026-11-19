@@ -59,7 +59,7 @@ const AUTO_FILLED_PARAM = 'customerName';
 /** Well inside Gupshup's own limit, and far past any real value. */
 const MAX_PARAM_LENGTH = 1000;
 
-export class SendWhatsAppTemplateDto {
+class SendWhatsAppTemplateDto {
   /**
    * One customer or many — the same endpoint either way. Capped because every recipient costs a
    * message fee and is a chance to be blocked or reported, which is what lowers the number's
@@ -82,7 +82,7 @@ export class SendWhatsAppTemplateDto {
   variables!: Record<string, string>;
 }
 
-export class SendWhatsAppTextDto {
+class SendWhatsAppTextDto {
   @IsUUID('all')
   customerId!: string;
 

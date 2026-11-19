@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { DetailLayout } from "@/components/ui/detail-layout";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { useState, type SubmitEvent } from "react";
 import { Send } from "lucide-react";
 import { apiClient, errorMessage } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
@@ -43,7 +45,7 @@ export default function AdminMailPage() {
     return Object.keys(next).length === 0;
   }
 
-  async function handleSubmit(e: FormEvent) {
+  async function handleSubmit(e: SubmitEvent) {
     e.preventDefault();
     if (!validate()) return;
 
@@ -69,7 +71,7 @@ export default function AdminMailPage() {
   }
 
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="space-y-6">
       <div className="space-y-1">
         <h1 className="text-xl font-semibold text-foreground">Send an email</h1>
         <p className="text-sm text-muted-foreground">
@@ -78,64 +80,97 @@ export default function AdminMailPage() {
         </p>
       </div>
 
-      <form onSubmit={handleSubmit} noValidate className="space-y-4">
-        <div className="space-y-1.5">
-          <Label htmlFor="to">To</Label>
-          <Input
-            id="to"
-            type="email"
-            placeholder="customer@example.com"
-            value={form.to}
-            onChange={(e) => setForm((f) => ({ ...f, to: e.target.value }))}
-            error={Boolean(errors.to)}
-          />
-          {errors.to && <FieldError>{errors.to}</FieldError>}
-        </div>
+      <DetailLayout
+        aside={
+          <Card>
+            <CardHeader>
+              <CardTitle>Preview</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm">
+              <p className="text-xs text-muted-foreground">
+                To {form.to.trim() || "recipient"}
+                {form.replyTo.trim() ? ` · replies to ${form.replyTo.trim()}` : ""}
+              </p>
+              <p className="font-semibold text-foreground text-balance">
+                {form.subject.trim() || "Subject"}
+              </p>
+              <div className="space-y-3 border-t border-border pt-3 text-foreground">
+                {form.body.trim() ? (
+                  form.body
+                    .trim()
+                    .split(/\n\s*\n/)
+                    .map((para, i) => (
+                      <p key={i} className="whitespace-pre-line text-pretty">
+                        {para}
+                      </p>
+                    ))
+                ) : (
+                  <p className="text-muted-foreground">Your message appears here as it will be laid out.</p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        }
+      >
+        <form onSubmit={handleSubmit} noValidate className="space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="to">To</Label>
+            <Input
+              id="to"
+              type="email"
+              placeholder="customer@example.com"
+              value={form.to}
+              onChange={(e) => setForm((f) => ({ ...f, to: e.target.value }))}
+              error={Boolean(errors.to)}
+            />
+            {errors.to && <FieldError>{errors.to}</FieldError>}
+          </div>
 
-        <div className="space-y-1.5">
-          <Label htmlFor="subject">Subject</Label>
-          <Input
-            id="subject"
-            value={form.subject}
-            onChange={(e) => setForm((f) => ({ ...f, subject: e.target.value }))}
-            error={Boolean(errors.subject)}
-          />
-          {errors.subject && <FieldError>{errors.subject}</FieldError>}
-        </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="subject">Subject</Label>
+            <Input
+              id="subject"
+              value={form.subject}
+              onChange={(e) => setForm((f) => ({ ...f, subject: e.target.value }))}
+              error={Boolean(errors.subject)}
+            />
+            {errors.subject && <FieldError>{errors.subject}</FieldError>}
+          </div>
 
-        <div className="space-y-1.5">
-          <Label htmlFor="body">Message</Label>
-          <textarea
-            id="body"
-            rows={10}
-            value={form.body}
-            onChange={(e) => setForm((f) => ({ ...f, body: e.target.value }))}
-            className={`w-full rounded-md border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${
-              errors.body ? "border-danger-border" : "border-border"
-            }`}
-            placeholder={"Hello,\n\nBlank lines become paragraphs."}
-          />
-          {errors.body && <FieldError>{errors.body}</FieldError>}
-        </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="body">Message</Label>
+            <textarea
+              id="body"
+              rows={10}
+              value={form.body}
+              onChange={(e) => setForm((f) => ({ ...f, body: e.target.value }))}
+              className={`w-full rounded-md border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${
+                errors.body ? "border-danger-border" : "border-border"
+              }`}
+              placeholder={"Hello,\n\nBlank lines become paragraphs."}
+            />
+            {errors.body && <FieldError>{errors.body}</FieldError>}
+          </div>
 
-        <div className="space-y-1.5">
-          <Label htmlFor="replyTo">Reply-to (optional)</Label>
-          <Input
-            id="replyTo"
-            type="email"
-            placeholder="Leave blank to use the default no-reply address"
-            value={form.replyTo}
-            onChange={(e) => setForm((f) => ({ ...f, replyTo: e.target.value }))}
-            error={Boolean(errors.replyTo)}
-          />
-          {errors.replyTo && <FieldError>{errors.replyTo}</FieldError>}
-        </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="replyTo">Reply-to (optional)</Label>
+            <Input
+              id="replyTo"
+              type="email"
+              placeholder="Leave blank to use the default no-reply address"
+              value={form.replyTo}
+              onChange={(e) => setForm((f) => ({ ...f, replyTo: e.target.value }))}
+              error={Boolean(errors.replyTo)}
+            />
+            {errors.replyTo && <FieldError>{errors.replyTo}</FieldError>}
+          </div>
 
-        <Button type="submit" size="lg" isLoading={isSending}>
-          <Send className="mr-2 h-4 w-4" aria-hidden />
-          {isSending ? "Sending…" : "Send email"}
-        </Button>
-      </form>
+          <Button type="submit" size="lg" isLoading={isSending}>
+            <Send className="mr-2 h-4 w-4" aria-hidden />
+            {isSending ? "Sending…" : "Send email"}
+          </Button>
+        </form>
+      </DetailLayout>
     </div>
   );
 }

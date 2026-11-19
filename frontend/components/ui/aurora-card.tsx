@@ -74,7 +74,7 @@ export function AuroraCard({
   return (
     <div
       className={cn(
-        "relative overflow-hidden rounded-[28px] p-6 text-[#F1F1F1] shadow-xl transition-colors duration-700 sm:p-8",
+        "relative overflow-hidden rounded-3xl p-6 text-[#F1F1F1] shadow-xl transition-colors duration-700 sm:p-8",
         className,
       )}
       style={{
@@ -83,7 +83,7 @@ export function AuroraCard({
       }}
     >
       <div
-        className="pointer-events-none absolute inset-0 rounded-[28px] p-[2px] opacity-80"
+        className="pointer-events-none absolute inset-0 rounded-3xl p-0.5 opacity-80"
         style={{
           background: t.border,
           mask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
@@ -98,7 +98,7 @@ export function AuroraCard({
         <span
           role="img"
           aria-label={TEXT_LOGO.alt}
-          className="block h-7 w-[123px] shrink-0 bg-white sm:h-8 sm:w-[141px]"
+          className="block h-7 w-30.75 shrink-0 bg-white sm:h-8 sm:w-35.25"
           style={{
             maskImage: `url(${TEXT_LOGO.src})`,
             WebkitMaskImage: `url(${TEXT_LOGO.src})`,

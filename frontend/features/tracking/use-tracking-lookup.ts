@@ -4,7 +4,7 @@ import { useCallback, useState } from "react";
 import type { TrackingResultDto } from "@nationwide/shared-types";
 import { apiClient, ApiError } from "@/lib/api-client";
 
-export type TrackingLookupState =
+type TrackingLookupState =
   | { status: "idle" }
   | { status: "loading" }
   | { status: "success"; result: TrackingResultDto }

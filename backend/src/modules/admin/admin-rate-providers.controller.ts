@@ -16,6 +16,7 @@ import {
   IsOptional,
   IsString,
   Max,
+  MaxLength,
   Min,
 } from 'class-validator';
 import type {
@@ -52,6 +53,7 @@ class ApplyFuelSurchargeBody {
 
   @IsOptional()
   @IsString()
+  @MaxLength(120)
   label?: string;
 }
 

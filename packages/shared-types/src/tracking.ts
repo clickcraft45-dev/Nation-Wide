@@ -30,17 +30,21 @@ export interface TrackingCarrierDto {
 
 export interface TrackingResultDto {
   internalTrackingNumber: string;
-  /** Who booked the shipment, as it is on the order. */
+  /** Who booked the shipment, shortened to first name and initial ("Ravi K."): this is public. */
   customerName: string;
   /**
    * The receiving party — name and phone as entered on the booking, whoever entered it (the
    * customer, staff, or the pickup partner at the door). Null only for a booking made before a
-   * destination was recorded at all.
+   * destination was recorded at all. Public, so the name is shortened like customerName and the
+   * phone shows its last four digits only.
    */
   consigneeName: string | null;
   consigneePhone: string | null;
-  /** What is inside, when the order recorded it. Empty when the contents were never captured. */
-  items: ShipmentItemDto[];
+  /**
+   * What is inside, when the order recorded it. Empty when the contents were never captured.
+   * Names and counts only: declared values and HS codes stay off this public answer.
+   */
+  items: Pick<ShipmentItemDto, "description" | "category" | "quantity">[];
   carrier: TrackingCarrierDto | null;
   // null when the shipment exists but no carrier tracking number has been mapped yet
   currentStatus: TrackingStatusCode | null;

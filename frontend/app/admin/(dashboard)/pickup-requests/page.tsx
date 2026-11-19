@@ -168,7 +168,7 @@ export default function AdminPickupRequestsPage() {
                   <span className="font-medium text-foreground">{p.customerName}</span>
                   <p className="text-xs text-muted-foreground">{p.customerPhone}</p>
                 </TableCell>
-                <TableCell className="max-w-[200px] truncate text-muted-foreground">
+                <TableCell className="max-w-50 truncate text-muted-foreground">
                   {p.dropAtWarehouse ? "Warehouse drop-off" : `${p.pickupCity}, ${p.pickupState}`}
                 </TableCell>
                 <TableCell className="text-muted-foreground">{p.rateProviderName ?? "—"}</TableCell>

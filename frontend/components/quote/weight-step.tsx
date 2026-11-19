@@ -49,7 +49,7 @@ export function WeightStep({
   // measures every box at pickup anyway (requireDimensions there), which is what gets priced.
   const requireDimensions = false;
 
-  function handleSubmit(e: React.FormEvent) {
+  function handleSubmit(e: React.SubmitEvent) {
     e.preventDefault();
     const problem = validatePackages(boxes, requireDimensions);
     if (problem) {

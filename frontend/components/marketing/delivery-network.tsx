@@ -141,7 +141,7 @@ export function DeliveryNetwork({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        "relative flex aspect-[564/460] w-full items-center justify-center overflow-hidden rounded-2xl border border-border bg-card p-8 sm:aspect-[564/410]",
+        "relative flex aspect-564/460 w-full items-center justify-center overflow-hidden rounded-2xl border border-border bg-card p-8 sm:aspect-564/410",
         className,
       )}
       aria-hidden
@@ -155,7 +155,7 @@ export function DeliveryNetwork({ className }: { className?: string }) {
           backgroundSize: "32px 32px",
         }}
       />
-      <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-card/70 via-transparent to-card/70" />
+      <div className="pointer-events-none absolute inset-0 bg-linear-to-b from-card/70 via-transparent to-card/70" />
 
       <svg
         className="pointer-events-none absolute inset-0 h-full w-full"

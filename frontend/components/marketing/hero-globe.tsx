@@ -1,105 +1,48 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { isLandAt } from "@/components/marketing/land-mask";
 
-// Rotating dotted globe with air/road freight moving along great-circle routes. Drag to spin it;
-// hover a hub to name it.
+// The hero planet: a dotted world map in black glass, with freight lanes drawing themselves out of
+// India to the hubs NationWide ships to. Drag to turn it; hover a hub to name it.
 //
 // Deliberately plain 2D canvas rather than three.js/WebGL: this is an orthographic projection of
-// points on a sphere, which is a dot product and a divide — a 3D engine (and ~150KB of JS on the
-// landing page's critical path) would buy nothing here. Everything below is pure math + 2D paths.
+// points on a sphere, which is a dot product and a divide. A 3D engine (and ~150KB of JS on the
+// landing page's critical path) would buy nothing here.
 
 type Vec = { x: number; y: number; z: number };
 
-// Sampled over the whole sphere; only the ~29% on land are kept. High, because the hero draws
-// this sphere wider than the viewport — at 4200 the continents thinned out to a scatter nobody
-// could read as a map.
-const DOT_COUNT = 15000;
-const TILT = -0.42; // north pole leaning toward the viewer, radians
-const SPIN = 0.05; // radians per second
-const DRAG_FRICTION = 0.94; // per-frame decay of flick momentum
+// Sampled over the whole sphere; only land is kept (~15k dots). Dense because the hero draws the
+// sphere about a screen wide: at 15k samples the dots sat ~14px apart and the continents read as
+// scatter rather than coastline.
+const DOT_COUNT = 42000;
+const TILT = -0.42; // radians; puts India (about 20°N) in the upper cap the hero shows
+const HOME_LON = 78.5; // the globe faces Hyderabad at rest
+const SWAY = 0.35; // radians either side of home; it never turns India out of view on its own
+const SWAY_SPEED = 0.12; // radians of phase per second, so one sway takes about 50s
+const DRAG_FRICTION = 0.94; // per-frame decay of a flick's momentum
+const DRAG_RETURN = 0.992; // per-frame pull back to home once a drag has stopped
 const HIT_RADIUS = 16; // px around a hub that counts as a hover
+const LANE_PERIOD = 8; // seconds for one lane to draw, arrive and fade
 
 const LIGHT = "228, 228, 231";
-const MID = "161, 161, 170";
 
+// Hyderabad is home: the warehouse every pickup goes back to. The rest are where the lanes land.
+const ORIGIN = { name: "Hyderabad", lat: 17.4, lon: 78.5 };
 const HUBS = [
-  { name: "Mumbai", lat: 19.1, lon: 72.9 },
-  { name: "Hyderabad", lat: 17.4, lon: 78.5 },
   { name: "Dubai", lat: 25.2, lon: 55.3 },
   { name: "London", lat: 51.5, lon: -0.1 },
+  { name: "Frankfurt", lat: 50.1, lon: 8.7 },
   { name: "New York", lat: 40.7, lon: -74.0 },
+  { name: "Toronto", lat: 43.7, lon: -79.4 },
   { name: "Singapore", lat: 1.35, lon: 103.8 },
+  { name: "Hong Kong", lat: 22.3, lon: 114.2 },
   { name: "Sydney", lat: -33.9, lon: 151.2 },
 ];
 
-// Every lane starts or ends in India — outbound freight to each hub and an inbound leg on the
-// same arc, so the globe shows two-way traffic rather than a one-way fan-out.
-// `air` arcs climb well off the surface and carry a plane; `road` arcs hug it and carry a truck.
-const ROUTES = [
-  { from: 0, to: 1, mode: "road" as const, speed: 0.13, phase: 0.0 },
-  { from: 0, to: 2, mode: "air" as const, speed: 0.075, phase: 0.35 },
-  { from: 0, to: 3, mode: "air" as const, speed: 0.06, phase: 0.1 },
-  { from: 0, to: 4, mode: "air" as const, speed: 0.05, phase: 0.6 },
-  { from: 1, to: 5, mode: "air" as const, speed: 0.07, phase: 0.8 },
-  { from: 1, to: 6, mode: "air" as const, speed: 0.055, phase: 0.25 },
-];
-
-
-// Coarse continent outlines as [lon, lat] rings — enough resolution for a dot map at this size,
-// and small enough to keep inline rather than shipping a topojson + a projection library.
-const LAND: [number, number][][] = [
-  // North America
-  [[-168, 66], [-155, 71], [-130, 70], [-110, 69], [-95, 70], [-80, 73], [-65, 66], [-55, 52],
-   [-65, 45], [-70, 41], [-76, 35], [-80, 25], [-84, 30], [-90, 29], [-97, 26], [-95, 18],
-   [-88, 16], [-83, 9], [-78, 8], [-83, 13], [-92, 16], [-105, 20], [-110, 24], [-114, 30],
-   [-120, 34], [-124, 40], [-125, 48], [-133, 55], [-145, 60], [-160, 58]],
-  // Greenland
-  [[-45, 60], [-55, 70], [-45, 78], [-30, 82], [-20, 75], [-25, 68], [-35, 62]],
-  // South America
-  [[-81, 8], [-76, 10], [-70, 12], [-62, 10], [-52, 5], [-50, 0], [-44, -2], [-35, -6],
-   [-38, -13], [-48, -25], [-56, -35], [-62, -40], [-65, -45], [-68, -53], [-73, -52],
-   [-72, -45], [-71, -35], [-71, -25], [-70, -18], [-76, -14], [-81, -6], [-80, 0], [-78, 4]],
-  // Europe
-  [[-10, 36], [-9, 44], [-2, 49], [3, 52], [8, 54], [12, 57], [18, 60], [24, 63], [30, 65],
-   [40, 67], [45, 58], [48, 50], [40, 46], [33, 44], [28, 41], [22, 40], [16, 40], [12, 45],
-   [5, 43], [-3, 40]],
-  // Britain and Ireland
-  [[-10, 52], [-6, 55], [-3, 58], [0, 54], [1, 51], [-5, 50]],
-  // Africa
-  [[-17, 15], [-10, 20], [0, 25], [10, 32], [20, 33], [30, 31], [33, 27], [37, 20], [43, 12],
-   [51, 12], [48, 4], [41, -2], [40, -12], [35, -20], [32, -26], [27, -34], [20, -35],
-   [15, -28], [12, -18], [9, -2], [9, 4], [0, 5], [-8, 4], [-13, 9]],
-  // Madagascar
-  [[43, -12], [50, -16], [48, -25], [44, -22]],
-  // Asia, including the Indian peninsula
-  [[45, 42], [55, 50], [65, 58], [75, 65], [90, 72], [105, 76], [120, 73], [135, 71], [150, 70],
-   [165, 68], [178, 66], [170, 60], [160, 58], [140, 55], [135, 48], [130, 42], [122, 37],
-   [120, 30], [112, 22], [108, 15], [105, 10], [100, 6], [98, 12], [94, 16], [90, 22], [88, 21],
-   [80, 8], [76, 15], [72, 20], [68, 24], [63, 25], [57, 22], [52, 15], [45, 13], [43, 20],
-   [48, 28], [50, 35]],
-  // Japan
-  [[129, 32], [133, 34], [139, 36], [142, 42], [145, 44], [143, 40], [137, 34], [132, 31]],
-  // Australia
-  [[113, -22], [115, -34], [118, -35], [125, -33], [131, -32], [137, -35], [141, -38], [146, -39],
-   [150, -37], [153, -32], [153.5, -27], [148, -20], [143, -14], [136, -12], [130, -12],
-   [125, -14], [118, -18]],
-  // New Zealand
-  [[166, -46], [174, -41], [178, -38], [173, -35], [170, -42]],
-];
-
-/** Ray-cast point-in-polygon over the outlines above. Exported for the unit test. */
+/** Whether a point is on land. Exported for the unit test. */
 export function isLand(lat: number, lon: number): boolean {
-  for (const ring of LAND) {
-    let inside = false;
-    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-      const [xi, yi] = ring[i];
-      const [xj, yj] = ring[j];
-      if (yi > lat !== yj > lat && lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) inside = !inside;
-    }
-    if (inside) return true;
-  }
-  return false;
+  return isLandAt(lat, lon);
 }
 
 function fromLatLon(lat: number, lon: number): Vec {
@@ -110,13 +53,13 @@ function fromLatLon(lat: number, lon: number): Vec {
 
 /**
  * Point at `f` (0..1) along the great circle from `a` to `b`, lifted by `altitude` at the midpoint.
- * Exported for the unit test — the endpoints and the apex are the only things worth pinning down.
+ * Exported for the unit test: the endpoints and the apex are the only things worth pinning down.
  */
 export function arcPoint(a: Vec, b: Vec, f: number, altitude: number): Vec {
   const dot = Math.min(1, Math.max(-1, a.x * b.x + a.y * b.y + a.z * b.z));
   const omega = Math.acos(dot);
   const sin = Math.sin(omega);
-  // Antipodal or identical points have no unique great circle — fall back to a linear blend.
+  // Antipodal or identical points have no unique great circle, so fall back to a linear blend.
   const [wa, wb] =
     sin < 1e-6 ? [1 - f, f] : [Math.sin((1 - f) * omega) / sin, Math.sin(f * omega) / sin];
   const lift = 1 + altitude * Math.sin(Math.PI * f);
@@ -128,7 +71,7 @@ export function arcPoint(a: Vec, b: Vec, f: number, altitude: number): Vec {
 }
 
 // Evenly-spaced points on a sphere. The golden-angle spiral gives a uniform scatter with no polar
-// clumping, which is what makes the dot field read as a solid surface rather than a wireframe.
+// clumping, which is what makes the dot field read as a surface rather than a wireframe.
 function fibonacciSphere(count: number): Vec[] {
   const points: Vec[] = [];
   const golden = Math.PI * (3 - Math.sqrt(5));
@@ -142,7 +85,7 @@ function fibonacciSphere(count: number): Vec[] {
 }
 
 function spin(p: Vec, angle: number): Vec {
-  // Rotate about the globe's axis, then tilt that axis toward the viewer.
+  // Rotate about the globe's axis, then tilt that axis.
   const cos = Math.cos(angle);
   const sin = Math.sin(angle);
   const x = p.x * cos + p.z * sin;
@@ -151,6 +94,8 @@ function spin(p: Vec, angle: number): Vec {
   const st = Math.sin(TILT);
   return { x, y: p.y * ct - z * st, z: p.y * st + z * ct };
 }
+
+const easeOut = (u: number) => 1 - Math.pow(1 - u, 3);
 
 export function HeroGlobe({ className }: { className?: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -164,7 +109,15 @@ export function HeroGlobe({ className }: { className?: string }) {
     const dots = fibonacciSphere(DOT_COUNT).filter((p) =>
       isLand((Math.asin(p.y) * 180) / Math.PI, (Math.atan2(p.z, p.x) * 180) / Math.PI),
     );
+    const origin = fromLatLon(ORIGIN.lat, ORIGIN.lon);
     const hubs = HUBS.map((h) => fromLatLon(h.lat, h.lon));
+    // Longer lanes climb higher, so a short hop to Dubai stays low and London clears the curve.
+    const altitudes = hubs.map((h) => {
+      const dot = Math.min(1, Math.max(-1, origin.x * h.x + origin.y * h.y + origin.z * h.z));
+      return 0.06 + 0.2 * (Math.acos(dot) / Math.PI);
+    });
+    // In spin(), a point at longitude L faces the viewer when angle = L - 90°.
+    const home = ((HOME_LON - 90) * Math.PI) / 180;
     const reduced = Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches);
 
     let width = 0;
@@ -173,8 +126,8 @@ export function HeroGlobe({ className }: { className?: string }) {
     let running = false;
     const started = performance.now();
 
-    // Interaction state. A drag adds to the automatic spin; releasing mid-drag keeps the momentum
-    // and lets friction bleed it off, so a flick feels like a flick.
+    // A drag adds to the sway; releasing mid-drag keeps the momentum and lets friction bleed it
+    // off, then the globe drifts back so India is in view again.
     let dragAngle = 0;
     let dragVelocity = 0;
     let dragging = false;
@@ -187,28 +140,36 @@ export function HeroGlobe({ className }: { className?: string }) {
       const cy = height / 2;
       const radius = Math.min(width, height) * 0.4;
 
-      if (!dragging && dragVelocity !== 0) {
-        dragAngle += dragVelocity;
-        dragVelocity *= DRAG_FRICTION;
-        if (Math.abs(dragVelocity) < 0.00005) dragVelocity = 0;
+      if (!dragging) {
+        if (dragVelocity !== 0) {
+          dragAngle += dragVelocity;
+          dragVelocity *= DRAG_FRICTION;
+          if (Math.abs(dragVelocity) < 0.00005) dragVelocity = 0;
+        } else if (!reduced) {
+          dragAngle *= DRAG_RETURN;
+        }
       }
 
-      const angle = t * SPIN + dragAngle;
-      const project = (p: Vec) => ({ sx: cx + p.x * radius, sy: cy - p.y * radius, z: p.z });
+      const angle = home + (reduced ? 0 : SWAY * Math.sin(t * SWAY_SPEED)) + dragAngle;
+      // x is negated: with the viewer on +z, fromLatLon's longitude runs east to the left, which
+      // drew the world mirrored (India to the right of Australia). Flipping it on screen puts east
+      // on the right without touching the sphere maths the arcs and tests rely on.
+      const project = (p: Vec) => {
+        const s = spin(p, angle);
+        return { sx: cx - s.x * radius, sy: cy - s.y * radius, z: s.z };
+      };
 
       ctx.clearRect(0, 0, width, height);
 
-      // Contact shadow: the page behind this is white, so the planet needs a soft dark bleed
-      // off the limb to sit on it rather than look like a sticker cut out of it.
-      const shadow = ctx.createRadialGradient(cx, cy, radius * 0.98, cx, cy, radius * 1.14);
-      shadow.addColorStop(0, "rgba(9, 9, 11, 0.30)");
+      // Contact shadow: the page behind is white, so the planet needs a soft dark bleed off the
+      // limb to sit on it rather than look cut out of it.
+      const shadow = ctx.createRadialGradient(cx, cy, radius * 0.98, cx, cy, radius * 1.12);
+      shadow.addColorStop(0, "rgba(9, 9, 11, 0.26)");
       shadow.addColorStop(1, "rgba(9, 9, 11, 0)");
       ctx.fillStyle = shadow;
       ctx.fillRect(0, 0, width, height);
 
-      // The planet body — black glass, and opaque, so the far side of the dot field is hidden
-      // behind it the way a real horizon hides it rather than showing through as ghost
-      // continents.
+      // The body: black glass, opaque, so the far side of the map is hidden behind a horizon.
       const body = ctx.createRadialGradient(
         cx - radius * 0.3,
         cy - radius * 0.5,
@@ -217,26 +178,24 @@ export function HeroGlobe({ className }: { className?: string }) {
         cy,
         radius,
       );
-      body.addColorStop(0, "#24242c");
-      body.addColorStop(0.55, "#101014");
+      body.addColorStop(0, "#26262e");
+      body.addColorStop(0.55, "#111115");
       body.addColorStop(1, "#050506");
       ctx.fillStyle = body;
       ctx.beginPath();
       ctx.arc(cx, cy, radius, 0, Math.PI * 2);
       ctx.fill();
 
-      // Dot field — front hemisphere only now that the body is opaque. Depth drives alpha and
-      // size, which is the whole 3D read. Bright enough that the continents read at a glance:
-      // on the hero only the top cap of this sphere is on screen, and dots up there are close
-      // to the limb, so a depth-only ramp would fade exactly the part people can see.
-      // ponytail: squares, not arcs. At 1–2px a rect and a circle are the same pixels, and
-      // fillRect is several times cheaper across ~4k dots a frame. Go back to arcs only if the
-      // globe is ever drawn small enough for the shape to show.
+      // The map. Dot size follows the globe's size so the pitch reads the same on a phone and a
+      // wide screen; depth drives brightness, which is the whole 3D read.
+      // ponytail: squares, not arcs. At 1-3px a rect and a circle are the same pixels, and
+      // fillRect is several times cheaper across ~7k visible dots a frame.
+      const unit = Math.max(1, radius / 360);
       for (const dot of dots) {
-        const { sx, sy, z } = project(spin(dot, angle));
+        const { sx, sy, z } = project(dot);
         if (z <= 0) continue;
-        const size = 1 + z * 0.9;
-        ctx.fillStyle = `rgba(244, 244, 245, ${0.45 + z * 0.45})`;
+        const size = unit * (0.9 + z * 0.7);
+        ctx.fillStyle = `rgba(244, 244, 245, ${0.28 + z * 0.6})`;
         ctx.fillRect(sx - size / 2, sy - size / 2, size, size);
       }
 
@@ -246,29 +205,31 @@ export function HeroGlobe({ className }: { className?: string }) {
       ctx.arc(cx, cy, radius, 0, Math.PI * 2);
       ctx.clip();
       const sheen = ctx.createLinearGradient(cx, cy - radius, cx, cy + radius * 0.1);
-      sheen.addColorStop(0, "rgba(255, 255, 255, 0.16)");
+      sheen.addColorStop(0, "rgba(255, 255, 255, 0.14)");
       sheen.addColorStop(1, "rgba(255, 255, 255, 0)");
       ctx.fillStyle = sheen;
       ctx.fillRect(cx - radius, cy - radius, radius * 2, radius * 2);
       ctx.restore();
 
-      for (const route of ROUTES) {
-        const a = hubs[route.from];
-        const b = hubs[route.to];
-        const air = route.mode === "air";
-        const altitude = air ? 0.22 : 0.03;
-        const tone = air ? LIGHT : MID;
+      // Lanes. Each one in turn draws out from Hyderabad, its hub pings on arrival, then it fades,
+      // staggered so one or two are always in flight. Reduced motion gets every lane drawn, still.
+      ctx.lineCap = "round";
+      hubs.forEach((hub, i) => {
+        const altitude = altitudes[i];
+        const u = reduced ? 1 : (((t + (i * LANE_PERIOD) / hubs.length) % LANE_PERIOD) / LANE_PERIOD);
+        const reach = reduced ? 1 : easeOut(Math.min(1, u / 0.45));
+        const fade = reduced ? 0.55 : u < 0.55 ? 1 : Math.max(0, 1 - (u - 0.55) / 0.45);
+        if (fade <= 0) return;
 
-        // The arc itself, dropped segment by segment as it wraps behind the globe.
-        ctx.lineWidth = air ? 1.3 : 1.1;
-        ctx.lineCap = "round";
+        const steps = 48;
         let previous: { sx: number; sy: number; z: number } | null = null;
-        for (let i = 0; i <= 60; i++) {
-          const point = project(spin(arcPoint(a, b, i / 60, altitude), angle));
-          // Front hemisphere only — anything further round is behind an opaque planet.
+        for (let s = 0; s <= steps; s++) {
+          const f = (s / steps) * reach;
+          const point = project(arcPoint(origin, hub, f, altitude));
           if (previous && (previous.z > 0 || point.z > 0)) {
             const depth = Math.max(0, (previous.z + point.z) / 2);
-            ctx.strokeStyle = `rgba(${tone}, ${0.1 + depth * 0.35})`;
+            ctx.strokeStyle = `rgba(${LIGHT}, ${(0.18 + depth * 0.55) * fade})`;
+            ctx.lineWidth = 1.1 * unit;
             ctx.beginPath();
             ctx.moveTo(previous.sx, previous.sy);
             ctx.lineTo(point.sx, point.sy);
@@ -277,66 +238,42 @@ export function HeroGlobe({ className }: { className?: string }) {
           previous = point;
         }
 
-        // The freight itself, plus a short comet trail behind it. `dir` is +1 for the outbound
-        // leg and -1 for the one flying home, so trail and nose both point the right way.
-        const drawMover = (progress: number, dir: 1 | -1) => {
-          const here = project(spin(arcPoint(a, b, progress, altitude), angle));
-          if (here.z <= 0) return;
-
-          for (let i = 1; i <= 8; i++) {
-            const behind = progress - i * 0.012 * dir;
-            if (behind < 0 || behind > 1) break;
-            const trail = project(spin(arcPoint(a, b, behind, altitude), angle));
-            if (trail.z <= 0) continue;
-            ctx.fillStyle = `rgba(${tone}, ${0.3 * (1 - i / 8)})`;
-            ctx.beginPath();
-            ctx.arc(trail.sx, trail.sy, 1.5 * (1 - i / 9), 0, Math.PI * 2);
-            ctx.fill();
-          }
-
-          const ahead = project(
-            spin(arcPoint(a, b, Math.min(1, Math.max(0, progress + 0.01 * dir)), altitude), angle),
-          );
-          const heading = Math.atan2(ahead.sy - here.sy, ahead.sx - here.sx);
-
+        if (reduced) return;
+        // The parcel: a bright head on the leading edge while the lane is still drawing.
+        if (u < 0.45 && previous && previous.z > 0) {
           ctx.save();
-          ctx.translate(here.sx, here.sy);
-          ctx.rotate(heading);
-          ctx.shadowBlur = 10;
-          ctx.shadowColor = `rgba(${tone}, 0.9)`;
-          ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
+          ctx.shadowBlur = 12;
+          ctx.shadowColor = "rgba(255, 255, 255, 0.9)";
+          ctx.fillStyle = "rgba(255, 255, 255, 0.98)";
           ctx.beginPath();
-          if (air) {
-            // Swept-wing dart pointing along the heading.
-            ctx.moveTo(5, 0);
-            ctx.lineTo(-3, 3.2);
-            ctx.lineTo(-1.2, 0);
-            ctx.lineTo(-3, -3.2);
-          } else {
-            ctx.rect(-2.6, -2, 5.2, 4);
-          }
-          ctx.closePath();
+          ctx.arc(previous.sx, previous.sy, 2.2 * unit, 0, Math.PI * 2);
           ctx.fill();
           ctx.restore();
-        };
+        }
+        // Arrival: one ring opening out from the hub, once per delivery rather than a loop.
+        if (u >= 0.45 && u < 0.7) {
+          const { sx, sy, z } = project(hub);
+          if (z > 0) {
+            const p = (u - 0.45) / 0.25;
+            ctx.strokeStyle = `rgba(255, 255, 255, ${(1 - p) * 0.8 * z})`;
+            ctx.lineWidth = 1.2;
+            ctx.beginPath();
+            ctx.arc(sx, sy, (3 + p * 14) * unit, 0, Math.PI * 2);
+            ctx.stroke();
+          }
+        }
+      });
 
-        const cycle = t * route.speed + route.phase;
-        drawMover(cycle % 1, 1);
-        drawMover(1 - ((cycle + 0.5) % 1), -1);
-      }
-
-      // Hubs last, so they sit on top of the routes leaving them. Hit-testing happens here too,
-      // because this is where their projected screen positions are already known.
-      ctx.shadowBlur = 0;
+      // Hubs last, so they sit on top of the lanes. Hit-testing happens here too, because this is
+      // where their projected screen positions are already known.
       let nearestIndex: number | null = null;
       let nearestX = 0;
       let nearestY = 0;
       let nearestDistance = HIT_RADIUS;
-
-      hubs.forEach((hub, index) => {
-        const { sx, sy, z } = project(spin(hub, angle));
+      const places = [origin, ...hubs];
+      places.forEach((place, index) => {
+        const { sx, sy, z } = project(place);
         if (z <= 0) return;
-
         if (pointer) {
           const distance = Math.hypot(pointer.x - sx, pointer.y - sy);
           if (distance < nearestDistance) {
@@ -346,27 +283,27 @@ export function HeroGlobe({ className }: { className?: string }) {
             nearestY = sy;
           }
         }
-
+        const isOrigin = index === 0;
         const active = hovered === index;
-        const pulse = 0.5 + 0.5 * Math.sin(t * 2 + sx);
-        ctx.strokeStyle = `rgba(${LIGHT}, ${(active ? 0.85 : 0.35) * z})`;
-        ctx.lineWidth = 1;
+        if (isOrigin) {
+          ctx.strokeStyle = `rgba(255, 255, 255, ${0.55 * z})`;
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.arc(sx, sy, 6 * unit, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        ctx.fillStyle = `rgba(255, 255, 255, ${0.6 + z * 0.4})`;
         ctx.beginPath();
-        ctx.arc(sx, sy, 4 + pulse * 4, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.fillStyle = `rgba(255, 255, 255, ${0.55 + z * 0.45})`;
-        ctx.beginPath();
-        ctx.arc(sx, sy, active ? 3 : 2, 0, Math.PI * 2);
+        ctx.arc(sx, sy, (active || isOrigin ? 3 : 2) * unit, 0, Math.PI * 2);
         ctx.fill();
       });
 
-      // The limb, drawn last so it sits over everything: a glass edge caught by the light,
-      // weighted to the top. Drawn just inside the radius so it reads as the inner wall of the
-      // glass rather than a stroke sitting on the white page outside it.
+      // The limb, drawn last: a glass edge caught by the light, weighted to the top, just inside
+      // the radius so it reads as the inner wall of the glass rather than a stroke on the page.
       const rim = ctx.createLinearGradient(cx, cy - radius, cx, cy + radius);
-      rim.addColorStop(0, "rgba(255, 255, 255, 0.75)");
-      rim.addColorStop(0.4, `rgba(${LIGHT}, 0.30)`);
-      rim.addColorStop(1, `rgba(${MID}, 0.10)`);
+      rim.addColorStop(0, "rgba(255, 255, 255, 0.7)");
+      rim.addColorStop(0.4, `rgba(${LIGHT}, 0.28)`);
+      rim.addColorStop(1, "rgba(161, 161, 170, 0.1)");
       ctx.strokeStyle = rim;
       ctx.lineWidth = 2;
       ctx.beginPath();
@@ -374,22 +311,19 @@ export function HeroGlobe({ className }: { className?: string }) {
       ctx.stroke();
 
       hovered = nearestIndex;
-
       if (nearestIndex !== null) {
-        const label = HUBS[nearestIndex].name;
-        ctx.font = "500 12px system-ui, sans-serif";
+        const label = nearestIndex === 0 ? `${ORIGIN.name} (home)` : HUBS[nearestIndex - 1].name;
+        ctx.font = "500 12px Poppins, system-ui, sans-serif";
         const boxWidth = ctx.measureText(label).width + 18;
         const boxX = Math.min(Math.max(nearestX - boxWidth / 2, 4), Math.max(width - boxWidth - 4, 4));
         const boxY = Math.max(nearestY - 34, 4);
-
-        ctx.fillStyle = "rgba(9, 9, 11, 0.88)";
+        ctx.fillStyle = "rgba(9, 9, 11, 0.9)";
         ctx.strokeStyle = `rgba(${LIGHT}, 0.25)`;
         ctx.lineWidth = 1;
         ctx.beginPath();
-        ctx.rect(boxX, boxY, boxWidth, 24);
+        ctx.roundRect(boxX, boxY, boxWidth, 24, 6);
         ctx.fill();
         ctx.stroke();
-
         ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
         ctx.textBaseline = "middle";
         ctx.fillText(label, boxX + 9, boxY + 13);
@@ -400,8 +334,8 @@ export function HeroGlobe({ className }: { className?: string }) {
 
     const resize = () => {
       const rect = canvas.getBoundingClientRect();
-      // The hero planet is wider than the viewport, so a retina backing store there would be a
-      // ~90MB texture for a decorative dot field. Drop to 1x once the canvas is that big.
+      // The hero planet is about a screen wide, so a retina backing store there would be a ~90MB
+      // texture for a decorative dot field. Drop to 1x once the canvas is that big.
       const dpr = Math.min(window.devicePixelRatio || 1, rect.width > 1400 ? 1 : 2);
       width = rect.width;
       height = rect.height;
@@ -416,8 +350,8 @@ export function HeroGlobe({ className }: { className?: string }) {
       frameId = requestAnimationFrame(frame);
     };
 
-    // Reduced motion still gets to drag it — the objection is to unrequested movement, not to
-    // movement the visitor asked for. Each interaction just repaints once.
+    // Reduced motion can still drag it: the objection is to unrequested movement, not movement the
+    // visitor asked for. Each interaction repaints once.
     const repaintIfIdle = () => {
       if (!running) draw(reduced ? 0 : (performance.now() - started) / 1000);
     };
@@ -433,8 +367,9 @@ export function HeroGlobe({ className }: { className?: string }) {
       const rect = canvas.getBoundingClientRect();
       pointer = { x: event.clientX - rect.left, y: event.clientY - rect.top };
       if (dragging) {
-        // A full canvas width ≈ half a turn, which makes the globe feel attached to the finger.
-        const delta = ((event.clientX - lastPointerX) / Math.max(rect.width, 1)) * Math.PI;
+        // A full canvas width is about half a turn, which makes the globe feel held. Negative,
+        // because the screen x is mirrored (see project): dragging right turns the surface right.
+        const delta = -((event.clientX - lastPointerX) / Math.max(rect.width, 1)) * Math.PI;
         dragAngle += delta;
         dragVelocity = delta * 0.35;
         lastPointerX = event.clientX;
@@ -465,8 +400,8 @@ export function HeroGlobe({ className }: { className?: string }) {
     resizeObserver.observe(canvas);
     resize();
 
-    // Only animate while on screen — a hero that keeps burning a rAF loop after the visitor has
-    // scrolled to the footer is a battery drain for nothing.
+    // Only animate while on screen: a hero that keeps a rAF loop going after the visitor has
+    // scrolled to the footer drains the battery for nothing.
     let intersectionObserver: IntersectionObserver | null = null;
     if (!reduced && typeof IntersectionObserver !== "undefined") {
       intersectionObserver = new IntersectionObserver(([entry]) => {
@@ -493,12 +428,11 @@ export function HeroGlobe({ className }: { className?: string }) {
   return (
     <canvas
       ref={canvasRef}
-      // touch-pan-y: a horizontal drag spins the globe, a vertical one still scrolls the page —
-      // the planet spans the foot of the hero, so swallowing vertical swipes would trap a
-      // phone visitor there.
+      // touch-pan-y: a horizontal drag turns the globe, a vertical one still scrolls the page. The
+      // planet spans the foot of the hero, so swallowing vertical swipes would trap a phone visitor.
       className={`touch-pan-y ${className ?? ""}`}
       role="img"
-      aria-label="Interactive dotted world map globe showing air and road freight moving between India and NationWide Logistics hubs worldwide. Drag to rotate."
+      aria-label="Dotted world map globe showing freight lanes from Hyderabad to NationWide's hubs in Dubai, London, Frankfurt, New York, Toronto, Singapore, Hong Kong and Sydney. Drag to rotate."
     />
   );
 }

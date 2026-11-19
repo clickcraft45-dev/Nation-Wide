@@ -56,7 +56,7 @@ export function ShipmentAwbCard({
     }
   }
 
-  async function submit(e: React.FormEvent) {
+  async function submit(e: React.SubmitEvent) {
     e.preventDefault();
     const awb = value.trim();
     if (!awb) return;

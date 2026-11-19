@@ -25,7 +25,7 @@ import { cn } from "@/lib/utils/cn";
  * screen-reader-only span. A crawler and a screen reader both get the sentence; only the eye gets
  * it letter by letter.
  */
-export type TypeRevealProps = {
+type TypeRevealProps = {
   text: string;
   /** Rendered element. Copy blocks are paragraphs; headings pass their level. */
   as?: "p" | "h1" | "h2" | "h3" | "h4" | "span" | "div";

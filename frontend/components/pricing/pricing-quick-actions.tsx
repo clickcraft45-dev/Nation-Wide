@@ -1,7 +1,6 @@
 import {
   Ban,
   Receipt,
-  FileSpreadsheet,
   FileText,
   Fuel,
   Globe,
@@ -23,15 +22,14 @@ const GROUPS: { title: string; actions: QuickAction[] }[] = [
   {
     title: "Rates",
     actions: [
-      { label: "Providers & rates", href: "/admin/pricing/providers", icon: Receipt },
-      { label: "Rate sheets", href: "/admin/pricing/rate-sheets", icon: FileSpreadsheet },
+      { label: "Providers and rates", href: "/admin/pricing/providers", icon: Receipt },
       { label: "Zones", href: "/admin/pricing/zones", icon: MapPinned },
     ],
   },
   {
-    title: "Charges on top",
+    title: "Surcharges",
     actions: [
-      { label: "Fuel, PSS & margins", href: "/admin/pricing/fuel-pss", icon: Fuel },
+      { label: "Fuel, PSS and margins", href: "/admin/pricing/fuel-pss", icon: Fuel },
       { label: "Cancellation charges", href: "/admin/pricing/fuel-pss?section=cancellation", icon: Ban },
     ],
   },
@@ -40,7 +38,7 @@ const GROUPS: { title: string; actions: QuickAction[] }[] = [
     actions: [{ label: "Countries", href: "/admin/pricing/countries", icon: Globe }],
   },
   {
-    title: "Publish and audit",
+    title: "Publishing and audit",
     actions: [
       { label: "Rate card PDFs", href: "/admin/pricing/pdf-generator", icon: FileText },
       { label: "Rate history", href: "/admin/pricing/rate-history", icon: FileClock },

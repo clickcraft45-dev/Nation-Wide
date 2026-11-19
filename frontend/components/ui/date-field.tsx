@@ -6,7 +6,7 @@ import { CalendarDays } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { Calendar, formatIsoLong, type CalendarProps } from "@/components/ui/calendar";
 
-export interface DateFieldProps
+interface DateFieldProps
   extends Pick<CalendarProps, "markers" | "markerLabel" | "markerTone" | "min" | "max"> {
   id?: string;
   value: string;
@@ -149,7 +149,7 @@ export function DateField({
         onClick={() => setOpen((o) => !o)}
         className={cn(
           "glass-field flex h-9 w-full items-center justify-between gap-2 rounded-lg px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
-          error ? "!border-danger" : "",
+          error ? "border-danger!" : "",
         )}
       >
         <span className={cn(!value && "text-muted-foreground")}>

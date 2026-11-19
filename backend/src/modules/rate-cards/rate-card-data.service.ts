@@ -17,12 +17,12 @@ import {
 // a single flat price stops making sense for an unbounded weight range.
 const OPEN_ENDED_WEIGHT_SENTINEL_KG = 999.99;
 
-export interface BuildRateCardCountryInput {
+interface BuildRateCardCountryInput {
   countryId: string;
   transitTime?: string;
 }
 
-export interface BuildRateCardDataInput {
+interface BuildRateCardDataInput {
   rateProviderId: string;
   shipmentType: ShipmentTypeCode;
   countries: BuildRateCardCountryInput[];

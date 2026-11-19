@@ -26,7 +26,8 @@ export class FlagService {
   }
 
   async getFlagPng(countryCode: string): Promise<Buffer | undefined> {
-    const key = countryCode.toUpperCase();
+    // A region (PT-AZORES) flies its country's flag.
+    const key = countryCode.toUpperCase().split('-')[0];
     if (flagCache.has(key)) {
       return flagCache.get(key) ?? undefined;
     }

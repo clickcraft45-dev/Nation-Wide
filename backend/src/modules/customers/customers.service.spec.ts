@@ -183,5 +183,14 @@ describe('CustomersService', () => {
       };
       expect(where).toEqual({});
     });
+
+    it('narrows to business accounts for the B2B links page', async () => {
+      await service.findAll({ isB2b: 'true' });
+
+      const { where } = prisma.customer.findMany.mock.calls[0][0] as {
+        where: Record<string, unknown>;
+      };
+      expect(where).toEqual({ isB2b: true });
+    });
   });
 });

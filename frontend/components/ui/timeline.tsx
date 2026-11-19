@@ -1,7 +1,7 @@
 import { type ReactNode } from "react";
 import { cn } from "@/lib/utils/cn";
 
-export interface TimelineEvent {
+interface TimelineEvent {
   label: ReactNode;
   timestamp: ReactNode;
   location?: ReactNode;
@@ -37,7 +37,7 @@ export function Timeline({ events, className }: { events: TimelineEvent[]; class
           >
             {!isLast && (
               <span
-                className="absolute left-[5px] top-3 h-[calc(100%-0.75rem)] w-px bg-border"
+                className="absolute left-1.25 top-3 h-[calc(100%-0.75rem)] w-px bg-border"
                 aria-hidden
               />
             )}

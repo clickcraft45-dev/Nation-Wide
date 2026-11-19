@@ -224,7 +224,7 @@ export function PickupsMap({
           type="button"
           onClick={fitAll}
           aria-label="Show everything"
-          className="absolute bottom-3 right-3 flex h-10 w-10 items-center justify-center rounded-full bg-card text-foreground shadow-md"
+          className="absolute bottom-3 right-3 flex h-11 w-11 items-center justify-center rounded-full bg-card text-foreground shadow-md"
         >
           <Crosshair className="h-5 w-5" aria-hidden />
         </button>

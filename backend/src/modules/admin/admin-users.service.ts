@@ -15,6 +15,24 @@ import { UpdateAdminUserDto } from './dto/update-admin-user.dto';
 const PASSWORD_HASH_ROUNDS = 10;
 
 /**
+ * Only a SUPER_ADMIN may create a SUPER_ADMIN, give anyone that role, or touch an existing one
+ * (edit, demote, deactivate, reset the password, delete). Without this an ADMIN could promote
+ * themselves through a colleague, or reset a super admin's password and sign in as them, which
+ * makes the role boundary decorative. `roles` are every role the request involves: the target's
+ * current role and the one being set.
+ */
+function assertMaySuperAdmin(
+  actorRole: string,
+  ...roles: (string | undefined)[]
+): void {
+  if (actorRole !== 'SUPER_ADMIN' && roles.includes('SUPER_ADMIN')) {
+    throw new ForbiddenException(
+      'Only a super admin can create, change or remove a super admin.',
+    );
+  }
+}
+
+/**
  * Every internal account. PICKUP_PARTNER is included so one screen manages all staff — a role
  * change between the office and the field is then an edit, not a delete-and-recreate that would
  * orphan the person's history. PickupPartnersService still owns partner *creation* (and the
@@ -49,7 +67,12 @@ export class AdminUsersService {
     });
   }
 
-  async create(dto: CreateAdminUserDto, actorId: string): Promise<AdminUser> {
+  async create(
+    dto: CreateAdminUserDto,
+    actorId: string,
+    actorRole: string,
+  ): Promise<AdminUser> {
+    assertMaySuperAdmin(actorRole, dto.role);
     // Checked against the whole table, not just admin rows: email is globally unique, so a
     // clash with a customer-facing pickup partner must report the conflict rather than a
     // confusing P2002 from Prisma.
@@ -90,8 +113,10 @@ export class AdminUsersService {
     id: string,
     dto: UpdateAdminUserDto,
     actorId: string,
+    actorRole: string,
   ): Promise<AdminUser> {
     const existing = await this.findManagedOrThrow(id);
+    assertMaySuperAdmin(actorRole, existing.role, dto.role);
 
     // Self-lockout guard. An admin demoting or deactivating their own account is how an
     // organisation ends up with no one who can administer it — and there is no recovery path
@@ -146,8 +171,10 @@ export class AdminUsersService {
     id: string,
     password: string,
     actorId: string,
+    actorRole: string,
   ): Promise<AdminUser> {
-    await this.findManagedOrThrow(id);
+    const existing = await this.findManagedOrThrow(id);
+    assertMaySuperAdmin(actorRole, existing.role);
     const passwordHash = await bcrypt.hash(password, PASSWORD_HASH_ROUNDS);
 
     const updated = await this.prisma.adminUser.update({
@@ -171,8 +198,9 @@ export class AdminUsersService {
    * simpler and more reliable than counting thirteen relations by hand, which would silently go
    * stale the next time someone adds a fourteenth.
    */
-  async remove(id: string, actorId: string): Promise<void> {
+  async remove(id: string, actorId: string, actorRole: string): Promise<void> {
     const existing = await this.findManagedOrThrow(id);
+    assertMaySuperAdmin(actorRole, existing.role);
 
     // Same two lockout guards as update() — deleting yourself or the last admin is worse than
     // demoting either, and has no recovery path inside the app.

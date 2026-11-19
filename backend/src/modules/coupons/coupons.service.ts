@@ -8,7 +8,7 @@ import { Prisma, type Coupon } from '@prisma/client';
 import type { CouponDto } from '@nationwide/shared-types';
 import { PrismaService } from '../../database/prisma.service';
 
-export function toCouponDto(coupon: Coupon): CouponDto {
+function toCouponDto(coupon: Coupon): CouponDto {
   return {
     id: coupon.id,
     code: coupon.code,

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { SearchInput } from "@/components/ui/search-input";
 import { FieldError } from "@/components/ui/input";
 import { cn } from "@/lib/utils/cn";
+import { normalizeQuery, searchCountries } from "@/lib/country-search";
 
 export function DestinationStep({
   countries,
@@ -24,20 +25,23 @@ export function DestinationStep({
   const [selected, setSelected] = useState<CountryDto | null>(initialSelected);
   const [error, setError] = useState<string | null>(null);
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return countries;
-    return countries.filter(
-      (c) => c.name.toLowerCase().includes(q) || c.code.toLowerCase().includes(q),
-    );
-  }, [countries, search]);
+  // Ranked: "USA", "Dubai" and "germny" all find their country, best match first.
+  const filtered = useMemo(() => searchCountries(countries, search), [countries, search]);
 
   function handleContinue() {
-    if (!selected) {
+    // Typing "United States" and pressing Continue is a complete answer when the search leaves
+    // no doubt: one match, or the name or code typed in full. "united" still asks for a pick.
+    const q = normalizeQuery(search);
+    const typed =
+      q && (filtered.length === 1 || (filtered[0] && [filtered[0].code, filtered[0].name].some((v) => normalizeQuery(v) === q)))
+        ? filtered[0]
+        : null;
+    const country = typed ?? selected;
+    if (!country) {
       setError("Please select a destination country to continue.");
       return;
     }
-    onContinue(selected);
+    onContinue(country);
   }
 
   return (
@@ -53,6 +57,15 @@ export function DestinationStep({
           placeholder={selected ? `${selected.name} (${selected.code}): search to change` : "Search country…"}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
+          // Enter takes the best match, so "usa ⏎" is a complete answer.
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && search.trim() && filtered[0]) {
+              e.preventDefault();
+              setSelected(filtered[0]);
+              setError(null);
+            }
+          }}
+          maxLength={64}
           aria-label="Search destination country"
         />
 
