@@ -1,21 +1,40 @@
+import { cn } from "@/lib/utils/cn";
+
 /**
- * Flag for an ISO 3166-1 alpha-2 code, built from regional-indicator characters. No image
- * request: the CSP only allows our own origins in img-src, and emoji need no dependency.
- * Renders nothing for a code that is not two letters, so callers never show a broken glyph.
+ * Flag for an ISO 3166-1 alpha-2 code, as a self-hosted SVG from public/flags (flag-icons, MIT,
+ * see public/flags/LICENSE.txt). Not emoji: Windows has no flag emoji and draws "AF" in their
+ * place, and not a CDN: the CSP allows images from our own origin only. Decorative, since the
+ * country name always sits next to it. Renders nothing for a code that is not two letters.
  */
-export function countryFlagEmoji(code: string | null | undefined): string | null {
-  if (!code || !/^[A-Za-z]{2}$/.test(code)) return null;
-  return String.fromCodePoint(
-    ...code.toUpperCase().split("").map((c) => 0x1f1e6 + c.charCodeAt(0) - 65),
-  );
-}
+// Older or carrier-specific codes still on some country rows, mapped to today's ISO flag.
+const LEGACY_CODES: Record<string, string> = {
+  uk: "gb", // United Kingdom
+  fx: "fr", // Metropolitan France
+  dy: "bj", // Dahomey, now Benin
+  hv: "bf", // Upper Volta, now Burkina Faso
+  yu: "rs", // Yugoslavia, now Serbia
+};
 
 export function CountryFlag({ code, className }: { code: string | null | undefined; className?: string }) {
-  const flag = countryFlagEmoji(code);
-  if (!flag) return null;
+  if (!code || !/^[A-Za-z]{2}$/.test(code)) return null;
+  const lower = code.toLowerCase();
+  const file = LEGACY_CODES[lower] ?? lower;
   return (
-    <span aria-hidden className={className} style={{ fontFamily: '"Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",sans-serif' }}>
-      {flag}
-    </span>
+    // eslint-disable-next-line @next/next/no-img-element -- a 4:3 SVG; next/image adds nothing here
+    <img
+      src={`/flags/${file}.svg`}
+      alt=""
+      aria-hidden
+      width={20}
+      height={15}
+      loading="lazy"
+      decoding="async"
+      className={cn(
+        "inline-block h-[15px] w-5 shrink-0 rounded-[2px] object-cover align-[-2px] ring-1 ring-black/10",
+        className,
+      )}
+      // No onError fallback: this also renders in server components, which cannot attach handlers.
+      // public/flags covers every ISO 3166-1 alpha-2 code, and alt="" keeps a miss invisible.
+    />
   );
 }

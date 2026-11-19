@@ -98,7 +98,7 @@ export function DestinationStep({
                     : "text-foreground hover:bg-muted",
                 )}
               >
-                <CountryFlag code={country.code} className="w-5 shrink-0 text-center text-base leading-none" />
+                <CountryFlag code={country.code} />
                 <span className="font-medium">{country.name}</span>
                 <span className="text-xs text-muted-foreground">{country.code}</span>
               </button>
