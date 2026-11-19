@@ -97,6 +97,66 @@ describe('TrackingService', () => {
     );
   });
 
+  describe('an AWB no order carries', () => {
+    const iclProvider = {
+      id: 'icl',
+      code: 'ICL',
+      name: 'ICL',
+      adapterClass: 'ICLShippingProviderAdapter',
+    };
+    beforeEach(() => {
+      prisma.shipment.findUnique.mockResolvedValue(null);
+      (prisma as unknown as Record<string, unknown>).shippingProvider = {
+        findFirst: jest.fn().mockResolvedValue(iclProvider),
+      };
+    });
+
+    it('asks the live provider and returns its timeline', async () => {
+      const trackShipment = jest.fn().mockResolvedValue({
+        events: [
+          {
+            status: 'PICKED_UP',
+            rawStatus: 'Booked',
+            location: 'DELHI',
+            eventTime: new Date('2026-11-01T10:00:00Z'),
+          },
+          {
+            status: 'DELIVERED',
+            rawStatus: 'DELIVERED',
+            location: 'NEW YORK',
+            eventTime: new Date('2026-11-06T15:00:00Z'),
+          },
+        ],
+      });
+      providerRegistry.resolve.mockReturnValue({ trackShipment });
+
+      const result = await service.getStatus(' 6003770226 ');
+
+      expect(trackShipment).toHaveBeenCalledWith('6003770226');
+      expect(result.internalTrackingNumber).toBe('6003770226');
+      expect(result.currentStatus).toBe('DELIVERED');
+      expect(result.events).toHaveLength(2);
+      expect(result.carrier?.trackingNumber).toBe('6003770226');
+      expect(redis.cacheSet).toHaveBeenCalledWith(
+        'tracking:AWB:6003770226',
+        expect.any(String),
+        expect.any(Number),
+      );
+    });
+
+    it('is not found when the provider does not know the AWB', async () => {
+      providerRegistry.resolve.mockReturnValue({
+        trackShipment: jest
+          .fn()
+          .mockRejectedValue(new Error('AWB does not exist..!')),
+      });
+
+      await expect(service.getStatus('982547327')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
   it('throws NotFoundException for an unknown tracking number', async () => {
     prisma.shipment.findUnique.mockResolvedValue(null);
 

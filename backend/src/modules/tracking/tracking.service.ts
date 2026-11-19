@@ -51,7 +51,7 @@ export class TrackingService {
   async getStatus(reference: string): Promise<TrackingResultDto> {
     const shipment = await this.findShipmentByReference(reference);
     if (!shipment) {
-      throw new NotFoundException(`Tracking number ${reference} not found`);
+      return this.trackUnlinkedAwb(reference);
     }
 
     // Canonical from here down. Everything below — the cache key above all — must key off the
@@ -152,6 +152,78 @@ export class TrackingService {
       internalTrackingNumber,
       details,
       shipment.id,
+    );
+    await this.cacheResult(cacheKey, dto);
+    return dto;
+  }
+
+  /**
+   * A carrier AWB that no order in our system carries yet: shipments booked with ICL directly,
+   * or ones staff have not linked to an order. Ask the live tracking provider for it instead of
+   * answering "not found" for a parcel the carrier knows about. Nothing is persisted (there is no
+   * shipment row to hang events on), and no customer details are exposed because there are none.
+   */
+  private async trackUnlinkedAwb(
+    reference: string,
+  ): Promise<TrackingResultDto> {
+    const awb = reference.trim();
+    const notFound = new NotFoundException(`Tracking number ${awb} not found`);
+    // Our own numbers (NW-...) and order uuids never reach a carrier; only AWB-shaped input does.
+    if (!/^[A-Za-z0-9]{6,20}$/.test(awb) || /^NW/i.test(awb)) throw notFound;
+
+    const provider = await this.prisma.shippingProvider.findFirst({
+      where: { adapterClass: 'ICLShippingProviderAdapter', isActive: true },
+    });
+    if (!provider) throw notFound;
+
+    const cacheKey = this.cacheKeyFor(`AWB:${awb.toUpperCase()}`);
+    const cached = await this.redis.cacheGet(cacheKey);
+    if (cached) return JSON.parse(cached) as TrackingResultDto;
+
+    let events: NormalizedTrackingEvent[];
+    try {
+      const adapter = this.providerRegistry.resolve(provider.adapterClass);
+      ({ events } = await this.withTimeout(
+        adapter.trackShipment(awb),
+        this.configService.get<number>('TRACKING_PROVIDER_TIMEOUT_MS') ??
+          DEFAULT_PROVIDER_TIMEOUT_MS,
+      ));
+    } catch (error) {
+      // ICL answers an unknown AWB with an error body, which is indistinguishable here from an
+      // outage; either way the honest answer for an unlinked number is "not found".
+      this.logger.warn(
+        `Unlinked AWB lookup failed for ${awb}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      throw notFound;
+    }
+    if (events.length === 0) throw notFound;
+
+    const statuses = await this.prisma.trackingStatus.findMany();
+    const labelByCode = new Map(statuses.map((s) => [s.code, s.displayLabel]));
+    const current = events[events.length - 1].status;
+
+    const dto = this.buildDto(
+      awb,
+      {
+        customerName: '—',
+        consigneeName: null,
+        consigneePhone: null,
+        items: [],
+        carrier: {
+          code: provider.code,
+          name: provider.name,
+          trackingNumber: awb,
+          trackingUrl: carrierTrackingUrl(provider.code, awb),
+        },
+      },
+      current,
+      new Date(),
+      events.map((event) => ({
+        status: event.status,
+        displayLabel: labelByCode.get(event.status) ?? event.rawStatus,
+        eventTime: event.eventTime.toISOString(),
+        location: event.location,
+      })),
     );
     await this.cacheResult(cacheKey, dto);
     return dto;
