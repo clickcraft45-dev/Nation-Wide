@@ -14,7 +14,8 @@
  */
 import { unstable_dev } from 'wrangler';
 
-const ROUTES = ['/', '/login', '/track'];
+// /courier-to/usa: a prerendered route 404'd on Cloudflare (no incremental cache), so a 404 fails too.
+const ROUTES = ['/', '/login', '/track', '/courier-to/usa'];
 const target = process.argv[2];
 
 let base = target?.replace(/\/$/, '');
@@ -43,7 +44,7 @@ for (const route of ROUTES) {
     status = 'no response';
     detail = err.message;
   }
-  const ok = typeof status === 'number' && status < 500;
+  const ok = typeof status === 'number' && status < 500 && status !== 404;
   failed ||= !ok;
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${status}  ${base}${route}${detail ? `\n      ${detail}` : ''}`);
 }

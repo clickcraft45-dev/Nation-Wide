@@ -11,12 +11,10 @@ import { DESTINATIONS, findDestination } from "@/lib/seo/destinations";
 
 type Props = { params: Promise<{ country: string }> };
 
-// Only the listed destinations exist; anything else is a 404 rather than a thin generated page.
-export const dynamicParams = false;
-
-export function generateStaticParams() {
-  return DESTINATIONS.map((d) => ({ country: d.slug }));
-}
+// Rendered per request. Prerendering (generateStaticParams + dynamicParams = false) builds fine but
+// 404s every country on Cloudflare: open-next.config.ts wires no incremental cache, so the Worker
+// has nowhere to serve the prerendered pages from. Unknown countries still 404 via notFound().
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const destination = findDestination((await params).country);
