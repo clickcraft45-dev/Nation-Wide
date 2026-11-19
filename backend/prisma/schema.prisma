@@ -650,7 +650,8 @@ model RateProvider {
 ///
 /// Margin used to live only on the weight slab, which meant re-entering the same commercial
 /// decision on every country and every band. A band matches when the chargeable weight falls in
-/// [fromKg, toKg), and charges `flatAmount + perKgAmount * (weight - fromKg)`. A null toKg is the
+/// [fromKg, toKg), and charges `flatAmount + perKgAmount * weight` (the whole weight: 11 kg at
+/// 100/kg is 1100). A null toKg is the
 /// open-ended top band. A weight slab that sets its own nationwideCut still wins over all of this.
 model ProviderMarginBand {
   id             String   @id @default(uuid())

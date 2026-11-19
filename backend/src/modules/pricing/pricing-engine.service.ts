@@ -139,10 +139,10 @@ export function calculateFinalPrice(
 /**
  * The margin a carrier charges at this weight, from its band ladder.
  *
- * The band that contains the weight charges its flat amount plus its per-kg rate on the weight
- * above the band's own floor — so "flat 1000 to 10 kg, then 100/kg to 20 kg" is 1000 at 8 kg and
- * 1500 at 15 kg. No band covering the weight means no margin from this ladder at all, which is
- * what an unconfigured provider looks like.
+ * The band that contains the weight charges its flat amount plus its per-kg rate on the WHOLE
+ * chargeable weight — so "flat 1000 to 10 kg, then 100/kg above" is 1000 at 8 kg and 1100 at
+ * 11 kg (11 × 100), not 100 for the one kg above the floor. No band covering the weight means no
+ * margin from this ladder at all, which is what an unconfigured provider looks like.
  */
 export function marginFromBands(
   bands: {
@@ -157,7 +157,7 @@ export function marginFromBands(
     (b) => weightKg >= b.fromKg && (b.toKg == null || weightKg < b.toKg),
   );
   if (!band) return 0;
-  return round2(band.flatAmount + band.perKgAmount * (weightKg - band.fromKg));
+  return round2(band.flatAmount + band.perKgAmount * weightKg);
 }
 
 const withActiveWeightSlabs = {

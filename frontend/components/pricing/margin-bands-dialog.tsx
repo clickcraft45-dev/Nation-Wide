@@ -32,9 +32,8 @@ function describe(row: BandRow): string {
   const flat = Number(row.flatAmount) || 0;
   const perKg = Number(row.perKgAmount) || 0;
   if (!perKg) return `₹${flat.toLocaleString("en-IN")} flat`;
-  return `₹${flat.toLocaleString("en-IN")} + ₹${perKg.toLocaleString("en-IN")}/kg above ${
-    row.fromKg || 0
-  } kg`;
+  const per = `₹${perKg.toLocaleString("en-IN")}/kg × full weight`;
+  return flat ? `₹${flat.toLocaleString("en-IN")} + ${per}` : per;
 }
 
 /**
@@ -114,7 +113,7 @@ export function MarginBandsDialog({
       {open && (
         <DialogContent
           title={`Margin bands: ${provider.name}`}
-          description="A flat amount plus a per-kg rate on the weight above the band's own floor. Leave the last band's To blank for everything above it."
+          description="A flat amount plus a per-kg rate times the whole weight (11 kg at ₹100/kg is ₹1,100). Leave the last band's To blank for everything above it."
         >
           <div className="space-y-4">
             <div className="space-y-3">

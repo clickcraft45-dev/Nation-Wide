@@ -126,10 +126,10 @@ describe('PricingEngineService', () => {
             name: 'Test Provider',
             fuelChargePercent: decimal(10),
             pssPerKg: decimal(25),
-            // Flat 1000 to 10kg, then 1000 + 100/kg above 10.
+            // Flat 1000 to 10kg, then 100/kg on the whole weight (the live DHL/UPS setup).
             marginBands: [
               { fromKg: 0, toKg: 10, flatAmount: 1000, perKgAmount: 0 },
-              { fromKg: 10, toKg: 20, flatAmount: 1000, perKgAmount: 100 },
+              { fromKg: 10, toKg: 20, flatAmount: 0, perKgAmount: 100 },
             ],
           },
         },
@@ -152,8 +152,9 @@ describe('PricingEngineService', () => {
       )[0];
 
     prisma.rateCard.findMany.mockResolvedValue([withBands(0)]);
-    // Inside the flat band, and then 1000 + 100 x 5kg above the 10kg floor.
+    // Inside the flat band; above it, 100 x the WHOLE weight (11kg is 1100, not 100 x 1kg).
     expect((await quote(2)).nationwideCut).toBe(1000);
+    expect((await quote(11)).nationwideCut).toBe(1100);
     expect((await quote(15)).nationwideCut).toBe(1500);
 
     prisma.rateCard.findMany.mockResolvedValue([withBands(100)]);
