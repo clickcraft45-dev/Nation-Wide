@@ -167,7 +167,7 @@ function brandColor(value: string | null | undefined): string {
 }
 
 let fontRegistered = false;
-function ensureFontRegistered(
+export function ensureFontRegistered(
   Font: Awaited<typeof import('@react-pdf/renderer')>['Font'],
 ) {
   if (fontRegistered) return;

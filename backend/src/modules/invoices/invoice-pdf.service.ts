@@ -6,6 +6,8 @@ import {
   type InvoiceBranding,
   type InvoiceExtras,
 } from './templates/tax-invoice-template';
+import { renderCustomsInvoice } from './templates/customs-invoice-template';
+import type { CustomsInvoiceDto } from '@nationwide/shared-types';
 
 @Injectable()
 export class InvoicePdfService {
@@ -36,6 +38,13 @@ export class InvoicePdfService {
       logoBuffer,
       branding,
     );
+    return renderToBuffer(document as Parameters<typeof renderToBuffer>[0]);
+  }
+
+  /** A customs invoice for a personal shipment. Rendered on demand, never stored or numbered. */
+  async renderCustoms(input: CustomsInvoiceDto): Promise<Buffer> {
+    const { renderToBuffer } = await import('@react-pdf/renderer');
+    const document = await renderCustomsInvoice(input);
     return renderToBuffer(document as Parameters<typeof renderToBuffer>[0]);
   }
 }

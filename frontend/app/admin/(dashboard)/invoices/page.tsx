@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CalendarDays, Download, FileText, MessageCircle, ReceiptIndianRupee } from "lucide-react";
+import { Download, FileText, MessageCircle, ReceiptIndianRupee } from "lucide-react";
 import type {
   ConsolidatedOrderCandidateDto,
   CustomerDto,
@@ -11,7 +11,6 @@ import type {
 } from "@nationwide/shared-types";
 import { apiClient, ApiError, errorMessage, fieldErrors } from "@/lib/api-client";
 import { CustomerPicker } from "@/components/customers/customer-picker";
-import { DateField } from "@/components/ui/date-field";
 import {
   CustomInvoiceLines,
   customInvoiceLinesTotal,
@@ -20,7 +19,6 @@ import {
   type CustomInvoiceLineForm,
 } from "@/components/invoices/custom-invoice-lines";
 import { Spinner } from "@/components/ui/spinner";
-import { NativeSelect } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -31,18 +29,12 @@ import {
   TableHead,
   TableCell,
 } from "@/components/ui/table";
-import { Skeleton, TableSkeleton } from "@/components/ui/skeleton";
+import { TableSkeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/page-state";
 import { useToast } from "@/components/ui/toast";
 import { downloadBlob } from "@/lib/utils/download-blob";
-import { todayIso } from "@/components/ui/calendar";
+import { CustomsInvoiceBuilder } from "@/components/invoices/customs-invoice-builder";
 import { CompanySettingsDialog } from "@/components/pricing/company-settings-dialog";
-
-function firstOfThisMonth(): string {
-  const now = new Date();
-  const month = `${now.getMonth() + 1}`.padStart(2, "0");
-  return `${now.getFullYear()}-${month}-01`;
-}
 
 function money(value: number): string {
   return `₹${value.toFixed(2)}`;
@@ -55,18 +47,6 @@ export default function AdminInvoicesPage() {
   const [error, setError] = useState<string | null>(null);
   const [isWorking, setIsWorking] = useState(false);
 
-  // The consolidated invoice is for ONE named account — see ConsolidateInvoiceDto for why the
-  // multi-customer bulk screen that used to live here was removed.
-  const [consolidateCustomerId, setConsolidateCustomerId] = useState("");
-  const [from, setFrom] = useState(firstOfThisMonth);
-  const [to, setTo] = useState(todayIso);
-  // What that window would bill, fetched before anything is issued, and the rows ticked for it.
-  // A tax invoice is a permanent numbered record — it should never be the thing that tells the
-  // office what was on it.
-  const [candidates, setCandidates] = useState<ConsolidatedOrderCandidateDto[] | null>(null);
-  const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
-  const [isPreviewing, setIsPreviewing] = useState(false);
-  const [previewError, setPreviewError] = useState<string | null>(null);
   const [selectedInvoiceIds, setSelectedInvoiceIds] = useState<string[]>([]);
   // Per-row, not a page-wide flag: downloading one invoice must not disable the other rows.
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
@@ -117,102 +97,6 @@ export default function AdminInvoicesPage() {
 
   function toggle(list: string[], id: string): string[] {
     return list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
-  }
-
-  const billableCandidates = (candidates ?? []).filter((row) => !row.blockedReason);
-  const selectedTotal = billableCandidates
-    .filter((row) => selectedOrderIds.includes(row.orderId))
-    .reduce((sum, row) => sum + (row.amount ?? 0), 0);
-
-  /**
-   * One invoice for everything a customer paid for between two dates.
-   *
-   * This replaced "Generate from orders", which issued one invoice per order across many
-   * customers. That screen only existed because nothing invoiced automatically; every order is
-   * now billed the moment its payment is recorded, whether an admin marks it or a pickup partner
-   * collects it at the door. What it could not do — and what an account with forty parcels a
-   * month actually asks for — is one bill for the period.
-   */
-  // End of the chosen day, not its midnight — otherwise "to = today" silently excludes
-  // everything paid today, which is the single most common thing to want.
-  const windowFrom = () => new Date(`${from}T00:00:00.000`).toISOString();
-  const windowTo = () => new Date(`${to}T23:59:59.999`).toISOString();
-
-  /** What this window would bill. Every billable row starts ticked — the common case is "all". */
-  useEffect(() => {
-    if (!consolidateCustomerId || !from || !to) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setCandidates(null);
-      setSelectedOrderIds([]);
-      return;
-    }
-    let cancelled = false;
-    setIsPreviewing(true);
-    setPreviewError(null);
-    const fromIso = new Date(`${from}T00:00:00.000`).toISOString();
-    const toIso = new Date(`${to}T23:59:59.999`).toISOString();
-    apiClient
-      .get<ConsolidatedOrderCandidateDto[]>(
-        `/admin/invoices/consolidate/preview?customerId=${consolidateCustomerId}` +
-          `&from=${encodeURIComponent(fromIso)}&to=${encodeURIComponent(toIso)}`,
-      )
-      .then((rows) => {
-        if (cancelled) return;
-        setCandidates(rows);
-        setSelectedOrderIds(rows.filter((r) => !r.blockedReason).map((r) => r.orderId));
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setCandidates(null);
-        setPreviewError(errorMessage(err, "Couldn't load the orders for that period."));
-      })
-      .finally(() => {
-        if (!cancelled) setIsPreviewing(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [consolidateCustomerId, from, to]);
-
-  async function consolidate() {
-    if (!consolidateCustomerId) {
-      showToast({ title: "Choose a customer.", variant: "error" });
-      return;
-    }
-    if (selectedOrderIds.length === 0) {
-      showToast({ title: "Tick at least one order to bill.", variant: "error" });
-      return;
-    }
-    setIsWorking(true);
-    try {
-      const result = await apiClient.post<{
-        invoice: InvoiceDto;
-        skipped: { orderId: string }[];
-      }>("/admin/invoices/consolidate", {
-        customerId: consolidateCustomerId,
-        from: windowFrom(),
-        to: windowTo(),
-        orderIds: selectedOrderIds,
-      });
-      showToast({
-        variant: "success",
-        title: `${result.invoice.invoiceNumber} issued for ${money(result.invoice.totalAmount)}`,
-        description: result.skipped.length
-          ? `${result.invoice.lineCount} orders billed. ${result.skipped.length} skipped: already on another invoice, or unpriced.`
-          : `${result.invoice.lineCount} orders billed.`,
-      });
-      load();
-    } catch (err) {
-      // The server's reason is the useful part here: "ships from more than one state", "no
-      // unbilled paid orders in that period" — each tells the admin exactly what to change.
-      showToast({
-        variant: "error",
-        title: "Couldn't issue the consolidated invoice.",
-        description: errorMessage(err, "Please try again."),
-      });
-    } finally {
-      setIsWorking(false);
-    }
   }
 
   /**
@@ -391,170 +275,8 @@ export default function AdminInvoicesPage() {
         </div>
       </div>
 
-      <div className="grid items-start gap-6 xl:grid-cols-[minmax(20rem,0.7fr)_minmax(0,1.3fr)]">
-      <Card className="glass-sheen">
-        <CardHeader>
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-              <CalendarDays className="h-4 w-4" aria-hidden />
-            </div>
-            <div>
-              <CardTitle className="text-foreground">Consolidated invoice</CardTitle>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                One invoice for everything a customer paid for in a period.
-              </p>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <label className="block space-y-1">
-            <span className="text-xs font-medium text-muted-foreground">Customer</span>
-            <NativeSelect
-              value={consolidateCustomerId}
-              onChange={(e) => setConsolidateCustomerId(e.target.value)}
-            >
-              <option value="">Choose a customer…</option>
-              {customers.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name} · {c.phone}
-                </option>
-              ))}
-            </NativeSelect>
-          </label>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <label className="space-y-1">
-              <span className="text-xs font-medium text-muted-foreground">From</span>
-              {/* The app's own calendar — see components/ui/date-field. */}
-              <DateField
-                title="Bill from"
-                value={from}
-                max={to || undefined}
-                onChange={setFrom}
-              />
-            </label>
-            <label className="space-y-1">
-              <span className="text-xs font-medium text-muted-foreground">To</span>
-              <DateField
-                title="Bill to"
-                value={to}
-                min={from || undefined}
-                onChange={setTo}
-              />
-            </label>
-          </div>
-
-          {/* The orders that window covers, so the bill is agreed before a number is consumed. */}
-          {consolidateCustomerId && (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-medium text-muted-foreground">
-                  Orders in this period
-                  {candidates ? ` (${selectedOrderIds.length}/${billableCandidates.length} selected)` : ""}
-                </span>
-                {billableCandidates.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setSelectedOrderIds(
-                        selectedOrderIds.length === billableCandidates.length
-                          ? []
-                          : billableCandidates.map((r) => r.orderId),
-                      )
-                    }
-                    className="text-xs font-medium text-primary hover:underline"
-                  >
-                    {selectedOrderIds.length === billableCandidates.length
-                      ? "Clear all"
-                      : "Select all"}
-                  </button>
-                )}
-              </div>
-
-              {isPreviewing && <Skeleton className="h-24 w-full" />}
-              {!isPreviewing && previewError && <ErrorState message={previewError} />}
-              {!isPreviewing && !previewError && candidates?.length === 0 && (
-                <p className="glass-field rounded-lg px-3 py-4 text-center text-xs text-muted-foreground">
-                  No paid orders in this period.
-                </p>
-              )}
-
-              {!isPreviewing && !previewError && candidates && candidates.length > 0 && (
-                <ul className="max-h-72 space-y-1.5 overflow-y-auto pr-1">
-                  {candidates.map((row) => {
-                    const blocked = Boolean(row.blockedReason);
-                    return (
-                      <li key={row.orderId}>
-                        <label
-                          className={`glass-field flex items-start gap-2.5 rounded-lg px-3 py-2 text-xs ${
-                            blocked ? "opacity-60" : "cursor-pointer"
-                          }`}
-                        >
-                          <input
-                            type="checkbox"
-                            className="mt-0.5"
-                            disabled={blocked}
-                            checked={selectedOrderIds.includes(row.orderId)}
-                            onChange={() =>
-                              setSelectedOrderIds((prev) => toggle(prev, row.orderId))
-                            }
-                          />
-                          <span className="min-w-0 flex-1">
-                            <span className="flex flex-wrap items-baseline justify-between gap-x-2">
-                              <span className="font-mono font-medium text-foreground">
-                                {row.trackingNumber ?? row.orderId.slice(0, 8)}
-                              </span>
-                              <span className="font-semibold tabular-nums text-foreground">
-                                {row.amount === null ? "—" : rupees(row.amount)}
-                              </span>
-                            </span>
-                            <span className="block text-muted-foreground">
-                              {new Date(row.createdAt).toLocaleDateString("en-IN")}
-                              {row.destination ? ` · ${row.destination}` : ""}
-                            </span>
-                            {/* What is inside, so the office can see what it is billing for. */}
-                            {row.contents && (
-                              <span className="block truncate text-muted-foreground">
-                                {row.contents}
-                              </span>
-                            )}
-                            {row.blockedReason && (
-                              <span className="block font-medium text-warning">
-                                {row.blockedReason}
-                              </span>
-                            )}
-                          </span>
-                        </label>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-
-              {selectedOrderIds.length > 0 && (
-                <p className="flex items-center justify-between rounded-lg bg-primary/5 px-3 py-2 text-xs font-medium text-foreground">
-                  <span>{selectedOrderIds.length} order(s) on this invoice</span>
-                  <span className="tabular-nums">{rupees(selectedTotal)}</span>
-                </p>
-              )}
-            </div>
-          )}
-
-          <Button
-            className="w-full sm:w-auto"
-            onClick={consolidate}
-            disabled={isWorking || !consolidateCustomerId || selectedOrderIds.length === 0}
-          >
-            <FileText className="mr-2 h-4 w-4" aria-hidden />
-            Issue consolidated invoice
-          </Button>
-          <p className="text-xs text-muted-foreground">
-            Covers paid orders in the period that aren&apos;t already on an invoice. Every order is
-            invoiced automatically when it&apos;s paid. Use this when a customer wants one bill
-            for the month instead.
-          </p>
-        </CardContent>
-      </Card>
+      <div className="grid items-start gap-6 2xl:grid-cols-2">
+      <CustomsInvoiceBuilder />
 
       <Card className="glass-sheen">
         <CardHeader>

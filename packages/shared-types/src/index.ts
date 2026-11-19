@@ -24,3 +24,4 @@ export * from "./coupon";
 export * from "./rate-sheet";
 export * from "./announcement";
 export * from "./online-payment";
+export * from "./customs-invoice";

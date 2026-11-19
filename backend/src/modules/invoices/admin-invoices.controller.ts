@@ -28,6 +28,8 @@ import { SendInvoicesDto } from './dto/send-invoices.dto';
 import { CancelInvoiceDto } from './dto/cancel-invoice.dto';
 import { QueryInvoicesDto } from './dto/query-invoices.dto';
 import { CreateCustomInvoiceDto } from './dto/create-custom-invoice.dto';
+import { CustomsInvoiceInput } from './dto/customs-invoice.dto';
+import { InvoicePdfService } from './invoice-pdf.service';
 
 // ADMIN only. Issuing a tax invoice is a financial act with a permanent, numbered record — the
 // same bar as pricing.
@@ -35,7 +37,34 @@ import { CreateCustomInvoiceDto } from './dto/create-custom-invoice.dto';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('ADMIN')
 export class AdminInvoicesController {
-  constructor(private readonly invoices: InvoicesService) {}
+  constructor(
+    private readonly invoices: InvoicesService,
+    private readonly pdfService: InvoicePdfService,
+  ) {}
+
+  /**
+   * A customs invoice for a personal shipment, rendered from what the admin typed and returned as
+   * a download. Nothing is stored and no number is taken: it is a customs declaration that travels
+   * with the boxes, not a GST tax invoice.
+   */
+  @Post('customs/pdf')
+  async customsPdf(
+    @Body() dto: CustomsInvoiceInput,
+    @Res() res: Response,
+  ): Promise<void> {
+    const buffer = await this.pdfService.renderCustoms(dto);
+    const name = dto.consigneeName
+      .replace(/[^A-Za-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '');
+    res
+      .status(200)
+      .set({
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename="invoice-${name || 'customs'}-${dto.invoiceDate.slice(0, 10)}.pdf"`,
+        'Content-Length': String(buffer.length),
+      })
+      .end(buffer);
+  }
 
   @Get()
   async list(@Query() query: QueryInvoicesDto): Promise<InvoiceListDto> {
