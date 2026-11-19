@@ -105,7 +105,12 @@ export default function CustomerProfilePage() {
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="phone">Phone</Label>
-                    <Input id="phone" value={customer.phone} disabled />
+                    <Input
+                      id="phone"
+                      value={customer.phone?.startsWith("+") ? customer.phone : ""}
+                      placeholder="Not added yet"
+                      disabled
+                    />
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="email">Email</Label>

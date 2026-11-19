@@ -147,7 +147,8 @@ export function ShipmentDetailsForm({
     setOrigin((prev) => ({
       ...prev,
       name: customer.name,
-      phone: customer.phone,
+      // A Google sign-up's "google:<id>" placeholder is not a number to prefill.
+      phone: customer.phone?.startsWith("+") ? customer.phone : prev.phone,
       addressLine1: customer.address ?? prev.addressLine1,
     }));
   }

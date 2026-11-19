@@ -5,6 +5,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "@/state/auth-context";
 import { CustomerMobileShell } from "@/components/customer/customer-mobile-shell";
+import { PhoneRequiredDialog } from "@/components/customer/phone-required-dialog";
 
 
 export default function CustomerLayout({ children }: { children: React.ReactNode }) {
@@ -31,5 +32,11 @@ export default function CustomerLayout({ children }: { children: React.ReactNode
     );
   }
 
-  return <CustomerMobileShell user={user}>{children}</CustomerMobileShell>;
+  return (
+    <CustomerMobileShell user={user}>
+      {children}
+      {/* Google sign-ups arrive without a phone; this asks until they add one. */}
+      <PhoneRequiredDialog />
+    </CustomerMobileShell>
+  );
 }
