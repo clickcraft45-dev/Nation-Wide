@@ -9,7 +9,10 @@
   "compatibility_flags": ["nodejs_compat"],
   "assets": {
     "directory": ".open-next/assets",
-    "binding": "ASSETS"
+    "binding": "ASSETS",
+    // Serve public/*.html at its own URL. The default ("auto-trailing-slash") 307-redirects
+    // /google...html to the extensionless path, and Search Console will not verify through a redirect.
+    "html_handling": "none"
   },
   "observability": {
     "enabled": true

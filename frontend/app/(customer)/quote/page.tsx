@@ -287,6 +287,7 @@ export default function GetQuotePage() {
       {step === "compare" && destination && weightKg && preview && (
         <ProviderComparison
           destinationName={destination.name}
+          destinationCode={destination.code}
           weightKg={weightKg}
           options={preview.options}
           onSelect={handleSelectProvider}
@@ -324,6 +325,7 @@ export default function GetQuotePage() {
       {step === "reselect" && destination && weightKg && (
         <ProviderComparison
           destinationName={destination.name}
+          destinationCode={destination.code}
           weightKg={weightKg}
           options={reselectOptions}
           onSelect={handleReselect}

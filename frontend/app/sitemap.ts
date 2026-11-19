@@ -1,10 +1,16 @@
 import type { MetadataRoute } from "next";
 import { SITE_URL } from "@/lib/constants/site";
+import { DESTINATIONS } from "@/lib/seo/destinations";
 
 // The complete set of publicly indexable routes — kept in step with app/robots.ts by hand, since
 // there are only a handful and every other route in the app is behind auth.
 const PUBLIC_ROUTES = [
   { path: "/", changeFrequency: "weekly", priority: 1 },
+  { path: "/services", changeFrequency: "monthly", priority: 0.8 },
+  { path: "/how-it-works", changeFrequency: "monthly", priority: 0.7 },
+  { path: "/about", changeFrequency: "yearly", priority: 0.6 },
+  { path: "/business", changeFrequency: "monthly", priority: 0.7 },
+  { path: "/faqs", changeFrequency: "monthly", priority: 0.7 },
   { path: "/track", changeFrequency: "monthly", priority: 0.8 },
   { path: "/prices", changeFrequency: "weekly", priority: 0.9 },
   { path: "/contact", changeFrequency: "yearly", priority: 0.6 },
@@ -17,10 +23,17 @@ const PUBLIC_ROUTES = [
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const lastModified = new Date();
-  return PUBLIC_ROUTES.map(({ path, changeFrequency, priority }) => ({
+  const pages = PUBLIC_ROUTES.map(({ path, changeFrequency, priority }) => ({
     url: `${SITE_URL}${path}`,
     lastModified,
     changeFrequency,
     priority,
   }));
+  const destinations = DESTINATIONS.map((d) => ({
+    url: `${SITE_URL}/courier-to/${d.slug}`,
+    lastModified,
+    changeFrequency: "monthly" as const,
+    priority: 0.7,
+  }));
+  return [...pages, ...destinations];
 }

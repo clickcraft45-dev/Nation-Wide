@@ -168,6 +168,7 @@ export function websiteSchema() {
     "@id": `${SITE_URL}/#website`,
     url: SITE_URL,
     name: "NationWide Logistics",
+    alternateName: ["NationWide", "NationWide Courier"],
     publisher: { "@id": `${SITE_URL}/#organization` },
     potentialAction: {
       "@type": "SearchAction",

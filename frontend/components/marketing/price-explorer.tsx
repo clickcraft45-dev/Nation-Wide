@@ -109,6 +109,7 @@ export function PriceExplorer() {
           {result.status === "RATED" ? (
             <ProviderComparison
               destinationName={destination.name}
+              destinationCode={destination.code}
               weightKg={weightKg}
               options={result.options}
               onSelect={() => gate("/quote")}

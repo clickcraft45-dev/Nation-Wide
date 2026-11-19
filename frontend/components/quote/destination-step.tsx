@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Globe } from "lucide-react";
+import { CountryFlag } from "@/components/ui/country-flag";
 import type { CountryDto } from "@nationwide/shared-types";
 import { Button } from "@/components/ui/button";
 import { SearchInput } from "@/components/ui/search-input";
@@ -85,7 +85,7 @@ export function DestinationStep({
                     : "text-foreground hover:bg-muted",
                 )}
               >
-                <Globe className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+                <CountryFlag code={country.code} className="w-5 shrink-0 text-center text-base leading-none" />
                 <span className="font-medium">{country.name}</span>
                 <span className="text-xs text-muted-foreground">{country.code}</span>
               </button>

@@ -8,6 +8,7 @@ import { Logo } from "@/components/brand/logo";
 import { InstallAppButton } from "@/components/pwa/install-prompt";
 import { REGISTERED_COMPANY } from "@nationwide/shared-types";
 import { CONTACT_EMAIL, CONTACT_PHONE } from "@/lib/constants/contact";
+import { DESTINATIONS } from "@/lib/seo/destinations";
 
 // min-h-11 keeps every footer link a 44px touch target on phones without spacing the list out.
 const LINK =
@@ -27,11 +28,18 @@ const COLUMNS: { title: string; links: FooterLink[] }[] = [
     ],
   },
   {
+    title: "Popular routes",
+    links: DESTINATIONS.slice(0, 6).map((d) => ({
+      label: `Courier to ${d.name.replace(/^the /, "")}`,
+      href: `/courier-to/${d.slug}`,
+    })),
+  },
+  {
     title: "Company",
     links: [
-      { label: "About us", href: "/#about" },
-      { label: "Services", href: "/#services" },
-      { label: "Business accounts", href: "/#business" },
+      { label: "About us", href: "/about" },
+      { label: "Services", href: "/services" },
+      { label: "Business accounts", href: "/business" },
       { label: "Offers", href: "/offers" },
       { label: "Events and news", href: "/events" },
       { label: "Contact", href: "/contact" },
@@ -43,7 +51,7 @@ const COLUMNS: { title: string; links: FooterLink[] }[] = [
       { label: "Terms and conditions", href: "/terms" },
       { label: "Privacy policy", href: "/privacy" },
       { label: "Prohibited items", href: "/terms#prohibited-goods" },
-      { label: "FAQs", href: "/#faqs" },
+      { label: "FAQs", href: "/faqs" },
     ],
   },
 ];
@@ -81,7 +89,7 @@ export function MarketingFooter() {
         </div>
       </div>
 
-      <div className="mx-auto grid max-w-6xl grid-cols-2 gap-x-6 gap-y-10 px-6 py-12 lg:grid-cols-[1.4fr_1fr_1fr_1fr]">
+      <div className="mx-auto grid max-w-6xl grid-cols-2 gap-x-6 gap-y-10 px-6 py-12 lg:grid-cols-[1.4fr_1fr_1fr_1fr_1fr]">
         <div className="col-span-2 space-y-4 text-sm lg:col-span-1">
           <Link href="/" className="inline-flex" aria-label="NationWide Logistics home">
             <Logo variant="reverse" size="sm" />

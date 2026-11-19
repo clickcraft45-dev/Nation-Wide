@@ -36,7 +36,8 @@ const DESCRIPTION =
   "baggage from India to 240+ countries with FedEx, UPS and DHL. Compare prices in minutes, " +
   "book a door pickup in Hyderabad or Secunderabad, and track every shipment end to end.";
 
-const TITLE = "International Courier Service in Hyderabad | NationWide Logistics";
+// Brand first: a search for the company name should show the company name as the result title.
+const TITLE = "NationWide Logistics | International Courier Service in Hyderabad";
 
 // iOS does not read `display: "standalone"` from the manifest — these two are what let an
 // added-to-home-screen shortcut open without Safari's chrome. app/apple-icon.png already supplies

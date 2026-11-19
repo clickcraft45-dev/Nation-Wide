@@ -121,6 +121,18 @@ const nextConfig: NextConfig = {
     contentDispositionType: "attachment",
     contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
   },
+  // The bare domain served a full copy of the site alongside www, so every page existed at two
+  // addresses. One permanent redirect makes www the only one search engines keep.
+  async redirects() {
+    return [
+      {
+        source: "/:path*",
+        has: [{ type: "host", value: "nationwidelogistics.co" }],
+        destination: "https://www.nationwidelogistics.co/:path*",
+        permanent: true,
+      },
+    ];
+  },
   async headers() {
     return [
       { source: "/:path*", headers: SECURITY_HEADERS },
