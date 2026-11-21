@@ -6,6 +6,8 @@ import {
   IsOptional,
   IsPositive,
   IsString,
+  MaxLength,
+  MinLength,
   ValidateNested,
 } from 'class-validator';
 import {
@@ -51,6 +53,16 @@ export class VerifyPickupRequestDto {
   @IsOptional()
   @IsString()
   verificationNotes?: string;
+
+  /**
+   * Where it is going. Required when staff dispatched the pickup without one; otherwise it may
+   * correct the country booked.
+   */
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(100)
+  destinationCountry?: string;
 
   /**
    * The recipient's delivery address as confirmed with the customer at the door. Required: the

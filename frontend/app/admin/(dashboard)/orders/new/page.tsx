@@ -3,17 +3,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, CheckCircle2, Clock, Link2, Plus, UserRound } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Clock, Link2, UserRound } from "lucide-react";
 import type {
   AddressBookDto,
   B2bOrderResultDto,
-  CountryDto,
   CustomerDto,
   PickupSpotsDto,
   PickupTimeSlot,
-  QuotePreviewResultDto,
   ResolvedMapsUrlDto,
-  SavedItemDto,
 } from "@nationwide/shared-types";
 import { apiClient, errorMessage } from "@/lib/api-client";
 import { googleMapsEnabled, type PickedAddress } from "@/lib/google-maps";
@@ -28,21 +25,7 @@ import { PhoneInput } from "@/components/ui/phone-input";
 import { PincodeInput } from "@/components/ui/pincode-input";
 import { DateField } from "@/components/ui/date-field";
 import { MapPinField } from "@/components/ui/map-pin-picker";
-import {
-  isRecipientBlank,
-  toRecipientPayload,
-  validateRecipient,
-  type RecipientErrors,
-} from "@/components/quote/recipient-fields";
-import { validatePackages } from "@/components/shipment/packages-editor";
-import { toItemsPayload, validateItems } from "@/components/shipment/items-editor";
 import { PartnerPicker } from "@/components/shipment/partner-picker";
-import {
-  ShipmentCard,
-  newShipment,
-  shipmentPackages,
-  type ShipmentDraft,
-} from "@/components/shipment/shipment-card";
 
 const TIME_SLOTS: { value: PickupTimeSlot; label: string }[] = [
   { value: "09:00-12:00", label: "9:00 AM - 12:00 PM" },
@@ -107,16 +90,10 @@ export default function AdminNewOrderPage() {
   const [isCreatingCustomer, setIsCreatingCustomer] = useState(false);
 
   // --- Booking ---
-  const [countries, setCountries] = useState<CountryDto[]>([]);
   const [pickup, setPickup] = useState<PickupForm>(emptyPickup);
   const [pickupLocation, setPickupLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [isResolvingLink, setIsResolvingLink] = useState(false);
   const [linkNote, setLinkNote] = useState<string | null>(null);
-  const [savedRecipients, setSavedRecipients] = useState<AddressBookDto["recipients"]>([]);
-  const [savedItems, setSavedItems] = useState<SavedItemDto[]>([]);
-  const [shipments, setShipments] = useState<ShipmentDraft[]>([newShipment()]);
-  const [shipmentErrors, setShipmentErrors] = useState<Record<string, string>>({});
-  const [recipientErrors, setRecipientErrors] = useState<Record<string, RecipientErrors>>({});
   const [partnerId, setPartnerId] = useState<string | null>(null);
   const [results, setResults] = useState<B2bOrderResultDto[] | null>(null);
 
@@ -131,10 +108,6 @@ export default function AdminNewOrderPage() {
       .then(setCustomers)
       .catch(() => showToast({ variant: "error", title: "Could not load customers", description: "Refresh the page to try again." }))
       .finally(() => setCustomersLoading(false));
-    apiClient
-      .get<CountryDto[]>("/countries")
-      .then((all) => setCountries(all.filter((c) => c.isActive)))
-      .catch(() => showToast({ variant: "error", title: "Could not load countries", description: "Refresh the page to try again." }));
   }, [showToast]);
 
   const filteredCustomers = useMemo(() => {
@@ -156,8 +129,6 @@ export default function AdminNewOrderPage() {
       .get<AddressBookDto>(`/customers/${selected.id}/address-book`)
       .catch(() => null);
     if (!book) return;
-    setSavedRecipients(book.recipients);
-    setSavedItems(book.savedItems);
     const last = book.lastPickup;
     if (last) {
       setPickup((p) => ({
@@ -249,10 +220,6 @@ export default function AdminNewOrderPage() {
   const fetchSpots = (at: { lat: number; lng: number }) =>
     apiClient.get<PickupSpotsDto>(`/admin/pickup-requests/pickup-spots?latitude=${at.lat}&longitude=${at.lng}`);
 
-  function updateShipment(key: string, patch: Partial<ShipmentDraft>) {
-    setShipments((all) => all.map((sh) => (sh.key === key ? { ...sh, ...patch } : sh)));
-  }
-
   function validate(): boolean {
     const next: Record<string, string> = {};
     const required: [keyof PickupForm, string][] = [
@@ -273,49 +240,8 @@ export default function AdminNewOrderPage() {
     }
     if (!partnerId) next.partner = "Choose who collects this pickup.";
 
-    const perShipment: Record<string, string> = {};
-    const perRecipient: Record<string, RecipientErrors> = {};
-    for (const [i, shipment] of shipments.entries()) {
-      const label = `Delivery address ${i + 1}: `;
-      // Optional here: the partner takes the recipient down at the door, where it is required.
-      // Half-filled is still checked, so a typo is caught now rather than at the door.
-      const recipientProblems = isRecipientBlank(shipment.recipient)
-        ? {}
-        : validateRecipient(shipment.recipient);
-      if (Object.keys(recipientProblems).length > 0) {
-        perRecipient[shipment.key] = recipientProblems;
-      }
-      if (!shipment.destinationCountry) {
-        perShipment[shipment.key] = `${label}choose the destination country.`;
-        continue;
-      }
-      const boxProblem = validatePackages(
-        shipment.boxes,
-        shipment.shipmentType !== "DOCUMENT",
-      );
-      if (boxProblem) {
-        perShipment[shipment.key] = label + boxProblem;
-        continue;
-      }
-      const itemProblem = validateItems(shipment.items);
-      if (itemProblem) {
-        perShipment[shipment.key] = label + itemProblem;
-        continue;
-      }
-      // A price is needed either way round: a carrier from the rate cards, or one staff typed.
-      if (!shipment.rateProviderId && !(Number(shipment.manualPrice) > 0)) {
-        perShipment[shipment.key] =
-          `${label}choose a carrier, or enter the price to charge.`;
-      }
-    }
-
     setErrors(next);
-    setShipmentErrors(perShipment);
-    setRecipientErrors(perRecipient);
-    const ok =
-      Object.keys(next).length === 0 &&
-      Object.keys(perShipment).length === 0 &&
-      Object.keys(perRecipient).length === 0;
+    const ok = Object.keys(next).length === 0;
     if (!ok) {
       requestAnimationFrame(() => {
         const first = document.querySelector<HTMLElement>('[aria-invalid="true"]');
@@ -351,18 +277,8 @@ export default function AdminNewOrderPage() {
         pickupTimeSlot: pickup.timeSlot,
         pickupInstructions: pickup.instructions.trim() || undefined,
       },
-      orders: shipments.map((shipment) => ({
-        ...(isRecipientBlank(shipment.recipient)
-          ? {}
-          : { recipient: toRecipientPayload(shipment.recipient) }),
-        destinationCountry: shipment.destinationCountry,
-        shipmentType: shipment.shipmentType,
-        packages: shipmentPackages(shipment),
-        items: toItemsPayload(shipment.items),
-        ...(shipment.rateProviderId
-          ? { rateProviderId: shipment.rateProviderId }
-          : { manualPrice: Number(shipment.manualPrice) }),
-      })),
+      // No orders: the partner takes the destination, recipient, boxes, contents and price
+      // at the door.
     };
     try {
       const created = await apiClient.post<B2bOrderResultDto[]>(
@@ -370,11 +286,10 @@ export default function AdminNewOrderPage() {
         body,
       );
       setResults(created);
-      const booked = created.filter((r) => r.status === "BOOKED").length;
       showToast({
         variant: "success",
-        title: `${booked} shipment${booked === 1 ? "" : "s"} booked`,
-        description: "Each order is created when the partner completes the pickup.",
+        title: "Pickup booked and assigned",
+        description: "The partner takes the parcel and delivery details at the door.",
       });
     } catch (err) {
       setSubmitError(errorMessage(err, "Couldn't book this order. Please try again."));
@@ -518,10 +433,14 @@ export default function AdminNewOrderPage() {
                 )}
                 <div className="flex-1">
                   <p className="font-medium text-foreground">
-                    {r.recipientName || "Recipient added at pickup"} · {r.destinationCountry}
+                    {r.destinationCountry
+                      ? `${r.recipientName || "Recipient added at pickup"} · ${r.destinationCountry}`
+                      : `Pickup for ${customer.name}`}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {r.status === "BOOKED"
+                    {r.status === "BOOKED" && !r.destinationCountry
+                      ? "Assigned to the partner. They take the destination, parcel and price at the door."
+                      : r.status === "BOOKED"
                       ? `${r.carrier ?? "Manually priced"} · ${r.currency} ${Math.round(
                           r.price ?? 0,
                         ).toLocaleString("en-IN")}: assigned to the partner.`
@@ -678,40 +597,6 @@ export default function AdminNewOrderPage() {
             </CardContent>
           </Card>
 
-          {shipments.map((shipment, index) => (
-            <ShipmentCard
-              key={shipment.key}
-              index={index}
-              draft={shipment}
-              countries={countries}
-              recipients={savedRecipients}
-              savedItems={savedItems}
-              onSavedItemsChange={setSavedItems}
-              savedItemsBase={`/customers/${customer.id}`}
-              // Staff may charge a route the rate cards do not cover; the portal may not.
-              allowManualPrice
-              fetchPreview={(query) =>
-                apiClient.get<QuotePreviewResultDto>(`/quotes/preview?${query}`)
-              }
-              recipientErrors={recipientErrors[shipment.key] ?? {}}
-              recipientAtPickup
-              error={shipmentErrors[shipment.key]}
-              canRemove={shipments.length > 1}
-              onRemove={() =>
-                setShipments((all) => all.filter((sh) => sh.key !== shipment.key))
-              }
-              onChange={(patch) => updateShipment(shipment.key, patch)}
-            />
-          ))}
-
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={() => setShipments((all) => [...all, newShipment()])}
-          >
-            <Plus className="h-4 w-4" aria-hidden /> Add another delivery address
-          </Button>
-
           <Card>
             <CardHeader>
               <CardTitle>Assign pickup partner</CardTitle>
@@ -729,7 +614,7 @@ export default function AdminNewOrderPage() {
 
           {submitError && <FieldError>{submitError}</FieldError>}
           <Button type="submit" size="lg" className="w-full" isLoading={isSubmitting}>
-            Book {shipments.length} shipment{shipments.length === 1 ? "" : "s"} &amp; assign partner
+            Book pickup &amp; assign partner
           </Button>
         </form>
       )}

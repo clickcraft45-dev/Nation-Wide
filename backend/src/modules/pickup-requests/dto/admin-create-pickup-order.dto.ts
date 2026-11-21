@@ -1,7 +1,6 @@
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
-  ArrayMinSize,
   IsArray,
   IsDefined,
   IsNumber,
@@ -55,12 +54,16 @@ export class AdminCreatePickupOrderDto {
   @Type(() => B2bPickupDto)
   pickup!: B2bPickupDto;
 
+  /**
+   * Optional. Left out (the usual case), staff only dispatch: the partner takes the destination,
+   * recipient, boxes, contents and price at the door.
+   */
+  @IsOptional()
   @IsArray()
-  @ArrayMinSize(1)
   @ArrayMaxSize(25)
   @ValidateNested({ each: true })
   @Type(() => AdminOrderDto)
-  orders!: AdminOrderDto[];
+  orders?: AdminOrderDto[];
 
   @IsUUID()
   partnerId!: string;

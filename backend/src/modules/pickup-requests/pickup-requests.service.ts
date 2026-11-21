@@ -800,10 +800,112 @@ export class PickupRequestsService {
       throw new NotFoundException(`Customer ${dto.customerId} not found`);
     }
 
-    return this.createBatchForCustomer(dto.customerId, dto, {
-      partnerId: dto.partnerId,
-      actorId,
+    if (!dto.orders?.length) {
+      return [await this.dispatchForAdmin(dto, actorId)];
+    }
+    return this.createBatchForCustomer(
+      dto.customerId,
+      { ...dto, orders: dto.orders },
+      { partnerId: dto.partnerId, actorId },
+    );
+  }
+
+  /**
+   * Staff send a partner to collect, with nothing known yet but who and where. The partner takes
+   * the destination, recipient, boxes and contents at the door and names the price there (the
+   * pickup carries no carrier and no estimate, which is what the partner app reads as "price it
+   * at the door").
+   */
+  private async dispatchForAdmin(
+    dto: AdminCreatePickupOrderDto,
+    actorId: string,
+  ): Promise<B2bOrderResultDto> {
+    // A retried submit returns the pickup it already made.
+    const existingQuote = await this.prisma.quote.findFirst({
+      where: { customerId: dto.customerId, submissionKey: dto.submissionKey },
+      select: { id: true },
     });
+    const existing = existingQuote
+      ? await this.prisma.pickupRequest.findUnique({
+          where: { quoteId: existingQuote.id },
+          ...withDetails,
+        })
+      : null;
+
+    let pickupRequest = existing;
+    if (!pickupRequest) {
+      let { pickupLatitude, pickupLongitude } = dto.pickup;
+      if (pickupLatitude == null && dto.pickup.pickupMapsUrl) {
+        const resolved = await resolveMapsUrl(dto.pickup.pickupMapsUrl);
+        pickupLatitude = resolved?.latitude;
+        pickupLongitude = resolved?.longitude;
+      }
+      const logistics: PickupLogistics = {
+        ...dto.pickup,
+        dropAtWarehouse: false,
+        pickupLatitude,
+        pickupLongitude,
+      };
+      pickupRequest = await this.prisma.$transaction(async (tx) => {
+        const quote = await tx.quote.create({
+          data: {
+            customerId: dto.customerId,
+            shipmentType: 'PACKAGE',
+            weightKg: 0,
+            // Taken at the door (verify sets it).
+            destCountry: '',
+            status: 'PICKUP_REQUESTED',
+            submissionKey: dto.submissionKey,
+          },
+        });
+        return tx.pickupRequest.create({
+          data: {
+            quoteId: quote.id,
+            customerId: dto.customerId,
+            rateProviderId: null,
+            rateProviderName: null,
+            shipmentType: 'PACKAGE',
+            estimatedWeightKg: 0,
+            estimatedPrice: 0,
+            currency: 'INR',
+            ...pickupLogisticsData(logistics),
+            assignedPartnerId: dto.partnerId,
+            assignedAt: new Date(),
+            status: 'ASSIGNED',
+          },
+          ...withDetails,
+        });
+      });
+      await this.prisma.auditLog.create({
+        data: {
+          actorId,
+          action: 'PICKUP_REQUEST_DISPATCHED',
+          entity: 'PickupRequest',
+          entityId: pickupRequest.id,
+          before: {},
+          after: { partnerId: dto.partnerId, customerId: dto.customerId },
+        },
+      });
+      await this.notificationsService.enqueue(
+        dto.customerId,
+        'WHATSAPP',
+        NOTIFICATION_TEMPLATES.PICKUP_REQUEST_RECEIVED,
+        { termsUrl: `${publicFrontendUrl(this.config)}/terms` },
+      );
+      await this.announceAssignment(pickupRequest, dto.partnerId);
+    }
+
+    return {
+      index: 0,
+      recipientName: '',
+      destinationCountry: '',
+      status: 'BOOKED',
+      quoteId: pickupRequest.quoteId,
+      pickupRequestId: pickupRequest.id,
+      carrier: null,
+      price: null,
+      currency: 'INR',
+    };
   }
 
   // A partner taking an open request. The WHERE re-checks "still unclaimed" against the database,
@@ -1147,6 +1249,10 @@ export class PickupRequestsService {
         `Cannot verify a pickup request that is already ${pickupRequest.status}`,
       );
     }
+    const destinationCountry = dto.destinationCountry?.trim();
+    if (!pickupRequest.quote.destCountry && !destinationCountry) {
+      throw new BadRequestException('Choose the destination country');
+    }
     if (!pickupRequest.arrivedAt) {
       throw new BadRequestException('Mark arrival before verifying the parcel');
     }
@@ -1218,6 +1324,7 @@ export class PickupRequestsService {
       where: { id: pickupRequest.quoteId },
       data: {
         ...(dto.recipient ? recipientToQuoteData(dto.recipient) : {}),
+        ...(destinationCountry ? { destCountry: destinationCountry } : {}),
         items: cleanItems(dto.items),
       },
     });

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, CalendarPlus, Check, MapPinned, Phone } from "lucide-react";
 import {
   chargeableWeightKg,
+  type CountryDto,
   type PickupDocumentsDto,
   type PickupRequestDto,
   type RecalculatePreviewDto,
@@ -24,6 +25,8 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Stepper } from "@/components/ui/stepper";
 import { useDebouncedValue } from "@/lib/utils/use-debounced-value";
 import { cn } from "@/lib/utils/cn";
+import { NativeSelect } from "@/components/ui/select";
+import { searchCountries } from "@/lib/country-search";
 import {
   RecipientFields,
   emptyRecipient,
@@ -142,6 +145,18 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
   const [recipient, setRecipient] = useState<RecipientForm>(emptyRecipient);
   const [recipientErrors, setRecipientErrors] = useState<RecipientErrors>({});
   const [recipientConfirmed, setRecipientConfirmed] = useState(false);
+  // Staff may dispatch a pickup with no destination yet: the partner picks it here.
+  const [destinationCountry, setDestinationCountry] = useState("");
+  const [countries, setCountries] = useState<CountryDto[]>([]);
+  const needsCountry = pickup !== null && !pickup.destCountry;
+  const country = pickup?.destCountry || destinationCountry;
+  useEffect(() => {
+    if (!needsCountry || countries.length > 0) return;
+    apiClient
+      .get<CountryDto[]>("/countries")
+      .then((all) => setCountries(all.filter((c) => c.isActive)))
+      .catch(() => undefined);
+  }, [needsCountry, countries.length]);
 
   const [rejectReason, setRejectReason] = useState("");
   const [isRejecting, setIsRejecting] = useState(false);
@@ -261,6 +276,11 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
   }
 
   async function handleVerify() {
+    if (needsCountry && !destinationCountry) {
+      setVerifyError("Choose the destination country.");
+      document.getElementById("destination-country")?.focus();
+      return;
+    }
     if (packagesProblem) {
       setVerifyError(packagesProblem);
       return;
@@ -296,6 +316,7 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
           // than letting the phone name the price on a rate-carded shipment.
           ...(needsManualPrice ? { verifiedPrice: price } : {}),
           recipient: toRecipientPayload(recipient),
+          ...(needsCountry ? { destinationCountry } : {}),
           verificationNotes: verificationNotes.trim() || undefined,
         },
       );
@@ -547,7 +568,9 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
                         pickup.recipient.city,
                         pickup.destCountry,
                       ].join(", ")}`
-                    : `${pickup.destCountry}: take the address down at pickup`}
+                    : pickup.destCountry
+                      ? `${pickup.destCountry}: take the address down at pickup`
+                      : "Take the destination and address down at pickup"}
                 </p>
               </div>
               {pickup.items && pickup.items.length > 0 && (
@@ -796,7 +819,7 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
                 <CardContent className="space-y-4 pt-5">
                   <div>
                     <p className="text-sm font-medium text-foreground">
-                      Recipient (delivery address) · {pickup.destCountry}
+                      Recipient (delivery address){country ? ` · ${country}` : ""}
                     </p>
                     <p className="text-xs text-muted-foreground">
                       {pickup.recipient
@@ -804,12 +827,32 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
                         : "The customer didn't add one: take it down now."}
                     </p>
                   </div>
+                  {needsCountry && (
+                    <div className="space-y-1.5">
+                      <Label htmlFor="destination-country">Destination country</Label>
+                      <NativeSelect
+                        id="destination-country"
+                        searchable
+                        searchPlaceholder="Search countries"
+                        rank={(q) => searchCountries(countries, q).map((c) => c.name)}
+                        value={destinationCountry}
+                        onChange={(e) => setDestinationCountry(e.target.value)}
+                      >
+                        <option value="">Select a country…</option>
+                        {countries.map((c) => (
+                          <option key={c.id} value={c.name}>
+                            {c.name}
+                          </option>
+                        ))}
+                      </NativeSelect>
+                    </div>
+                  )}
                   <RecipientFields
                     value={recipient}
                     onChange={setRecipient}
                     errors={recipientErrors}
-                    isIndia={pickup.destCountry === "India"}
-                    country={pickup.destCountry}
+                    isIndia={country === "India"}
+                    country={country}
                     idPrefix="recipient"
                   />
                   <label className="flex items-center gap-2 text-sm text-foreground">
