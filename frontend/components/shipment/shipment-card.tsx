@@ -97,7 +97,7 @@ export function ShipmentCard({
   savedItemsBase,
   savedItemsClient,
   allowManualPrice = false,
-  recipientOptional = false,
+  recipientAtPickup = false,
   recipientErrors,
   error,
   canRemove,
@@ -114,8 +114,11 @@ export function ShipmentCard({
   savedItemsBase?: string;
   savedItemsClient?: React.ComponentProps<typeof ItemsEditor>["client"];
   allowManualPrice?: boolean;
-  /** Staff booking: the partner takes the recipient down at the door if it is left blank here. */
-  recipientOptional?: boolean;
+  /**
+   * Staff booking: only the destination country is taken here. The pickup partner takes down the
+   * recipient's name, phone and address at the door, where it is required.
+   */
+  recipientAtPickup?: boolean;
   recipientErrors: RecipientErrors;
   error?: string;
   canRemove: boolean;
@@ -207,26 +210,27 @@ export function ShipmentCard({
         )}
       </CardHeader>
       <CardContent className="space-y-7 pt-5" aria-invalid={Boolean(error) && !itemsError} tabIndex={-1}>
-        <Section title={recipientOptional ? "Recipient (optional)" : "Recipient"}>
-          {recipientOptional && (
+        <Section title={recipientAtPickup ? "Destination" : "Recipient"}>
+          {recipientAtPickup && (
             <p className="-mt-2 text-sm text-muted-foreground">
-              Leave it blank if the customer doesn&apos;t have it yet. The pickup partner must fill it in
-              at the door before collecting the parcel.
+              The pickup partner takes the recipient&apos;s name, phone and address at the door.
             </p>
           )}
           <div className="grid gap-4 sm:grid-cols-2">
-            <SavedRecipients
-              id={`saved-recipient-${draft.key}`}
-              recipients={forCountry.length > 0 ? forCountry : recipients}
-              onPick={(r) =>
-                onChange({
-                  recipient: recipientFrom(r),
-                  destinationCountry: r.country,
-                  // Their usual goods come back with the address; still editable.
-                  ...(r.lastItems?.length ? { items: itemsFrom(r.lastItems) } : {}),
-                })
-              }
-            />
+            {!recipientAtPickup && (
+              <SavedRecipients
+                id={`saved-recipient-${draft.key}`}
+                recipients={forCountry.length > 0 ? forCountry : recipients}
+                onPick={(r) =>
+                  onChange({
+                    recipient: recipientFrom(r),
+                    destinationCountry: r.country,
+                    // Their usual goods come back with the address; still editable.
+                    ...(r.lastItems?.length ? { items: itemsFrom(r.lastItems) } : {}),
+                  })
+                }
+              />
+            )}
             <div className="space-y-1.5">
               <Label htmlFor={`country-${draft.key}`}>Destination country</Label>
               <NativeSelect
@@ -247,18 +251,20 @@ export function ShipmentCard({
             </div>
           </div>
 
-          <RecipientFields
-            value={draft.recipient}
-            onChange={(update) =>
-              onChange({
-                recipient: typeof update === "function" ? update(draft.recipient) : update,
-              })
-            }
-            errors={recipientErrors}
-            isIndia={draft.destinationCountry === "India"}
-            country={draft.destinationCountry}
-            idPrefix={`recipient-${draft.key}`}
-          />
+          {!recipientAtPickup && (
+            <RecipientFields
+              value={draft.recipient}
+              onChange={(update) =>
+                onChange({
+                  recipient: typeof update === "function" ? update(draft.recipient) : update,
+                })
+              }
+              errors={recipientErrors}
+              isIndia={draft.destinationCountry === "India"}
+              country={draft.destinationCountry}
+              idPrefix={`recipient-${draft.key}`}
+            />
+          )}
         </Section>
 
         <Section title="Parcel">

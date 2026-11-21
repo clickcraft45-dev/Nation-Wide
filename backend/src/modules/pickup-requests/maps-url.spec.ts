@@ -23,6 +23,14 @@ describe('parseMapsUrl', () => {
     });
   });
 
+  it('reads a dropped pin shared from the app (/maps/search/lat,+lng)', () => {
+    expect(
+      parseMapsUrl(
+        'https://www.google.com/maps/search/17.434923,+78.340931?entry=tts&g_ep=EgoyMDI2MTExOC4xIPu8ASoASAFQAw%3D%3D',
+      ),
+    ).toEqual({ latitude: 17.434923, longitude: 78.340931 });
+  });
+
   it('is null for a link with no coordinates', () => {
     expect(
       parseMapsUrl('https://www.google.com/maps/place/Charminar'),

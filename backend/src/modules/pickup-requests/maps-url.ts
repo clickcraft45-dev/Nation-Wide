@@ -2,7 +2,8 @@
  * Pulls coordinates out of a Google Maps link staff paste when booking a pickup by phone.
  *
  * Covers the shapes Google actually hands out: "@lat,lng,17z" (browser), "!3dlat!4dlng" (a place),
- * "?q=lat,lng" / "?ll=" / "?query=" / "?destination=" (shared or API links). A link that names only
+ * "?q=lat,lng" / "?ll=" / "?query=" / "?destination=" (shared or API links), and
+ * "/maps/search/lat,+lng" (a dropped pin shared from the phone app). A link that names only
  * a place ("/place/Charminar") has no coordinates in it and yields null — the partner then opens the
  * link itself.
  */
@@ -22,6 +23,9 @@ export function parseMapsUrl(
     new RegExp(
       String.raw`[?&](?:q|ll|query|destination|center)=${num},\s*${num}`,
     ),
+    // A dropped pin shared from the app: maps.app.goo.gl expands to
+    // "/maps/search/17.434923,+78.340931" (or /place/), the coordinates in the path.
+    new RegExp(String.raw`/maps/(?:search|place)/${num},[\s+]*${num}`),
     new RegExp(String.raw`@${num},${num}`),
   ];
   for (const pattern of patterns) {

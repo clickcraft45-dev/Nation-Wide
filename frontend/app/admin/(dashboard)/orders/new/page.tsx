@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, CheckCircle2, Clock, Plus, UserRound } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Clock, Link2, Plus, UserRound } from "lucide-react";
 import type {
   AddressBookDto,
   B2bOrderResultDto,
@@ -214,36 +214,37 @@ export default function AdminNewOrderPage() {
     }
   }
 
-  // A pasted Google Maps link is read as soon as it looks complete, no button: the map then
-  // jumps to the spot and snaps the pin to the building's entrance.
+  // Reads the link into a pin: on "Use link", and on its own once a pasted link looks complete.
+  // The map then jumps to the spot and snaps the pin to the building's entrance.
   const mapsUrl = pickup.mapsUrl.trim();
+  const linkSeq = useRef(0);
+  const resolveLink = useCallback(async (url: string) => {
+    if (!url) return;
+    const seq = ++linkSeq.current;
+    setIsResolvingLink(true);
+    setLinkNote(null);
+    try {
+      const res = await apiClient.post<ResolvedMapsUrlDto>("/admin/pickup-requests/resolve-maps-url", { url });
+      if (seq !== linkSeq.current) return;
+      if (res.latitude != null && res.longitude != null) {
+        setPickupLocation({ lat: res.latitude, lng: res.longitude });
+        setLinkNote(`Pin set from the link: ${res.latitude.toFixed(6)}, ${res.longitude.toFixed(6)}`);
+      } else {
+        setLinkNote("No location in this link. It is saved, and the partner can open it to navigate.");
+      }
+    } catch {
+      if (seq === linkSeq.current) {
+        setLinkNote("Couldn't read that link right now. It will still be saved for the partner.");
+      }
+    } finally {
+      if (seq === linkSeq.current) setIsResolvingLink(false);
+    }
+  }, []);
   useEffect(() => {
     if (!MAPS_LINK.test(mapsUrl)) return;
-    let cancelled = false;
-    const timer = setTimeout(async () => {
-      setIsResolvingLink(true);
-      setLinkNote(null);
-      try {
-        const res = await apiClient.post<ResolvedMapsUrlDto>("/admin/pickup-requests/resolve-maps-url", {
-          url: mapsUrl,
-        });
-        if (cancelled) return;
-        if (res.latitude != null && res.longitude != null) {
-          setPickupLocation({ lat: res.latitude, lng: res.longitude });
-        } else {
-          setLinkNote("No location in this link. It is saved, and the partner can open it to navigate.");
-        }
-      } catch {
-        if (!cancelled) setLinkNote("Couldn't read that link right now. It will still be saved for the partner.");
-      } finally {
-        if (!cancelled) setIsResolvingLink(false);
-      }
-    }, 400);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [mapsUrl]);
+    const timer = setTimeout(() => void resolveLink(mapsUrl), 400);
+    return () => clearTimeout(timer);
+  }, [mapsUrl, resolveLink]);
 
   const fetchSpots = (at: { lat: number; lng: number }) =>
     apiClient.get<PickupSpotsDto>(`/admin/pickup-requests/pickup-spots?latitude=${at.lat}&longitude=${at.lng}`);
@@ -589,16 +590,33 @@ export default function AdminNewOrderPage() {
 
               <div className="space-y-1.5">
                 <Label htmlFor="pickup-mapsUrl">Google Maps link</Label>
-                <Input
-                  id="pickup-mapsUrl"
-                  type="url"
-                  inputMode="url"
-                  placeholder="Paste the link, e.g. https://maps.app.goo.gl/…"
-                  value={pickup.mapsUrl}
-                  onChange={(e) => setPickupField("mapsUrl")(e.target.value)}
-                  error={Boolean(errors.mapsUrl)}
-                  aria-describedby="pickup-mapsUrl-note"
-                />
+                <div className="flex gap-2">
+                  <Input
+                    id="pickup-mapsUrl"
+                    type="url"
+                    inputMode="url"
+                    placeholder="https://maps.app.goo.gl/…"
+                    value={pickup.mapsUrl}
+                    onChange={(e) => setPickupField("mapsUrl")(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        void resolveLink(mapsUrl);
+                      }
+                    }}
+                    error={Boolean(errors.mapsUrl)}
+                    aria-describedby="pickup-mapsUrl-note"
+                  />
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => void resolveLink(mapsUrl)}
+                    isLoading={isResolvingLink}
+                    disabled={!mapsUrl}
+                  >
+                    <Link2 className="h-4 w-4" aria-hidden /> Use link
+                  </Button>
+                </div>
                 {errors.mapsUrl && <FieldError>{errors.mapsUrl}</FieldError>}
                 <p id="pickup-mapsUrl-note" className="text-xs text-muted-foreground" aria-live="polite">
                   {isResolvingLink ? "Reading the link…" : linkNote}
@@ -676,7 +694,7 @@ export default function AdminNewOrderPage() {
                 apiClient.get<QuotePreviewResultDto>(`/quotes/preview?${query}`)
               }
               recipientErrors={recipientErrors[shipment.key] ?? {}}
-              recipientOptional
+              recipientAtPickup
               error={shipmentErrors[shipment.key]}
               canRemove={shipments.length > 1}
               onRemove={() =>
