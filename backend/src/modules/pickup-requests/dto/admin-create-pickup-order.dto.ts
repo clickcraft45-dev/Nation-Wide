@@ -13,10 +13,19 @@ import {
   MinLength,
   ValidateNested,
 } from 'class-validator';
-import { B2bOrderDto, B2bPickupDto } from './b2b-create-orders.dto';
+import { B2bPickupDto, OrderShipmentDto } from './b2b-create-orders.dto';
+import { RecipientAddressDto } from './recipient-address.dto';
 
-/** One shipment of a staff booking: the portal's shape plus a price staff may set by hand. */
-class AdminOrderDto extends B2bOrderDto {
+/**
+ * One shipment of a staff booking: the portal's shape plus a price staff may set by hand. The
+ * recipient is optional: the partner takes it down at the door, where verify requires it.
+ */
+export class AdminOrderDto extends OrderShipmentDto {
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => RecipientAddressDto)
+  recipient?: RecipientAddressDto;
+
   /**
    * What to charge when no rate card covers the route — the same escape hatch the single-shipment
    * screen had. Staff-only: the customer portal never names its own price.

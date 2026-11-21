@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/select";
 import { TrackingStatusBadge } from "@/components/ui/status-badge";
 import { useToast } from "@/components/ui/toast";
+import { InvoiceReviewDialog } from "@/components/invoices/invoice-review-dialog";
 
 /**
  * A shipment rendered as a payment card.
@@ -40,6 +41,8 @@ export function ShipmentAwbCard({
   const [error, setError] = useState<string | null>(null);
   // ponytail: per-view only; persist to localStorage if admins want their pick remembered.
   const [theme, setTheme] = useState<AuroraTheme>("crimson");
+  // Mapping or changing the AWB opens the invoice for review; sending is a separate, explicit step.
+  const [reviewing, setReviewing] = useState(false);
   const { showToast } = useToast();
 
   const isMapped = Boolean(shipment.externalTrackingNumber);
@@ -69,6 +72,7 @@ export function ShipmentAwbCard({
       );
       showToast({ variant: "success", title: `AWB ${awb} mapped` });
       onMapped();
+      setReviewing(true);
     } catch (err) {
       // The server rejects a duplicate AWB with a 409 naming the other shipment — that reason is
       // the whole value of the failure, so it is shown rather than a generic message.
@@ -135,6 +139,12 @@ export function ShipmentAwbCard({
         </Button>
       </form>
       {error && <p className="text-sm text-destructive">{error}</p>}
+
+      <InvoiceReviewDialog
+        source={reviewing ? { trackingNumber: shipment.internalTrackingNumber } : null}
+        onClose={() => setReviewing(false)}
+        onSent={onMapped}
+      />
     </div>
   );
 }

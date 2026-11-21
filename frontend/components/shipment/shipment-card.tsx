@@ -97,6 +97,7 @@ export function ShipmentCard({
   savedItemsBase,
   savedItemsClient,
   allowManualPrice = false,
+  recipientOptional = false,
   recipientErrors,
   error,
   canRemove,
@@ -113,6 +114,8 @@ export function ShipmentCard({
   savedItemsBase?: string;
   savedItemsClient?: React.ComponentProps<typeof ItemsEditor>["client"];
   allowManualPrice?: boolean;
+  /** Staff booking: the partner takes the recipient down at the door if it is left blank here. */
+  recipientOptional?: boolean;
   recipientErrors: RecipientErrors;
   error?: string;
   canRemove: boolean;
@@ -204,7 +207,13 @@ export function ShipmentCard({
         )}
       </CardHeader>
       <CardContent className="space-y-7 pt-5" aria-invalid={Boolean(error) && !itemsError} tabIndex={-1}>
-        <Section title="Recipient">
+        <Section title={recipientOptional ? "Recipient (optional)" : "Recipient"}>
+          {recipientOptional && (
+            <p className="-mt-2 text-sm text-muted-foreground">
+              Leave it blank if the customer doesn&apos;t have it yet. The pickup partner must fill it in
+              at the door before collecting the parcel.
+            </p>
+          )}
           <div className="grid gap-4 sm:grid-cols-2">
             <SavedRecipients
               id={`saved-recipient-${draft.key}`}

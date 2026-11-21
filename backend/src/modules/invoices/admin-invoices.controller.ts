@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Param,
+  Patch,
   Post,
   Query,
   Res,
@@ -26,6 +27,7 @@ import { ConsolidateInvoiceDto } from './dto/consolidate-invoice.dto';
 import { PreviewConsolidatedDto } from './dto/preview-consolidated.dto';
 import { SendInvoicesDto } from './dto/send-invoices.dto';
 import { CancelInvoiceDto } from './dto/cancel-invoice.dto';
+import { UpdateInvoiceDto } from './dto/update-invoice.dto';
 import { QueryInvoicesDto } from './dto/query-invoices.dto';
 import { CreateCustomInvoiceDto } from './dto/create-custom-invoice.dto';
 import { CustomsInvoiceInput } from './dto/customs-invoice.dto';
@@ -129,6 +131,34 @@ export class AdminInvoicesController {
   ): Promise<InvoiceDto> {
     return toInvoiceDto(
       await this.invoices.generateForOrder(orderId, user.sub),
+    );
+  }
+
+  /**
+   * After an AWB is mapped or changed: the order's invoice, redrawn with that AWB, for staff to
+   * check. Sends nothing. `invoice` is null when the order is not paid yet.
+   */
+  @Post('review-for-shipment/:trackingNumber')
+  async reviewForShipment(
+    @Param('trackingNumber') trackingNumber: string,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<{ invoice: InvoiceDto | null }> {
+    const invoice = await this.invoices.prepareForReview(
+      trackingNumber,
+      user.sub,
+    );
+    return { invoice: invoice ? toInvoiceDto(invoice) : null };
+  }
+
+  /** Corrections while reviewing, before the invoice is sent. */
+  @Patch(':id')
+  async update(
+    @Param('id') id: string,
+    @Body() dto: UpdateInvoiceDto,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<InvoiceDto> {
+    return toInvoiceDto(
+      await this.invoices.updateBeforeSend(id, dto, user.sub),
     );
   }
 

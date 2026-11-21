@@ -12,6 +12,7 @@ import { apiClient } from "@/lib/api-client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
+import { InvoiceReviewDialog } from "@/components/invoices/invoice-review-dialog";
 
 /**
  * The paperwork this order produced: its tax invoice and any receipts against it.
@@ -29,6 +30,7 @@ export function OrderDocumentsCard({
 }) {
   const [invoices, setInvoices] = useState<InvoiceDto[]>([]);
   const [receipts, setReceipts] = useState<ReceiptDto[]>([]);
+  const [reviewing, setReviewing] = useState<InvoiceDto | null>(null);
   const { showToast } = useToast();
 
   useEffect(() => {
@@ -71,7 +73,7 @@ export function OrderDocumentsCard({
         {invoices.length === 0 && receipts.length === 0 && (
           <p className="text-muted-foreground">
             Nothing issued for this order yet. An invoice and receipt are raised when the payment
-            is recorded.
+            is recorded. The invoice goes to the customer after you map the AWB and send it.
           </p>
         )}
 
@@ -81,15 +83,27 @@ export function OrderDocumentsCard({
               <p className="font-medium text-foreground">{invoice.invoiceNumber}</p>
               <p className="text-xs text-muted-foreground">
                 {new Date(invoice.invoiceDate).toLocaleDateString("en-IN")} · {invoice.status}
+                {invoice.status === "ISSUED" && (invoice.sentAt ? " · Sent" : " · Not sent yet")}
               </p>
             </div>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => openPdf(`/admin/invoices/${invoice.id}/pdf`)}
-            >
-              Invoice PDF
-            </Button>
+            <div className="flex gap-2">
+              {invoice.status === "ISSUED" && (
+                <Button
+                  variant={invoice.sentAt ? "secondary" : "primary"}
+                  size="sm"
+                  onClick={() => setReviewing(invoice)}
+                >
+                  {invoice.sentAt ? "Review" : "Review & send"}
+                </Button>
+              )}
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => openPdf(`/admin/invoices/${invoice.id}/pdf`)}
+              >
+                Invoice PDF
+              </Button>
+            </div>
           </div>
         ))}
 
@@ -112,6 +126,12 @@ export function OrderDocumentsCard({
           </div>
         ))}
       </CardContent>
+
+      <InvoiceReviewDialog
+        source={reviewing ? { invoice: reviewing } : null}
+        onClose={() => setReviewing(null)}
+        onSent={(sent) => setInvoices((all) => all.map((i) => (i.id === sent.id ? sent : i)))}
+      />
     </Card>
   );
 }

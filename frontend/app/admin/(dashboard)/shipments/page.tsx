@@ -10,6 +10,7 @@ import type {
 } from "@nationwide/shared-types";
 import { apiClient, ApiError } from "@/lib/api-client";
 import { useToast } from "@/components/ui/toast";
+import { InvoiceReviewDialog } from "@/components/invoices/invoice-review-dialog";
 import { Button } from "@/components/ui/button";
 import { ErrorState } from "@/components/ui/page-state";
 import { ShipmentLookupForm } from "@/features/admin/ShipmentLookupForm";
@@ -28,6 +29,8 @@ function AdminShipmentsPageInner() {
   const { showToast } = useToast();
 
   const [trackingNumber, setTrackingNumber] = useState<string | null>(null);
+  // After an AWB is mapped: the order's invoice, for review before it is sent.
+  const [reviewFor, setReviewFor] = useState<string | null>(null);
   const [shipment, setShipment] = useState<ShipmentAdminDetailDto | null>(null);
   const [providers, setProviders] = useState<ShippingProviderDto[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -103,6 +106,7 @@ function AdminShipmentsPageInner() {
       );
       setShipment(data);
       showToast({ variant: "success", title: "Carrier tracking number mapped" });
+      setReviewFor(trackingNumber);
     } catch (e) {
       showToast({
         variant: "error",
@@ -218,6 +222,11 @@ function AdminShipmentsPageInner() {
           </div>
         </div>
       )}
+
+      <InvoiceReviewDialog
+        source={reviewFor ? { trackingNumber: reviewFor } : null}
+        onClose={() => setReviewFor(null)}
+      />
     </div>
   );
 }

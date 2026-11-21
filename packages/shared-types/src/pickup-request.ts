@@ -103,6 +103,23 @@ export interface ResolvedMapsUrlDto {
   longitude: number | null;
 }
 
+/** A place to put the pickup pin: a building entrance, or a point a vehicle can stop at. */
+export interface PickupSpotDto {
+  kind: "ENTRANCE" | "STOP";
+  label: string;
+  /** Google's preferred entrance for the building; the pin snaps to it. */
+  preferred: boolean;
+  latitude: number;
+  longitude: number;
+}
+
+/** The building at a pin: its outline and ways in. Empty when Google has no data for the spot. */
+export interface PickupSpotsDto {
+  buildingName: string | null;
+  outline: { latitude: number; longitude: number }[] | null;
+  spots: PickupSpotDto[];
+}
+
 /** Short-lived links to the KYC/parcel photos — only ever fetched on demand, never embedded. */
 export interface PickupDocumentsDto {
   aadhaarUrl: string | null;

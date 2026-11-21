@@ -45,7 +45,9 @@ export interface InvoiceDto {
   lineCount: number;
 
   recipientName: string;
+  recipientPhone: string;
   recipientGstin: string | null;
+  recipientAddress: string | null;
   placeOfSupplyState: string;
   placeOfSupplyCode: string;
 
@@ -59,12 +61,27 @@ export interface InvoiceDto {
   igstAmount: number;
   totalTax: number;
   nonTaxableCharges: number;
+  /** A coupon taken off after tax. */
+  discountAmount: number;
   totalAmount: number;
   breakdownSource: InvoiceBreakdownSource;
 
   sentAt: string | null; // when the WhatsApp send was ACCEPTED, not when delivered
   cancelledAt: string | null;
   cancellationReason: string | null;
+}
+
+/** Corrections staff make while reviewing an order's invoice, before it is sent. */
+export interface UpdateInvoiceInput {
+  recipientName?: string;
+  recipientPhone?: string;
+  /** Empty string clears it. */
+  recipientGstin?: string;
+  recipientAddress?: string;
+  placeOfSupplyState?: string;
+  taxableValue?: number;
+  nonTaxableCharges?: number;
+  discountAmount?: number;
 }
 
 export interface InvoiceListDto {

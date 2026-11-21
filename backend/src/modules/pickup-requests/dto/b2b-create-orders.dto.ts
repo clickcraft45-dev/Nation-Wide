@@ -92,13 +92,12 @@ export class B2bPickupDto {
   pickupInstructions?: string;
 }
 
-/** One shipment in the batch: its own recipient, boxes and contents. */
-export class B2bOrderDto {
-  @IsDefined()
-  @ValidateNested()
-  @Type(() => RecipientAddressDto)
-  recipient!: RecipientAddressDto;
-
+/**
+ * One shipment, minus who it goes to. The portal and staff booking differ only there: a business
+ * must name the recipient, staff may leave it for the partner to take down at the door. Split out
+ * because a subclass cannot loosen an inherited @IsDefined.
+ */
+export class OrderShipmentDto {
   @IsString()
   @MinLength(1)
   @MaxLength(100)
@@ -118,6 +117,19 @@ export class B2bOrderDto {
   @IsUUID()
   rateProviderId?: string;
 }
+
+/** One shipment in the batch: its own recipient, boxes and contents. */
+export class B2bOrderDto extends OrderShipmentDto {
+  @IsDefined()
+  @ValidateNested()
+  @Type(() => RecipientAddressDto)
+  recipient!: RecipientAddressDto;
+}
+
+/** A shipment from either booking screen: the recipient may be missing on a staff booking. */
+export type BookableOrderDto = OrderShipmentDto & {
+  recipient?: RecipientAddressDto;
+};
 
 // Capped so one submission cannot price and write an unbounded number of rows; a business with
 // more than this books a second batch.

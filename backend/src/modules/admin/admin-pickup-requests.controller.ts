@@ -13,10 +13,12 @@ import type {
   B2bOrderResultDto,
   PickupDocumentsDto,
   PickupRequestDto,
+  PickupSpotsDto,
   RecalculatePreviewDto,
   ResolvedMapsUrlDto,
 } from '@nationwide/shared-types';
-import { IsString, MaxLength } from 'class-validator';
+import { IsLatitude, IsLongitude, IsString, MaxLength } from 'class-validator';
+import { Type } from 'class-transformer';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -34,6 +36,17 @@ import { RejectParcelDto } from '../pickup-requests/dto/reject-parcel.dto';
 import { AdminCreatePickupOrderDto } from '../pickup-requests/dto/admin-create-pickup-order.dto';
 import { PhotoUpload, requireFile } from '../pickup-requests/image-upload';
 import { resolveMapsUrl } from '../pickup-requests/maps-url';
+import { findPickupSpots } from '../pickup-requests/pickup-spots';
+
+class PickupSpotsQueryDto {
+  @Type(() => Number)
+  @IsLatitude()
+  latitude!: number;
+
+  @Type(() => Number)
+  @IsLongitude()
+  longitude!: number;
+}
 
 class ResolveMapsUrlDto {
   @IsString()
@@ -90,6 +103,13 @@ export class AdminPickupRequestsController {
       latitude: resolved?.latitude ?? null,
       longitude: resolved?.longitude ?? null,
     };
+  }
+
+  // The building at the pin, its entrances and stopping points, so staff can pin the gate.
+  // Ahead of :id. Empty when Google has no building data there or no server key is configured.
+  @Get('pickup-spots')
+  pickupSpots(@Query() query: PickupSpotsQueryDto): Promise<PickupSpotsDto> {
+    return findPickupSpots(query.latitude, query.longitude);
   }
 
   @Get(':id')

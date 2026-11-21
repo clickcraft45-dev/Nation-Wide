@@ -36,7 +36,9 @@ export function toInvoiceDto(invoice: InvoiceWithCustomer): InvoiceDto {
     lineCount: invoice._count?.lines ?? invoice.lines?.length ?? 0,
 
     recipientName: invoice.recipientName,
+    recipientPhone: invoice.recipientPhone,
     recipientGstin: invoice.recipientGstin,
+    recipientAddress: invoice.recipientAddress,
     placeOfSupplyState: invoice.placeOfSupplyState,
     placeOfSupplyCode: invoice.placeOfSupplyCode,
 
@@ -50,6 +52,7 @@ export function toInvoiceDto(invoice: InvoiceWithCustomer): InvoiceDto {
     igstAmount: invoice.igstAmount,
     totalTax: invoice.totalTax,
     nonTaxableCharges: invoice.nonTaxableCharges,
+    discountAmount: invoice.discountAmount,
     totalAmount: invoice.totalAmount,
     breakdownSource: invoice.breakdownSource as InvoiceBreakdownSource,
 

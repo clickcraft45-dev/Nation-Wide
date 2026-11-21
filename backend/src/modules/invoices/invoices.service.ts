@@ -31,6 +31,7 @@ import { gstStateCode, isIntraStateSupply } from './indian-states';
 import { InvoicePdfService } from './invoice-pdf.service';
 import { dialablePhone } from '../../common/utils/phone.util';
 import type { InvoiceBranding } from './templates/tax-invoice-template';
+import type { UpdateInvoiceDto } from './dto/update-invoice.dto';
 
 /**
  * Who the invoice is from and to, frozen onto the row at issue. One place, so every kind of
@@ -81,7 +82,8 @@ const ORDER_FOR_INVOICE = {
     customer: true,
     quote: { include: { selectedOption: true } },
     pickupRequest: true,
-    shipments: { include: { provider: true } },
+    // The carrier AWB is printed in place of our own number once staff have mapped one.
+    shipments: { include: { provider: true, externalTrackingNumbers: true } },
     // The code printed on the invoice beside the deduction it caused.
     coupon: { select: { code: true } },
   },
@@ -824,7 +826,12 @@ export class InvoicesService {
       invoice,
       {
         shipments: order.shipments.map((shipment) => ({
-          trackingNumber: shipment.internalTrackingNumber,
+          // The carrier's AWB once mapped (the number the customer can track with at the
+          // carrier), our own reference until then.
+          trackingNumber:
+            shipment.externalTrackingNumbers.find(
+              (etn) => etn.providerId === shipment.providerId,
+            )?.externalTrackingNumber ?? shipment.internalTrackingNumber,
           providerName: shipment.provider.name,
         })),
         destination: order.quote
@@ -1064,6 +1071,178 @@ export class InvoicesService {
       }
     }
     return summary;
+  }
+
+  // -------------------------------------------------------------------------
+  // Review before sending
+  // -------------------------------------------------------------------------
+
+  /**
+   * An order's invoice, made ready for staff to check after they map (or change) the carrier
+   * AWB. Nothing is sent from here: the customer receives it only when staff press Send.
+   *
+   * Issued now if the order is paid and has none yet; otherwise the existing PDF is redrawn so it
+   * prints the AWB just mapped. Null when the order is not paid yet: there is nothing to bill.
+   */
+  async prepareForReview(
+    internalTrackingNumber: string,
+    actorId: string,
+  ): Promise<Invoice | null> {
+    const shipment = await this.prisma.shipment.findUnique({
+      where: { internalTrackingNumber },
+      select: {
+        orderId: true,
+        order: { select: { paymentStatus: true, status: true } },
+      },
+    });
+    if (!shipment) {
+      throw new NotFoundException(
+        `Tracking number ${internalTrackingNumber} not found`,
+      );
+    }
+    const existing = await this.prisma.invoice.findUnique({
+      where: { orderId: shipment.orderId },
+    });
+    if (!existing) {
+      if (
+        shipment.order.paymentStatus !== 'PAID' ||
+        shipment.order.status === 'CANCELLED'
+      ) {
+        return null;
+      }
+      // Rendered with the mapped AWB already.
+      return this.generateForOrder(shipment.orderId, actorId);
+    }
+    if (existing.status === 'CANCELLED') return existing;
+    return this.redraw(existing);
+  }
+
+  /**
+   * Corrections while reviewing. Only before the invoice is sent: once the customer has it, the
+   * document they filed must not change under them, so a correction then is Cancel and reissue.
+   * Same number, tax recalculated, PDF redrawn.
+   */
+  async updateBeforeSend(
+    id: string,
+    dto: UpdateInvoiceDto,
+    actorId: string,
+  ): Promise<Invoice> {
+    const invoice = await this.findOne(id);
+    if (invoice.status === 'CANCELLED') {
+      throw new BadRequestException('A cancelled invoice cannot be edited');
+    }
+    if (invoice.kind !== 'ORDER') {
+      throw new BadRequestException(
+        'Only an order invoice can be edited here. Cancel and reissue this one instead.',
+      );
+    }
+    if (invoice.sentAt) {
+      throw new BadRequestException(
+        'This invoice was already sent to the customer. Cancel it and issue a new one to correct it.',
+      );
+    }
+
+    const placeOfSupplyState =
+      dto.placeOfSupplyState?.trim() || invoice.placeOfSupplyState;
+    const placeOfSupplyCode = gstStateCode(placeOfSupplyState);
+    if (!placeOfSupplyCode) {
+      throw new BadRequestException(
+        `"${placeOfSupplyState}" is not an Indian state or union territory`,
+      );
+    }
+
+    // The rate the invoice was issued at, kept: staff correct the amount, not the GST rate.
+    const ratePercent =
+      invoice.taxableValue > 0
+        ? (invoice.totalTax / invoice.taxableValue) * 100
+        : DEFAULT_GST_PERCENT;
+    const taxableValue = round2(dto.taxableValue ?? invoice.taxableValue);
+    const split = splitGst(
+      taxableValue,
+      round2((taxableValue * ratePercent) / 100),
+      isIntraStateSupply(invoice.supplierStateCode, placeOfSupplyCode),
+    );
+    const nonTaxableCharges = round2(
+      dto.nonTaxableCharges ?? invoice.nonTaxableCharges,
+    );
+    const gross = taxableValue + split.totalTax + nonTaxableCharges;
+    const discountAmount = round2(
+      Math.min(dto.discountAmount ?? invoice.discountAmount, gross),
+    );
+
+    const data = {
+      recipientName: dto.recipientName?.trim() ?? invoice.recipientName,
+      recipientPhone: dto.recipientPhone?.trim() ?? invoice.recipientPhone,
+      recipientGstin:
+        dto.recipientGstin === undefined
+          ? invoice.recipientGstin
+          : dto.recipientGstin.trim().toUpperCase() || null,
+      recipientAddress:
+        dto.recipientAddress === undefined
+          ? invoice.recipientAddress
+          : dto.recipientAddress.trim() || null,
+      placeOfSupplyState,
+      placeOfSupplyCode,
+      taxableValue,
+      ...split,
+      nonTaxableCharges,
+      discountAmount,
+      totalAmount: round2(gross - discountAmount),
+    };
+
+    const updated = await this.prisma.invoice.update({
+      where: { id },
+      data,
+    });
+    await this.prisma.auditLog.create({
+      data: {
+        actorId,
+        action: 'INVOICE_EDITED',
+        entity: 'Invoice',
+        entityId: id,
+        before: {
+          recipientName: invoice.recipientName,
+          recipientPhone: invoice.recipientPhone,
+          recipientGstin: invoice.recipientGstin,
+          recipientAddress: invoice.recipientAddress,
+          placeOfSupplyState: invoice.placeOfSupplyState,
+          taxableValue: invoice.taxableValue,
+          totalTax: invoice.totalTax,
+          nonTaxableCharges: invoice.nonTaxableCharges,
+          discountAmount: invoice.discountAmount,
+          totalAmount: invoice.totalAmount,
+        },
+        after: {
+          recipientName: data.recipientName,
+          recipientPhone: data.recipientPhone,
+          recipientGstin: data.recipientGstin,
+          recipientAddress: data.recipientAddress,
+          placeOfSupplyState: data.placeOfSupplyState,
+          taxableValue: data.taxableValue,
+          totalTax: data.totalTax,
+          nonTaxableCharges: data.nonTaxableCharges,
+          discountAmount: data.discountAmount,
+          totalAmount: data.totalAmount,
+        },
+      },
+    });
+    return this.redraw(updated);
+  }
+
+  /** Re-render an order invoice's PDF from its current fields and the order's current AWB. */
+  private async redraw(invoice: Invoice): Promise<Invoice> {
+    if (!invoice.orderId) return invoice;
+    const order = await this.prisma.order.findUnique({
+      where: { id: invoice.orderId },
+      ...ORDER_FOR_INVOICE,
+    });
+    if (!order) return invoice;
+    const settings = await this.companySettings.get();
+    const pdfPath = await this.renderAndStorePdf(invoice, order, settings);
+    return this.prisma.invoice.update({
+      where: { id: invoice.id },
+      data: { pdfPath },
+    });
   }
 
   // -------------------------------------------------------------------------

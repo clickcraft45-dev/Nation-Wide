@@ -3,12 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, CheckCircle2, Clock, Link2, Plus, UserRound } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Clock, Plus, UserRound } from "lucide-react";
 import type {
   AddressBookDto,
   B2bOrderResultDto,
   CountryDto,
   CustomerDto,
+  PickupSpotsDto,
   PickupTimeSlot,
   QuotePreviewResultDto,
   ResolvedMapsUrlDto,
@@ -28,6 +29,7 @@ import { PincodeInput } from "@/components/ui/pincode-input";
 import { DateField } from "@/components/ui/date-field";
 import { MapPinField } from "@/components/ui/map-pin-picker";
 import {
+  isRecipientBlank,
   toRecipientPayload,
   validateRecipient,
   type RecipientErrors,
@@ -47,6 +49,9 @@ const TIME_SLOTS: { value: PickupTimeSlot; label: string }[] = [
   { value: "12:00-15:00", label: "12:00 PM - 3:00 PM" },
   { value: "15:00-18:00", label: "3:00 PM - 6:00 PM" },
 ];
+
+// The Google Maps hosts the backend will read (maps-url.ts), with something after the host.
+const MAPS_LINK = /^https:\/\/(maps\.app\.goo\.gl|goo\.gl|(www\.)?google\.[a-z.]+|maps\.google\.com)\/\S+/i;
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
 
@@ -209,26 +214,39 @@ export default function AdminNewOrderPage() {
     }
   }
 
-  async function resolveLink() {
-    if (!pickup.mapsUrl.trim()) return;
-    setIsResolvingLink(true);
-    setLinkNote(null);
-    try {
-      const res = await apiClient.post<ResolvedMapsUrlDto>("/admin/pickup-requests/resolve-maps-url", {
-        url: pickup.mapsUrl.trim(),
-      });
-      if (res.latitude != null && res.longitude != null) {
-        setPickupLocation({ lat: res.latitude, lng: res.longitude });
-        setLinkNote(`Pin set from the link: ${res.latitude.toFixed(6)}, ${res.longitude.toFixed(6)}`);
-      } else {
-        setLinkNote("No coordinates in this link. The partner will open the link itself to navigate.");
+  // A pasted Google Maps link is read as soon as it looks complete, no button: the map then
+  // jumps to the spot and snaps the pin to the building's entrance.
+  const mapsUrl = pickup.mapsUrl.trim();
+  useEffect(() => {
+    if (!MAPS_LINK.test(mapsUrl)) return;
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      setIsResolvingLink(true);
+      setLinkNote(null);
+      try {
+        const res = await apiClient.post<ResolvedMapsUrlDto>("/admin/pickup-requests/resolve-maps-url", {
+          url: mapsUrl,
+        });
+        if (cancelled) return;
+        if (res.latitude != null && res.longitude != null) {
+          setPickupLocation({ lat: res.latitude, lng: res.longitude });
+        } else {
+          setLinkNote("No location in this link. It is saved, and the partner can open it to navigate.");
+        }
+      } catch {
+        if (!cancelled) setLinkNote("Couldn't read that link right now. It will still be saved for the partner.");
+      } finally {
+        if (!cancelled) setIsResolvingLink(false);
       }
-    } catch {
-      setLinkNote("Couldn't read that link right now. It will still be saved for the partner.");
-    } finally {
-      setIsResolvingLink(false);
-    }
-  }
+    }, 400);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [mapsUrl]);
+
+  const fetchSpots = (at: { lat: number; lng: number }) =>
+    apiClient.get<PickupSpotsDto>(`/admin/pickup-requests/pickup-spots?latitude=${at.lat}&longitude=${at.lng}`);
 
   function updateShipment(key: string, patch: Partial<ShipmentDraft>) {
     setShipments((all) => all.map((sh) => (sh.key === key ? { ...sh, ...patch } : sh)));
@@ -258,7 +276,11 @@ export default function AdminNewOrderPage() {
     const perRecipient: Record<string, RecipientErrors> = {};
     for (const [i, shipment] of shipments.entries()) {
       const label = `Delivery address ${i + 1}: `;
-      const recipientProblems = validateRecipient(shipment.recipient);
+      // Optional here: the partner takes the recipient down at the door, where it is required.
+      // Half-filled is still checked, so a typo is caught now rather than at the door.
+      const recipientProblems = isRecipientBlank(shipment.recipient)
+        ? {}
+        : validateRecipient(shipment.recipient);
       if (Object.keys(recipientProblems).length > 0) {
         perRecipient[shipment.key] = recipientProblems;
       }
@@ -329,7 +351,9 @@ export default function AdminNewOrderPage() {
         pickupInstructions: pickup.instructions.trim() || undefined,
       },
       orders: shipments.map((shipment) => ({
-        recipient: toRecipientPayload(shipment.recipient),
+        ...(isRecipientBlank(shipment.recipient)
+          ? {}
+          : { recipient: toRecipientPayload(shipment.recipient) }),
         destinationCountry: shipment.destinationCountry,
         shipmentType: shipment.shipmentType,
         packages: shipmentPackages(shipment),
@@ -493,7 +517,7 @@ export default function AdminNewOrderPage() {
                 )}
                 <div className="flex-1">
                   <p className="font-medium text-foreground">
-                    {r.recipientName} · {r.destinationCountry}
+                    {r.recipientName || "Recipient added at pickup"} · {r.destinationCountry}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     {r.status === "BOOKED"
@@ -565,30 +589,25 @@ export default function AdminNewOrderPage() {
 
               <div className="space-y-1.5">
                 <Label htmlFor="pickup-mapsUrl">Google Maps link</Label>
-                <div className="flex gap-2">
-                  <Input
-                    id="pickup-mapsUrl"
-                    type="url"
-                    placeholder="https://maps.app.goo.gl/…"
-                    value={pickup.mapsUrl}
-                    onChange={(e) => setPickupField("mapsUrl")(e.target.value)}
-                    error={Boolean(errors.mapsUrl)}
-                  />
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={resolveLink}
-                    isLoading={isResolvingLink}
-                    disabled={!pickup.mapsUrl.trim()}
-                  >
-                    <Link2 className="h-4 w-4" aria-hidden /> Use link
-                  </Button>
-                </div>
+                <Input
+                  id="pickup-mapsUrl"
+                  type="url"
+                  inputMode="url"
+                  placeholder="Paste the link, e.g. https://maps.app.goo.gl/…"
+                  value={pickup.mapsUrl}
+                  onChange={(e) => setPickupField("mapsUrl")(e.target.value)}
+                  error={Boolean(errors.mapsUrl)}
+                  aria-describedby="pickup-mapsUrl-note"
+                />
                 {errors.mapsUrl && <FieldError>{errors.mapsUrl}</FieldError>}
-                {linkNote && <p className="text-xs text-muted-foreground">{linkNote}</p>}
+                <p id="pickup-mapsUrl-note" className="text-xs text-muted-foreground" aria-live="polite">
+                  {isResolvingLink ? "Reading the link…" : linkNote}
+                </p>
               </div>
 
-              {googleMapsEnabled() && <MapPinField value={pickupLocation} onChange={applyPicked} />}
+              {googleMapsEnabled() && (
+                <MapPinField value={pickupLocation} onChange={applyPicked} fetchSpots={fetchSpots} />
+              )}
 
               {field("addressLine1", "Address line 1 (house / flat, street)")}
               {field("addressLine2", "Address line 2 / landmark (optional)")}
@@ -657,6 +676,7 @@ export default function AdminNewOrderPage() {
                 apiClient.get<QuotePreviewResultDto>(`/quotes/preview?${query}`)
               }
               recipientErrors={recipientErrors[shipment.key] ?? {}}
+              recipientOptional
               error={shipmentErrors[shipment.key]}
               canRemove={shipments.length > 1}
               onRemove={() =>

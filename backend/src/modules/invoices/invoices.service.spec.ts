@@ -43,7 +43,12 @@ function makeOrder(overrides: Record<string, unknown> = {}) {
     shipments: [
       {
         internalTrackingNumber: 'NW-26-000123',
+        providerId: 'prov-icl',
         provider: { name: 'ICL' },
+        externalTrackingNumbers: [] as {
+          providerId: string;
+          externalTrackingNumber: string;
+        }[],
       },
     ],
     ...overrides,
@@ -497,6 +502,94 @@ describe('InvoicesService', () => {
       expect(data.status).toBe('CANCELLED');
       expect(data).not.toHaveProperty('invoiceNumber');
       expect(prisma.auditLog.create).toHaveBeenCalled();
+    });
+  });
+
+  describe('review before sending', () => {
+    const unsent = {
+      id: 'inv-1',
+      kind: 'ORDER',
+      status: 'ISSUED',
+      orderId: 'order-1',
+      invoiceNumber: 'NW/2026-27/00042',
+      invoiceDate: new Date('2026-09-25T00:00:00.000Z'),
+      sentAt: null,
+      supplierStateCode: '36',
+      recipientName: 'Ravi Kumar',
+      recipientPhone: '+919876500000',
+      recipientGstin: null,
+      recipientAddress: null,
+      placeOfSupplyState: 'Telangana',
+      placeOfSupplyCode: '36',
+      taxableValue: 600,
+      totalTax: 108,
+      nonTaxableCharges: 100,
+      discountAmount: 0,
+      totalAmount: 808,
+    };
+
+    it('recalculates tax at the same rate and redraws the PDF', async () => {
+      prisma.invoice.findUnique.mockResolvedValue(unsent);
+      // Prisma returns the whole row, not just what changed.
+      prisma.invoice.update.mockImplementation(
+        ({ data }: { data: Record<string, unknown> }) =>
+          Promise.resolve({ ...unsent, ...data }),
+      );
+      await service.updateBeforeSend(
+        'inv-1',
+        { taxableValue: 1000, placeOfSupplyState: 'Karnataka' },
+        'admin-1',
+      );
+      const data = prisma.invoice.update.mock.calls[0][0].data as Record<
+        string,
+        number
+      >;
+      expect(data.taxableValue).toBe(1000);
+      // Out of state now: IGST at the 18% the invoice was issued at.
+      expect(data.igstAmount).toBe(180);
+      expect(data.cgstAmount).toBe(0);
+      expect(data.totalAmount).toBe(1280);
+      expect(invoicePdf.render).toHaveBeenCalled();
+      expect(prisma.auditLog.create).toHaveBeenCalled();
+    });
+
+    it('refuses to edit an invoice the customer already has', async () => {
+      prisma.invoice.findUnique.mockResolvedValue({
+        ...unsent,
+        sentAt: new Date(),
+      });
+      await expect(
+        service.updateBeforeSend('inv-1', { taxableValue: 1 }, 'admin-1'),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.invoice.update).not.toHaveBeenCalled();
+    });
+
+    it('prints the mapped carrier AWB in place of our own reference', async () => {
+      prisma.order.findUnique.mockResolvedValue(
+        makeOrder({
+          shipments: [
+            {
+              internalTrackingNumber: 'NW-26-000123',
+              providerId: 'prov-dhl',
+              provider: { name: 'DHL' },
+              externalTrackingNumbers: [
+                { providerId: 'prov-icl', externalTrackingNumber: 'OLD1' },
+                {
+                  providerId: 'prov-dhl',
+                  externalTrackingNumber: '1234567890',
+                },
+              ],
+            },
+          ],
+        }),
+      );
+      await service.generateForOrder('order-1', 'admin-1');
+      const extras = invoicePdf.render.mock.calls[0][1] as {
+        shipments: { trackingNumber: string }[];
+      };
+      expect(extras.shipments[0].trackingNumber).toBe('1234567890');
+      // Issuing never sends: staff send it after reviewing.
+      expect(notifications.enqueue).not.toHaveBeenCalled();
     });
   });
 });

@@ -47,6 +47,11 @@ export function recipientFrom(
   };
 }
 
+/** Nothing typed at all: where the recipient is optional, that means "add it later". */
+export function isRecipientBlank(value: RecipientForm): boolean {
+  return Object.values(value).every((v) => !v.trim());
+}
+
 // Mirrors RecipientAddressDto's limits so a bad value is caught next to its field.
 export function validateRecipient(value: RecipientForm): RecipientErrors {
   const errors: RecipientErrors = {};

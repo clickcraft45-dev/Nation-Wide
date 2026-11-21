@@ -440,8 +440,9 @@ export class OrdersService {
     // retry path for anything that lands here unbilled.
     if (dto.paymentStatus === 'PAID') {
       try {
-        const invoice = await this.invoices.generateForOrder(id, actorId);
-        if (!invoice.sentAt) await this.invoices.sendToWhatsApp(invoice.id);
+        // Issued, not sent: staff review it once the carrier AWB is mapped and send it from
+        // there, so the copy the customer gets carries the AWB and any corrections.
+        await this.invoices.generateForOrder(id, actorId);
       } catch (error) {
         this.logger.warn(
           `Order ${id} was marked paid but its invoice could not be issued: ${

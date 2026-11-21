@@ -47,7 +47,11 @@ import { AcceptParcelDto } from './dto/accept-parcel.dto';
 import { RejectParcelDto } from './dto/reject-parcel.dto';
 import { RecipientAddressDto } from './dto/recipient-address.dto';
 import { AdminCreatePickupOrderDto } from './dto/admin-create-pickup-order.dto';
-import { B2bCreateOrdersDto, B2bOrderDto } from './dto/b2b-create-orders.dto';
+import {
+  B2bCreateOrdersDto,
+  B2bOrderDto,
+  BookableOrderDto,
+} from './dto/b2b-create-orders.dto';
 import { resolveMapsUrl } from './maps-url';
 
 const withDetails = {
@@ -439,7 +443,8 @@ export class PickupRequestsService {
     quote: { id: string; status: string; weightKg: number };
     customerId: string;
     shipmentType: B2bOrderDto['shipmentType'];
-    recipient: RecipientAddressDto;
+    /** Missing on a staff booking: the partner takes it down at the door. */
+    recipient?: RecipientAddressDto;
     items: B2bOrderDto['items'];
     logistics: PickupLogistics;
     pricing: BookingPricing;
@@ -454,7 +459,7 @@ export class PickupRequestsService {
         },
         data: {
           status: 'PICKUP_REQUESTED',
-          ...recipientToQuoteData(params.recipient),
+          ...(params.recipient ? recipientToQuoteData(params.recipient) : {}),
           items: cleanItems(params.items),
           ...pricing.quote,
         },
@@ -545,7 +550,8 @@ export class PickupRequestsService {
    */
   async createBatchForCustomer(
     customerId: string,
-    dto: B2bCreateOrdersDto,
+    // The portal's shape, or staff's, whose recipient may be missing.
+    dto: Omit<B2bCreateOrdersDto, 'orders'> & { orders: BookableOrderDto[] },
     opts: { partnerId?: string; actorId?: string } = {},
   ): Promise<B2bOrderResultDto[]> {
     const results: B2bOrderResultDto[] = [];
@@ -633,7 +639,7 @@ export class PickupRequestsService {
         // nothing is dispatched on a price nobody has set.
         results.push({
           index,
-          recipientName: order.recipient.name,
+          recipientName: order.recipient?.name ?? '',
           destinationCountry: order.destinationCountry,
           status: 'NEEDS_PRICING',
           quoteId: quote.id,
@@ -755,12 +761,12 @@ export class PickupRequestsService {
 
   private toOrderResult(
     index: number,
-    order: B2bOrderDto,
+    order: BookableOrderDto,
     pickupRequest: PickupRequestWithDetails,
   ): B2bOrderResultDto {
     return {
       index,
-      recipientName: order.recipient.name,
+      recipientName: order.recipient?.name ?? '',
       destinationCountry: order.destinationCountry,
       status: 'BOOKED',
       quoteId: pickupRequest.quoteId,
@@ -1599,12 +1605,9 @@ export class PickupRequestsService {
     // company's GSTIN is not filled in yet. Both calls are idempotent, so the admin screens
     // remain the retry path.
     try {
-      const invoice = await this.invoicesService.generateForOrder(
-        order.id,
-        partnerId,
-      );
-      // Generating alone never reached the customer; they only ever saw "invoice will follow".
-      if (!invoice.sentAt) await this.invoicesService.sendToWhatsApp(invoice.id);
+      // Issued, not sent: staff review it once the carrier AWB is mapped and send it from
+      // there, so the copy the customer gets carries the AWB and any corrections.
+      await this.invoicesService.generateForOrder(order.id, partnerId);
     } catch (error) {
       this.logger.warn(
         `Order ${order.id} was created paid from pickup ${id} but could not be invoiced: ${
