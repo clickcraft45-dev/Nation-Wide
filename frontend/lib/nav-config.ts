@@ -3,6 +3,7 @@ import {
   Warehouse,
   History,
   Inbox,
+  ListChecks,
   Package,
   PackagePlus,
   Users,
@@ -79,6 +80,8 @@ export const ADMIN_NAV_GROUPS: NavGroup[] = [
       { label: "Pickup Assignments", href: "/admin/pickup-assignments", icon: Inbox },
       { label: "Pickup Requests", href: "/admin/pickup-requests", icon: ClipboardList },
       { label: "Warehouse Drop-offs", href: "/admin/warehouse-dropoffs", icon: Warehouse },
+      // The recurring goods offered when contents are typed; ADMIN-only, like the API.
+      { label: "Items List", href: "/admin/item-catalog", icon: ListChecks, roles: ["ADMIN"] },
       // One directory for customers, businesses, partners and staff — the slider picks the
       // audience, and the create button follows it.
       { label: "People", href: "/admin/people", icon: Users },

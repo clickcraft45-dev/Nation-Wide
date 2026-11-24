@@ -78,6 +78,7 @@ export function ParcelContentsCard({
               <table className="mt-1 w-full text-left">
                 <thead className="text-xs text-muted-foreground">
                   <tr>
+                    {pickup.items.some((item) => item.box) && <th className="py-1 font-normal">Box</th>}
                     <th className="py-1 font-normal">Item</th>
                     <th className="py-1 font-normal">HS code</th>
                     <th className="py-1 text-right font-normal">Qty</th>
@@ -87,7 +88,15 @@ export function ParcelContentsCard({
                 <tbody className="font-medium text-foreground">
                   {pickup.items.map((item, i) => (
                     <tr key={i} className="border-t border-border">
-                      <td className="py-1">{item.description}</td>
+                      {pickup.items!.some((it) => it.box) && (
+                        <td className="py-1 whitespace-nowrap">{item.box ? `Box ${item.box}` : "—"}</td>
+                      )}
+                      <td className="py-1">
+                        {item.description}
+                        {item.category && (
+                          <span className="block text-xs font-normal text-muted-foreground">{item.category}</span>
+                        )}
+                      </td>
                       <td className="py-1">{item.hsCode ?? "—"}</td>
                       <td className="py-1 text-right">{item.quantity}</td>
                       <td className="py-1 text-right">₹{(item.quantity * item.unitValue).toLocaleString("en-IN")}</td>

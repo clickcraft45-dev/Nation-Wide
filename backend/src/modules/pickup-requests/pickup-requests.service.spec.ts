@@ -789,7 +789,10 @@ describe('PickupRequestsService', () => {
     it('refuses more photos than a document may hold', async () => {
       prisma.pickupRequest.findUnique.mockResolvedValue({
         ...basePickupRequest,
-        photos: Array.from({ length: 20 }, (_, i) => ({ id: `p${i}`, kind: 'PARCEL' })),
+        photos: Array.from({ length: 20 }, (_, i) => ({
+          id: `p${i}`,
+          kind: 'PARCEL',
+        })),
       });
       await expect(
         service.savePhotos('pr-1', 'PARCEL', [photo()], undefined, 'partner-1'),

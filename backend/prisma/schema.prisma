@@ -1754,3 +1754,21 @@ model Announcement {
   @@index([kind, isPublished])
   @@map("announcements")
 }
+
+/// The recurring goods the office ships, kept by an admin: typing "Saree" anywhere items are
+/// entered offers it, with its kind of goods and HS code. Not a closed list: an item that is not
+/// here is still accepted, and the admin page shows those so they can be added.
+model ItemCatalogEntry {
+  id               String   @id @default(uuid())
+  /// What it is, as typed on the shipment ("Saree"). Unique ignoring case.
+  name             String
+  /// The kind of goods ("Garments"), recorded with the item on the shipment.
+  category         String?
+  hsCode           String?  @map("hs_code")
+  /// Per unit, INR: filled in when the item is picked and no value has been typed yet.
+  defaultUnitValue Float?   @map("default_unit_value")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@map("item_catalog")
+}

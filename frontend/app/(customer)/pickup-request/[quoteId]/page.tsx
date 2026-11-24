@@ -275,7 +275,7 @@ export default function PickupRequestPage() {
       }
     }
     const nextRecipientErrors = addRecipient ? validateRecipient(recipient) : {};
-    const nextItemsError = validateItems(items);
+    const nextItemsError = validateItems(items, quote?.packages?.length ?? 1);
     const nextTermsError = acceptedTerms
       ? null
       : "You must accept the Terms and Conditions of Carriage to book a pickup.";
@@ -344,7 +344,7 @@ export default function PickupRequestPage() {
                 : {}),
             }),
         recipient: addRecipient ? toRecipientPayload(recipient) : undefined,
-        items: toItemsPayload(items),
+        items: toItemsPayload(items, quote?.packages?.length ?? 1),
       });
       setSubmitted(true);
     } catch (err) {
@@ -657,6 +657,7 @@ export default function PickupRequestPage() {
             {/* aria-invalid lets focusFirstError scroll here like any other field. */}
             <div aria-invalid={Boolean(itemsError)} tabIndex={-1}>
               <ItemsEditor
+                boxCount={quote?.packages?.length ?? 1}
                 value={items}
                 onChange={(next) => {
                   setItems(next);

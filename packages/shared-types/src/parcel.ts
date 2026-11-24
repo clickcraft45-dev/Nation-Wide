@@ -20,6 +20,8 @@ export interface ShipmentItemDto {
   /** Per unit, INR. */
   unitValue: number;
   hsCode?: string | null;
+  /** Which box it is packed in, 1 for "Box 1". Null when not recorded (one box, or older data). */
+  box?: number | null;
 }
 
 export interface SavedItemDto {
@@ -94,4 +96,29 @@ export function chargeableWeightKg(packages: ParcelPackageDto[]): number {
   );
   // toFixed first strips float noise (0.1 + 0.2) that would otherwise ceil to an extra cent.
   return Math.ceil(Number((total * 100).toFixed(6))) / 100;
+}
+
+/** One entry in the admin's list of recurring items. */
+export interface ItemCatalogEntryDto {
+  id: string;
+  name: string;
+  category: string | null;
+  hsCode: string | null;
+  defaultUnitValue: number | null;
+}
+
+export interface SaveItemCatalogEntryDto {
+  name: string;
+  category?: string;
+  hsCode?: string;
+  defaultUnitValue?: number;
+}
+
+/** An item typed on recent shipments that is not in the list yet, with how often. */
+export interface UnlistedItemDto {
+  name: string;
+  category: string | null;
+  hsCode: string | null;
+  unitValue: number | null;
+  timesUsed: number;
 }

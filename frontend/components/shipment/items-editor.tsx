@@ -1,8 +1,8 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { Check, Pencil, Plus, Trash2, X } from "lucide-react";
-import type { SavedItemDto, ShipmentItemDto } from "@nationwide/shared-types";
+import type { ItemCatalogEntryDto, SavedItemDto, ShipmentItemDto } from "@nationwide/shared-types";
 import { apiClient, errorMessage } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
 import { Input, Label, FieldError } from "@/components/ui/input";
@@ -10,11 +10,14 @@ import { NativeSelect } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toast";
 
 export interface ItemForm {
+  /** The kind of goods ("Garments"). Not typed: it comes with an item picked from the list. */
   category: string;
   description: string;
   quantity: string;
   unitValue: string;
   hsCode: string;
+  /** Which box it is in, "1" for Box 1. Empty means Box 1. */
+  box: string;
 }
 
 const emptyItem: ItemForm = {
@@ -23,22 +26,8 @@ const emptyItem: ItemForm = {
   quantity: "1",
   unitValue: "",
   hsCode: "",
+  box: "",
 };
-
-// The kinds of goods that actually move through this business. Offered as suggestions, never a
-// closed list — the field stays free text, because the next customer ships something not here.
-const COMMON_CATEGORIES = [
-  "Garments",
-  "Food",
-  "Medicines",
-  "Documents",
-  "Electronics",
-  "Cosmetics",
-  "Spices",
-  "Handicrafts",
-  "Books",
-  "Spare parts",
-];
 
 export function itemsFrom(saved: ShipmentItemDto[] | null | undefined): ItemForm[] {
   if (!saved?.length) return [{ ...emptyItem }];
@@ -48,24 +37,32 @@ export function itemsFrom(saved: ShipmentItemDto[] | null | undefined): ItemForm
     quantity: String(i.quantity),
     unitValue: String(i.unitValue),
     hsCode: i.hsCode ?? "",
+    box: i.box ? String(i.box) : "",
   }));
 }
 
-export function toItemsPayload(forms: ItemForm[]): ShipmentItemDto[] {
+/** The box a row is in: its own choice, or Box 1. */
+const boxOf = (f: ItemForm) => Number(f.box) || 1;
+
+/** `boxCount` above 1 records each item's box; with one box there is nothing to say. */
+export function toItemsPayload(forms: ItemForm[], boxCount = 1): ShipmentItemDto[] {
   return forms.map((f) => ({
     ...(f.category.trim() ? { category: f.category.trim() } : {}),
     description: f.description.trim(),
     quantity: Number(f.quantity),
     unitValue: Number(f.unitValue),
     ...(f.hsCode.trim() ? { hsCode: f.hsCode.trim() } : {}),
+    ...(boxCount > 1 ? { box: boxOf(f) } : {}),
   }));
 }
 
 /** Mirrors ShipmentItemDto — contents are mandatory, so an empty list is an error too. */
-export function validateItems(forms: ItemForm[]): string | null {
+export function validateItems(forms: ItemForm[], boxCount = 1): string | null {
   if (forms.length === 0) return "Add at least one item.";
   for (const [i, f] of forms.entries()) {
     const row = forms.length > 1 ? `Item ${i + 1}: ` : "";
+    // A box was removed after its items were assigned to it.
+    if (boxCount > 1 && boxOf(f) > boxCount) return `${row}Box ${boxOf(f)} no longer exists, choose its box.`;
     if (!f.description.trim()) return `${row}describe what it is.`;
     if (!Number.isInteger(Number(f.quantity)) || Number(f.quantity) < 1) return `${row}quantity must be a whole number.`;
     if (!(Number(f.unitValue) > 0)) return `${row}enter its value in ₹.`;
@@ -74,9 +71,36 @@ export function validateItems(forms: ItemForm[]): string | null {
   return null;
 }
 
+// Fetched once per page load and shared by every editor on it; it changes rarely.
+let catalogRequest: Promise<ItemCatalogEntryDto[]> | null = null;
+
+/** The admin's list of recurring items, offered as the item is typed. Empty if it fails. */
+function useItemCatalog(): ItemCatalogEntryDto[] {
+  const [catalog, setCatalog] = useState<ItemCatalogEntryDto[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    catalogRequest ??= apiClient.get<ItemCatalogEntryDto[]>("/item-catalog").catch(() => {
+      catalogRequest = null; // try again on the next editor that mounts
+      return [];
+    });
+    catalogRequest.then((list) => {
+      if (!cancelled) setCatalog(list);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  return catalog;
+}
+
+const SELECT_CLASS =
+  "h-10 w-full rounded-lg border border-border bg-background px-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring aria-invalid:border-danger";
+
 /**
  * What is inside the shipment — the contents DHL, FedEx, UPS and DPD ask for on the commercial
- * invoice. Picking a description the customer shipped before fills in its value and HS code;
+ * invoice. With more than one box (`boxCount`), each item says which box it is in. Typing an item
+ * offers the admin's list of recurring items, which fills in its kind of goods and HS code; an
+ * item not on the list is accepted as typed. Picking a description the customer shipped before fills in its value and HS code;
  * everything shipped is remembered for next time by the server, and the saved list can be edited
  * or pruned here. `libraryBase` is "/customers/me" for a customer, "/customers/:id" for staff;
  * omit it (the partner at the door) to edit contents without touching the library.
@@ -89,6 +113,7 @@ export function ItemsEditor({
   libraryBase,
   client = apiClient,
   error,
+  boxCount = 1,
 }: {
   value: ItemForm[];
   onChange: (next: ItemForm[]) => void;
@@ -98,25 +123,50 @@ export function ItemsEditor({
   /** How to reach the saved-items API. The B2B portal passes its own token-authenticated client. */
   client?: Pick<typeof apiClient, "patch" | "delete">;
   error?: string | null;
+  /** How many boxes the shipment has; above 1, each item is assigned to one. */
+  boxCount?: number;
 }) {
   const listId = useId();
-  const categoryListId = useId();
   const saved = savedItems ?? [];
+  const catalog = useItemCatalog();
+  const multiBox = boxCount > 1;
+  // The admin's list first, then this customer's own past items not already on it.
+  const suggestions = [
+    ...catalog.map((c) => ({ key: `c-${c.id}`, name: c.name })),
+    ...saved
+      .filter((s) => !catalog.some((c) => c.name.toLowerCase() === s.description.toLowerCase()))
+      .map((s) => ({ key: `s-${s.id}`, name: s.description })),
+  ];
 
   function setRow(index: number, key: keyof ItemForm, v: string) {
     onChange(
       value.map((row, i) => {
         if (i !== index) return row;
         const next = { ...row, [key]: v };
-        // Picking a remembered description fills what was declared for it last time.
-        const match = key === "description" ? saved.find((s) => s.description === v) : undefined;
-        return match
-          ? {
-              ...next,
-              category: match.category ?? next.category,
-              unitValue: String(match.unitValue),
-              hsCode: match.hsCode ?? next.hsCode,
-            }
+        if (key !== "description") return next;
+        // Picking what this customer declared before fills its value from last time; otherwise
+        // the admin's list fills the kind of goods and HS code, and a usual value if none is typed.
+        const mine = saved.find((s) => s.description === v);
+        if (mine) {
+          return {
+            ...next,
+            category: mine.category ?? next.category,
+            unitValue: String(mine.unitValue),
+            hsCode: mine.hsCode ?? next.hsCode,
+          };
+        }
+        const listed = catalog.find((c) => c.name.toLowerCase() === v.trim().toLowerCase());
+        if (listed) {
+          return {
+            ...next,
+            category: listed.category ?? next.category,
+            hsCode: next.hsCode || listed.hsCode || "",
+            unitValue: next.unitValue || (listed.defaultUnitValue ? String(listed.defaultUnitValue) : ""),
+          };
+        }
+        // A new item: a kind of goods carried over from a previous pick would be wrong.
+        return row.description !== v && catalog.some((c) => c.name.toLowerCase() === row.description.trim().toLowerCase())
+          ? { ...next, category: "" }
           : next;
       }),
     );
@@ -131,8 +181,9 @@ export function ItemsEditor({
       quantity: "1",
       unitValue: String(item.unitValue),
       hsCode: item.hsCode ?? "",
+      box: value[value.length - 1]?.box ?? "",
     };
-    onChange(blank >= 0 ? value.map((r, i) => (i === blank ? row : r)) : [...value, row]);
+    onChange(blank >= 0 ? value.map((r, i) => (i === blank ? { ...row, box: r.box } : r)) : [...value, row]);
   }
 
   const total = value.reduce((sum, r) => sum + (Number(r.quantity) || 0) * (Number(r.unitValue) || 0), 0);
@@ -140,40 +191,43 @@ export function ItemsEditor({
   return (
     <div className="space-y-3">
       <datalist id={listId}>
-        {saved.map((s) => (
-          <option key={s.id} value={s.description} />
+        {suggestions.map((s) => (
+          <option key={s.key} value={s.name} />
         ))}
-      </datalist>
-      <datalist id={categoryListId}>
-        {[...new Set([...saved.map((s) => s.category), ...COMMON_CATEGORIES])]
-          .filter((c): c is string => Boolean(c))
-          .map((category) => (
-            <option key={category} value={category} />
-          ))}
       </datalist>
 
       {value.map((row, i) => (
         <div key={i} className="grid grid-cols-6 items-end gap-2 rounded-lg border border-border p-3 sm:grid-cols-12">
-          <div className="col-span-3 space-y-1 sm:col-span-3">
-            <Label htmlFor={`item-${i}-category`}>Type</Label>
-            <Input
-              id={`item-${i}-category`}
-              list={categoryListId}
-              placeholder="e.g. Garments"
-              value={row.category}
-              onChange={(e) => setRow(i, "category", e.target.value)}
-            />
-          </div>
-          <div className="col-span-3 space-y-1 sm:col-span-3">
+          {multiBox && (
+            <div className="col-span-2 space-y-1 sm:col-span-2">
+              <Label htmlFor={`item-${i}-box`}>Box</Label>
+              <select
+                id={`item-${i}-box`}
+                value={String(boxOf(row))}
+                onChange={(e) => setRow(i, "box", e.target.value)}
+                aria-invalid={boxOf(row) > boxCount}
+                className={SELECT_CLASS}
+              >
+                {Array.from({ length: Math.max(boxCount, boxOf(row)) }, (_, b) => (
+                  <option key={b} value={String(b + 1)} disabled={b + 1 > boxCount}>
+                    Box {b + 1}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          <div className={multiBox ? "col-span-4 space-y-1 sm:col-span-4" : "col-span-6 space-y-1 sm:col-span-6"}>
             <Label htmlFor={`item-${i}-description`}>Item</Label>
             <Input
               id={`item-${i}-description`}
               list={listId}
-              placeholder="e.g. Saree"
+              placeholder="Start typing, e.g. Saree"
+              autoComplete="off"
               value={row.description}
               onChange={(e) => setRow(i, "description", e.target.value)}
               error={Boolean(error)}
             />
+            {row.category && <p className="truncate text-xs text-muted-foreground">{row.category}</p>}
           </div>
           <div className="col-span-2 space-y-1 sm:col-span-2">
             <Label htmlFor={`item-${i}-quantity`}>Qty</Label>
@@ -225,7 +279,13 @@ export function ItemsEditor({
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
-          <Button type="button" variant="secondary" size="sm" onClick={() => onChange([...value, { ...emptyItem }])}>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            // A new row goes in the same box as the one above: items are usually listed box by box.
+            onClick={() => onChange([...value, { ...emptyItem, box: value[value.length - 1]?.box ?? "" }])}
+          >
             <Plus className="h-4 w-4" aria-hidden /> Add item
           </Button>
           {saved.length > 0 && (

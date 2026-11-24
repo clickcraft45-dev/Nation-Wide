@@ -81,6 +81,7 @@ export function toPickupRequestDto(
 
     destCity: pickupRequest.quote.destCity,
     destState: pickupRequest.quote.destState,
+    destPostalCode: pickupRequest.quote.destPostalCode,
     destCountry: pickupRequest.quote.destCountry,
     // Null until someone has entered the delivery address — the customer may leave it for the
     // partner to take down at pickup.

@@ -229,6 +229,8 @@ export interface PickupRequestDto {
   // address has been entered.
   destCity: string | null;
   destState: string | null;
+  /** Known before the full address when staff took it while booking. */
+  destPostalCode: string | null;
   destCountry: string;
   // The recipient's delivery address; null when the customer left it for the partner to take
   // down at pickup. The partner confirms (or fills) it during verification.

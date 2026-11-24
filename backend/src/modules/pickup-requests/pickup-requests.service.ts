@@ -940,6 +940,9 @@ export class PickupRequestsService {
             weightKg: 0,
             // Taken at the door (verify sets it) unless staff gave it.
             destCountry: destinationCountry,
+            destPostalCode: dto.destinationPostalCode?.trim() || null,
+            destCity: dto.destinationCity?.trim() || null,
+            destState: dto.destinationState?.trim() || null,
             status: 'PICKUP_REQUESTED',
             submissionKey: dto.submissionKey,
           },

@@ -24,6 +24,7 @@ import { SearchInput } from "@/components/ui/search-input";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { PhoneInput } from "@/components/ui/phone-input";
 import { PincodeInput } from "@/components/ui/pincode-input";
+import { PostalCodeInput } from "@/components/ui/postal-code-input";
 import { DateField } from "@/components/ui/date-field";
 import { MapPinField } from "@/components/ui/map-pin-picker";
 import { PartnerPicker } from "@/components/shipment/partner-picker";
@@ -105,6 +106,8 @@ export default function AdminNewOrderPage() {
   const [carriers, setCarriers] = useState<{ id: string; name: string }[] | null>(null);
   const [carriersFailed, setCarriersFailed] = useState(false);
   const [rateProviderId, setRateProviderId] = useState("");
+  // Optional: the recipient's postal code, if the customer has it. Finds the country for staff.
+  const [destination, setDestination] = useState({ postalCode: "", city: "", state: "" });
   const [results, setResults] = useState<B2bOrderResultDto[] | null>(null);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -312,6 +315,13 @@ export default function AdminNewOrderPage() {
       partnerId,
       destinationCountry,
       rateProviderId: rateProviderId || undefined,
+      ...(destination.postalCode.trim()
+        ? {
+            destinationPostalCode: destination.postalCode.trim(),
+            destinationCity: destination.city || undefined,
+            destinationState: destination.state || undefined,
+          }
+        : {}),
       pickup: {
         pickupContactName: pickup.contactName.trim(),
         pickupContactPhone: pickup.contactPhone.trim(),
@@ -655,6 +665,27 @@ export default function AdminNewOrderPage() {
               <CardTitle>Ship to</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="destination-postal">Recipient&apos;s postal / ZIP code (optional)</Label>
+                <PostalCodeInput
+                  id="destination-postal"
+                  value={destination.postalCode}
+                  onChange={(postalCode) => setDestination((d) => ({ ...d, postalCode }))}
+                  country={destinationCountry}
+                  canChooseCountry
+                  onResolved={(place) => {
+                    setDestination((d) => ({
+                      ...d,
+                      city: place.city || place.district || "",
+                      state: place.state || "",
+                    }));
+                    if (place.countryName !== destinationCountry) chooseCountry(place.countryName);
+                  }}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Fills in the country below. The partner takes the full address at the door.
+                </p>
+              </div>
               <div className="space-y-1.5">
                 <Label htmlFor="destination-country">Destination country</Label>
                 <NativeSelect

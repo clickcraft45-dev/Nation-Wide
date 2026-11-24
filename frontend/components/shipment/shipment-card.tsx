@@ -130,7 +130,7 @@ export function ShipmentCard({
 
   const boxProblem = validatePackages(draft.boxes, draft.shipmentType !== "DOCUMENT");
   // A contents problem is shown under Contents, on the field to fix, not at the foot of the card.
-  const itemsProblem = error ? validateItems(draft.items) : null;
+  const itemsProblem = error ? validateItems(draft.items, draft.boxes.length) : null;
   const itemsError = itemsProblem && error?.endsWith(itemsProblem) ? error : null;
   const chargeable = boxProblem ? 0 : chargeableWeightKg(shipmentPackages(draft));
   const debounced = useDebouncedValue(
@@ -287,6 +287,7 @@ export function ShipmentCard({
 
         <Section title="Contents">
           <ItemsEditor
+            boxCount={draft.boxes.length}
             value={draft.items}
             onChange={(items) => onChange({ items })}
             savedItems={savedItems}

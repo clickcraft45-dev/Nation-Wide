@@ -86,4 +86,24 @@ export class AdminCreatePickupOrderDto {
   @IsOptional()
   @IsUUID()
   rateProviderId?: string;
+
+  /**
+   * Where in that country, when staff took the recipient's postal code on the phone (it is also
+   * how they found the country). Kept on the booking so the partner's recipient form starts with
+   * it; the rest of the address is still taken at the door.
+   */
+  @IsOptional()
+  @IsString()
+  @MaxLength(12)
+  destinationPostalCode?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  destinationCity?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  destinationState?: string;
 }

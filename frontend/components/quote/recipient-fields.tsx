@@ -87,6 +87,7 @@ export function RecipientFields({
   errors,
   isIndia,
   country,
+  onCountryChange,
   idPrefix = "recipient",
 }: {
   value: RecipientForm;
@@ -96,8 +97,16 @@ export function RecipientFields({
   isIndia: boolean;
   /** Destination country (name or ISO code) — scopes the worldwide postal-code lookup. */
   country: string;
+  /**
+   * Given where the country is not fixed yet (the partner at the door on a booking with none):
+   * the postal code may then set it. Left out where the price was quoted for a country.
+   */
+  onCountryChange?: (countryName: string) => void;
   idPrefix?: string;
 }) {
+  // India keeps the India Post field, unless the country is still open: then one worldwide field
+  // (which asks India Post for a PIN itself) can also say which country it is.
+  const usePinField = isIndia && !onCountryChange;
   const field = (key: keyof RecipientForm) => ({
     id: `${idPrefix}-${key}`,
     value: value[key],
@@ -142,19 +151,14 @@ export function RecipientFields({
       <Field label="Address line 2 (optional)" htmlFor={`${idPrefix}-addressLine2`}>
         <Input {...field("addressLine2")} />
       </Field>
+      {/* The code first: it fills the city and state (and, where open, the country). */}
       <div className="grid gap-4 sm:grid-cols-3">
-        <Field label="City" htmlFor={`${idPrefix}-city`} error={errors.city}>
-          <Input {...field("city")} />
-        </Field>
-        <Field label="State / region" htmlFor={`${idPrefix}-state`} error={errors.state}>
-          <Input {...field("state")} />
-        </Field>
         <Field
-          label={isIndia ? "PIN code" : "Postal / ZIP code"}
+          label={usePinField ? "PIN code" : country || !onCountryChange ? "Postal / ZIP code" : "Postal / ZIP code (fills the country)"}
           htmlFor={`${idPrefix}-postalCode`}
           error={errors.postalCode}
         >
-          {isIndia ? (
+          {usePinField ? (
             <PincodeInput
               id={`${idPrefix}-postalCode`}
               value={value.postalCode}
@@ -174,14 +178,26 @@ export function RecipientFields({
               id={`${idPrefix}-postalCode`}
               value={value.postalCode}
               country={country}
+              canChooseCountry={Boolean(onCountryChange)}
               onChange={(postalCode) => onChange((prev) => ({ ...prev, postalCode }))}
-              onResolved={({ city, state }) =>
+              onResolved={(place) => {
                 // Same rule as the PIN: the code wins over a city/state typed before it.
-                onChange((prev) => ({ ...prev, city: city || prev.city, state: state || prev.state }))
-              }
+                onChange((prev) => ({
+                  ...prev,
+                  city: place.city || place.district || prev.city,
+                  state: place.state || prev.state,
+                }));
+                if (onCountryChange && place.countryName !== country) onCountryChange(place.countryName);
+              }}
               error={Boolean(errors.postalCode)}
             />
           )}
+        </Field>
+        <Field label="City" htmlFor={`${idPrefix}-city`} error={errors.city}>
+          <Input {...field("city")} />
+        </Field>
+        <Field label="State / region" htmlFor={`${idPrefix}-state`} error={errors.state}>
+          <Input {...field("state")} />
         </Field>
       </div>
     </div>

@@ -198,7 +198,7 @@ export function B2bPortal({ client, onSignOut }: { client: B2bClient; onSignOut?
         perOrder[order.key] = label + boxProblem;
         continue;
       }
-      const itemProblem = validateItems(order.items);
+      const itemProblem = validateItems(order.items, order.boxes.length);
       if (itemProblem) perOrder[order.key] = label + itemProblem;
     }
 
@@ -243,7 +243,7 @@ export function B2bPortal({ client, onSignOut }: { client: B2bClient; onSignOut?
         destinationCountry: o.destinationCountry,
         shipmentType: o.shipmentType,
         packages: shipmentPackages(o),
-        items: toItemsPayload(o.items),
+        items: toItemsPayload(o.items, o.boxes.length),
         ...(o.rateProviderId ? { rateProviderId: o.rateProviderId } : {}),
       })),
     };

@@ -191,7 +191,12 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
       .get<PickupRequestDto>(`${api}/${id}`)
       .then((res) => {
         setPickup(res);
-        setRecipient(recipientFrom(res.recipient));
+        // Staff may have taken the postal code (and so the city) while booking.
+        setRecipient(
+          recipientFrom(
+            res.recipient ?? { postalCode: res.destPostalCode, city: res.destCity, state: res.destState },
+          ),
+        );
         setBoxes(packagesFrom(res.verifiedPackages ?? res.packages, res.verifiedWeightKg ?? res.estimatedWeightKg));
         setItems(itemsFrom(res.items));
         setVerifiedShipmentType(res.verifiedShipmentType ?? res.shipmentType);
@@ -278,7 +283,7 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
       setVerifyError(packagesProblem);
       return;
     }
-    const itemsProblem = validateItems(items);
+    const itemsProblem = validateItems(items, boxes.length);
     if (itemsProblem) {
       setVerifyError(itemsProblem);
       return;
@@ -303,7 +308,7 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
         `${api}/${id}/verify`,
         {
           packages: toPackagesPayload(boxes),
-          items: toItemsPayload(items),
+          items: toItemsPayload(items, boxes.length),
           verifiedShipmentType,
           // Sent only on the no-rate path — the server rejects it outright anywhere else rather
           // than letting the phone name the price on a rate-carded shipment.
@@ -796,7 +801,7 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
                       Check against what is actually in the box. Carriers declare these to customs.
                     </p>
                   </div>
-                  <ItemsEditor value={items} onChange={setItems} />
+                  <ItemsEditor value={items} onChange={setItems} boxCount={boxes.length} />
                 </CardContent>
               </Card>
 
@@ -876,6 +881,8 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
                     </div>
                   )}
                   <RecipientFields
+                    // No destination on the booking: the postal code can set it.
+                    onCountryChange={needsCountry ? setDestinationCountry : undefined}
                     value={recipient}
                     onChange={setRecipient}
                     errors={recipientErrors}

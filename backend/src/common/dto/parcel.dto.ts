@@ -10,6 +10,7 @@ import {
   IsPositive,
   IsString,
   Max,
+  Min,
   MaxLength,
   MinLength,
   ValidateIf,
@@ -72,6 +73,13 @@ export class ShipmentItemDto {
   @IsString()
   @MaxLength(20)
   hsCode?: string | null;
+  // Which box it is packed in ("Box 2" is 2). Optional: one box needs no saying, and contents
+  // recorded before this stay valid.
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(50)
+  box?: number | null;
 }
 
 /** A required, bounded list of boxes. */
@@ -111,5 +119,7 @@ export function cleanItems(items: ShipmentItemDto[]) {
     quantity: i.quantity,
     unitValue: i.unitValue,
     hsCode: i.hsCode?.trim() || null,
+    // Only when given: single-box contents stay exactly as they were stored before.
+    ...(i.box ? { box: i.box } : {}),
   }));
 }
