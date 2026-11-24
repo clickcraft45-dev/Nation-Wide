@@ -1,12 +1,13 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
   Post,
   Query,
-  UploadedFile,
+  UploadedFiles,
   UseGuards,
 } from '@nestjs/common';
 import type {
@@ -31,10 +32,15 @@ import { AssignPartnerDto } from '../pickup-requests/dto/assign-partner.dto';
 import { RecalculateWeightDto } from '../pickup-requests/dto/recalculate-weight.dto';
 import { VerifyPickupRequestDto } from '../pickup-requests/dto/verify-pickup-request.dto';
 import { CollectPaymentDto } from '../pickup-requests/dto/collect-payment.dto';
+import { DoorDiscountDto } from '../pickup-requests/dto/door-discount.dto';
 import { AcceptParcelDto } from '../pickup-requests/dto/accept-parcel.dto';
 import { RejectParcelDto } from '../pickup-requests/dto/reject-parcel.dto';
 import { AdminCreatePickupOrderDto } from '../pickup-requests/dto/admin-create-pickup-order.dto';
-import { PhotoUpload, requireFile } from '../pickup-requests/image-upload';
+import { PhotosUpload, requireFiles } from '../pickup-requests/image-upload';
+import {
+  KycDocumentDto,
+  UploadPickupPhotosDto,
+} from '../pickup-requests/dto/pickup-photos.dto';
 import { resolveMapsUrl } from '../pickup-requests/maps-url';
 import { findPickupSpots } from '../pickup-requests/pickup-spots';
 
@@ -46,6 +52,12 @@ class PickupSpotsQueryDto {
   @Type(() => Number)
   @IsLongitude()
   longitude!: number;
+}
+
+class CarriersQueryDto {
+  @IsString()
+  @MaxLength(100)
+  country!: string;
 }
 
 class ResolveMapsUrlDto {
@@ -112,31 +124,42 @@ export class AdminPickupRequestsController {
     return findPickupSpots(query.latitude, query.longitude);
   }
 
+  // The carriers that ship to a country, for staff picking one while booking. Ahead of :id.
+  @Get('carriers')
+  carriersForCountry(
+    @Query() query: CarriersQueryDto,
+  ): Promise<{ id: string; name: string }[]> {
+    return this.pickupRequestsService.carriersForCountry(query.country);
+  }
+
   @Get(':id')
   async findOne(@Param('id') id: string): Promise<PickupRequestDto> {
     const pickupRequest = await this.pickupRequestsService.findOne(id);
     return toPickupRequestDto(pickupRequest);
   }
 
-  // Photos taken at the door: the customer's Aadhaar (kept on the customer, reused next time) and
-  // the parcel itself.
+  // Photos taken at the door: the customer's ID document (kept on the customer, reused next time)
+  // and the parcel itself.
   //
   // Staff upload here as BACK OFFICE: no "are you at the door" guards, and no requirement that
   // the pickup still be open. A partner's photo is evidence taken at pickup and keeps its strict
-  // rules; an admin attaching the Aadhaar a customer emailed in a week later is bookkeeping, and
+  // rules; an admin attaching the ID a customer emailed in a week later is bookkeeping, and
   // refusing it (which is what happened, because a pickup behind an order is COMPLETED) left the
   // gap permanently unfillable. The audit log records which of the two it was.
-  @Post(':id/aadhaar')
-  @PhotoUpload()
-  async uploadAadhaar(
+  @Post(':id/photos')
+  @PhotosUpload()
+  async uploadPhotos(
     @Param('id') id: string,
-    @UploadedFile() file: Express.Multer.File | undefined,
+    @UploadedFiles() files: Express.Multer.File[] | undefined,
+    @Body() dto: UploadPickupPhotosDto,
     @CurrentUser() user: JwtPayload,
   ): Promise<PickupRequestDto> {
     return toPickupRequestDto(
-      await this.pickupRequestsService.saveAadhaar(
+      await this.pickupRequestsService.savePhotos(
         id,
-        requireFile(file),
+        dto.kind,
+        requireFiles(files),
+        dto.labels,
         user.sub,
         true,
         true,
@@ -144,17 +167,33 @@ export class AdminPickupRequestsController {
     );
   }
 
-  @Post(':id/parcel-photo')
-  @PhotoUpload()
-  async uploadParcelPhoto(
+  @Delete(':id/photos/:photoId')
+  async deletePhoto(
     @Param('id') id: string,
-    @UploadedFile() file: Express.Multer.File | undefined,
+    @Param('photoId') photoId: string,
     @CurrentUser() user: JwtPayload,
   ): Promise<PickupRequestDto> {
     return toPickupRequestDto(
-      await this.pickupRequestsService.saveParcelPhoto(
+      await this.pickupRequestsService.deletePhoto(
         id,
-        requireFile(file),
+        photoId,
+        user.sub,
+        true,
+        true,
+      ),
+    );
+  }
+
+  @Patch(':id/kyc-document')
+  async setKycDocument(
+    @Param('id') id: string,
+    @Body() dto: KycDocumentDto,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<PickupRequestDto> {
+    return toPickupRequestDto(
+      await this.pickupRequestsService.setKycDocument(
+        id,
+        dto,
         user.sub,
         true,
         true,
@@ -212,6 +251,23 @@ export class AdminPickupRequestsController {
   ): Promise<PickupRequestDto> {
     return toPickupRequestDto(
       await this.pickupRequestsService.verify(id, dto, user.sub, true),
+    );
+  }
+
+  // A discount given at the door, approved by a named admin. Before payment only.
+  @Patch(':id/door-discount')
+  async applyDoorDiscount(
+    @Param('id') id: string,
+    @Body() dto: DoorDiscountDto,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<PickupRequestDto> {
+    return toPickupRequestDto(
+      await this.pickupRequestsService.applyDoorDiscount(
+        id,
+        dto,
+        user.sub,
+        true,
+      ),
     );
   }
 

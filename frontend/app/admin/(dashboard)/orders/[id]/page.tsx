@@ -147,7 +147,7 @@ export default function AdminOrderDetailPage() {
                 <ParcelContentsCard
                   pickup={pickup}
                   showPickupLink
-                  onDocumentUploaded={() => setReloadKey((key) => key + 1)}
+                  onPickupChange={setPickup}
                 />
               )}
 

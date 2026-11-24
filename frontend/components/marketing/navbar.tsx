@@ -35,7 +35,7 @@ function isActivePath(pathname: string, href: string): boolean {
 
 function dashboardHrefForRole(role: string): string {
   if (role === "CUSTOMER") return "/dashboard";
-  if (role === "PICKUP_PARTNER") return "/partner/requests";
+  if (role === "PICKUP_PARTNER") return "/partner/dashboard";
   return "/admin/dashboard";
 }
 

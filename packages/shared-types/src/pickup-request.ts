@@ -120,10 +120,53 @@ export interface PickupSpotsDto {
   spots: PickupSpotDto[];
 }
 
+/** The identity documents a shipper can be verified with, as customs and the carriers accept them. */
+export const KYC_DOCUMENT_TYPES = [
+  "AADHAAR",
+  "GSTIN",
+  "PAN",
+  "PASSPORT",
+  "TAN",
+  "VAT",
+  "VOTER_ID",
+] as const;
+export type KycDocumentType = (typeof KYC_DOCUMENT_TYPES)[number];
+
+export const KYC_DOCUMENT_LABELS: Record<KycDocumentType, string> = {
+  AADHAAR: "Aadhaar Number",
+  GSTIN: "GSTIN (Normal)",
+  PAN: "PAN Number",
+  PASSPORT: "Passport Number",
+  TAN: "TAN Number",
+  VAT: "VAT",
+  VOTER_ID: "Voter ID",
+};
+
+/** The shipper's identity document: which one, and its number. Set at the door, reused after. */
+export interface KycDocumentDto {
+  type: KycDocumentType;
+  number: string;
+}
+
+export const PICKUP_PHOTO_KINDS = ["KYC", "PARCEL", "PAYMENT"] as const;
+export type PickupPhotoKind = (typeof PICKUP_PHOTO_KINDS)[number];
+
+/** Most photos one upload may carry, and the most a document or parcel may hold in all. */
+export const MAX_PHOTOS_PER_UPLOAD = 10;
+export const MAX_PHOTOS_PER_KIND = 20;
+
+/** One stored photo. The image itself is never embedded: see PickupDocumentsDto. */
+export interface PickupPhotoDto {
+  id: string;
+  kind: PickupPhotoKind;
+  /** What it shows, e.g. "Front", "Back", "Box 2 label". */
+  label: string;
+  createdAt: string; // ISO 8601
+}
+
 /** Short-lived links to the KYC/parcel photos — only ever fetched on demand, never embedded. */
 export interface PickupDocumentsDto {
-  aadhaarUrl: string | null;
-  parcelPhotoUrl: string | null;
+  photos: (PickupPhotoDto & { url: string | null })[];
 }
 
 export interface PickupRecipientDto {
@@ -160,7 +203,9 @@ export interface PickupRequestDto {
    */
   couponCode: string | null;
   discountAmount: number | null;
-  /** What is actually collected at the door: the priced amount less the discount. */
+  /** A discount the partner gave at the door, with the admin who approved it. */
+  doorDiscount: DoorDiscountDto | null;
+  /** What is actually collected at the door: the priced amount less both discounts. */
   payableAmount: number;
 
   dropAtWarehouse: boolean;
@@ -194,9 +239,14 @@ export interface PickupRequestDto {
   packages: ParcelPackageDto[] | null;
   verifiedPackages: ParcelPackageDto[] | null;
   items: ShipmentItemDto[] | null;
-  /** The customer's Aadhaar is already on file — reused unless the partner replaces it. */
-  aadhaarOnFile: boolean;
-  parcelPhotoOnFile: boolean;
+  /** The customer's identity document, kept from an earlier pickup unless changed. */
+  kycDocument: KycDocumentDto | null;
+  /** Photos of that document: the customer's, so they carry over to later pickups. */
+  kycPhotos: PickupPhotoDto[];
+  /** Photos of this pickup's parcel. */
+  parcelPhotos: PickupPhotoDto[];
+  /** Proof of payment taken at the door, e.g. the customer's UPI screen. Optional. */
+  paymentPhotos: PickupPhotoDto[];
 
   status: PickupRequestStatusCode;
 
@@ -216,8 +266,12 @@ export interface PickupRequestDto {
   verificationNotes: string | null;
   verifiedAt: string | null; // ISO 8601
 
+  /** The method, or the largest part of a split payment. */
   paymentMethod: PaymentMethodCode | null;
+  /** The total taken at the door, across every method. */
   collectedAmount: number | null;
+  /** Each method's share when the payment was split; null for a single method. */
+  paymentSplits: PaymentSplitDto[] | null;
   paymentReference: string | null;
   paymentNotes: string | null;
   paymentCollectedAt: string | null; // ISO 8601
@@ -300,11 +354,43 @@ export interface VerifyPickupRequestDto {
   verificationNotes?: string;
 }
 
+/** One way the customer paid: Rs 2,000 in cash, or Rs 400 by UPI. */
+export interface PaymentSplitDto {
+  method: PaymentMethodCode;
+  amount: number;
+  /** The UPI transaction reference, when there is one. */
+  reference?: string | null;
+}
+
+/** The ways a partner can be paid at the door. */
+export const DOOR_PAYMENT_METHODS = ["CASH", "UPI"] as const satisfies readonly PaymentMethodCode[];
+
+export interface DoorDiscountDto {
+  amount: number;
+  reason: string;
+  approvedByAdminName: string | null;
+}
+
+/** A discount given at the door. Amount 0 removes one already given. */
+export interface ApplyDoorDiscountDto {
+  amount: number;
+  reason?: string;
+  approvedByAdminId?: string;
+}
+
 export interface CollectPaymentDto {
-  paymentMethod: PaymentMethodCode;
-  collectedAmount: number;
-  paymentReference?: string;
+  /**
+   * How the money was taken: one entry for a single method, two for cash + UPI. Their sum is
+   * what was collected.
+   */
+  payments: PaymentSplitDto[];
   paymentNotes?: string;
+}
+
+/** The part of a split total not yet assigned to a method, rounded to the paisa. */
+export function splitRemainder(total: number, splits: { amount: number }[]): number {
+  const assigned = splits.reduce((sum, s) => sum + (Number.isFinite(s.amount) ? s.amount : 0), 0);
+  return Math.round((total - assigned) * 100) / 100;
 }
 
 export interface AcceptParcelDto {
@@ -330,4 +416,40 @@ export interface PickupPartnerDashboardSummaryDto {
   cashCollectedToday: number;
   upiCollectedToday: number;
   totalStops: number;
+}
+
+// The shape each document's number takes, so a mistyped digit is caught at the door rather than
+// by customs. VAT numbers vary by country, so only their length is checked.
+const KYC_NUMBER_PATTERNS: Record<KycDocumentType, RegExp> = {
+  AADHAAR: /^\d{12}$/,
+  GSTIN: /^\d{2}[A-Z]{5}\d{4}[A-Z][A-Z\d]Z[A-Z\d]$/,
+  PAN: /^[A-Z]{5}\d{4}[A-Z]$/,
+  PASSPORT: /^[A-Z][A-Z\d]{6,8}$/,
+  TAN: /^[A-Z]{4}\d{5}[A-Z]$/,
+  VAT: /^[A-Z\d]{5,20}$/,
+  VOTER_ID: /^[A-Z]{3}\d{7}$/,
+};
+
+const KYC_NUMBER_HINTS: Record<KycDocumentType, string> = {
+  AADHAAR: "12 digits",
+  GSTIN: "15 characters, e.g. 36ABCDE1234F1Z5",
+  PAN: "10 characters, e.g. ABCDE1234F",
+  PASSPORT: "8 characters, e.g. K1234567",
+  TAN: "10 characters, e.g. HYDA12345B",
+  VAT: "5 to 20 letters and digits",
+  VOTER_ID: "10 characters, e.g. ABC1234567",
+};
+
+/** The number as stored: upper case, spaces and dashes removed ("1234 5678 9012" -> "123456789012"). */
+export function normalizeKycNumber(value: string): string {
+  return value.replace(/[\s-]/g, "").toUpperCase();
+}
+
+/** Null when the number fits the document type; otherwise what it should look like. */
+export function kycNumberProblem(type: KycDocumentType, value: string): string | null {
+  const number = normalizeKycNumber(value);
+  if (!number) return "Enter the document number.";
+  return KYC_NUMBER_PATTERNS[type].test(number)
+    ? null
+    : `A ${KYC_DOCUMENT_LABELS[type].replace(/ Number$/, "")} number is ${KYC_NUMBER_HINTS[type]}.`;
 }

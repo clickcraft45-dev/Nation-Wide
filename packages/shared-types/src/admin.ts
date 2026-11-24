@@ -15,6 +15,17 @@ export interface ExternalTrackingNumberDto {
   externalTrackingNumber: string;
 }
 
+/**
+ * What happened to the order's GST invoice when an AWB was mapped: sent to the customer on
+ * WhatsApp with the AWB printed on it, not billable yet (order unpaid, nothing issued), or failed.
+ */
+export interface AwbInvoiceDeliveryDto {
+  status: "SENT" | "NOT_BILLABLE" | "FAILED";
+  invoiceNumber: string | null;
+  /** Why it failed, e.g. company GSTIN missing in Settings. */
+  reason: string | null;
+}
+
 export interface ShipmentAdminDetailDto {
   id: string;
   internalTrackingNumber: string;
@@ -25,6 +36,8 @@ export interface ShipmentAdminDetailDto {
   lastSyncedAt: string | null; // ISO 8601
   externalTrackingNumbers: ExternalTrackingNumberDto[];
   events: RawTrackingEventDto[];
+  /** Set only on the response to mapping an AWB. */
+  invoiceDelivery?: AwbInvoiceDeliveryDto;
 }
 
 export interface IntegrationHealthDto {

@@ -53,11 +53,13 @@ const basePickupRequest = {
     // compared — see explainPriceChange.
     selectedOption: null,
   },
-  parcelPhotoKey: 'pickups/pr-1/parcel.jpg',
+  photos: [{ id: 'photo-parcel', kind: 'PARCEL', label: 'Parcel' }],
   customer: {
     name: 'Jane',
     phone: '+911234567890',
-    aadhaarKey: 'kyc/aadhaar/customer-1/a.jpg',
+    kycDocumentType: 'AADHAAR',
+    kycDocumentNumber: '123412341234',
+    photos: [{ id: 'photo-kyc', kind: 'KYC', label: 'Front' }],
   },
   assignedPartner: { id: 'partner-1', name: 'Partner One', email: 'p1@nw.dev' },
 };
@@ -85,7 +87,13 @@ describe('PickupRequestsService', () => {
       findMany: jest.Mock;
     };
     customer: { findUnique: jest.Mock; update: jest.Mock };
+    pickupPhoto: {
+      createMany: jest.Mock;
+      findUnique: jest.Mock;
+      delete: jest.Mock;
+    };
     order: { update: jest.Mock };
+    receipt: { updateMany: jest.Mock };
     auditLog: { create: jest.Mock };
     $transaction: jest.Mock;
   };
@@ -95,7 +103,10 @@ describe('PickupRequestsService', () => {
   let config: { get: jest.Mock };
   let coupons: { validate: jest.Mock; redeem: jest.Mock };
   let invoicesService: { generateForOrder: jest.Mock };
-  let receiptsService: { issueAndSendQuietly: jest.Mock };
+  let receiptsService: {
+    issueAndSendQuietly: jest.Mock;
+    issueForPickupAndSendQuietly: jest.Mock;
+  };
   let pushService: { sendToAdminUser: jest.Mock };
   let addressBook: { remember: jest.Mock };
   let quotesService: { create: jest.Mock };
@@ -129,7 +140,13 @@ describe('PickupRequestsService', () => {
         findUnique: jest.fn().mockResolvedValue({ id: 'customer-1' }),
         update: jest.fn().mockResolvedValue(undefined),
       },
+      pickupPhoto: {
+        createMany: jest.fn().mockResolvedValue({ count: 1 }),
+        findUnique: jest.fn().mockResolvedValue(null),
+        delete: jest.fn().mockResolvedValue(undefined),
+      },
       order: { update: jest.fn().mockResolvedValue(undefined) },
+      receipt: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
       auditLog: { create: jest.fn().mockResolvedValue(undefined) },
       // Supports both the array form ($transaction([...])) and the interactive callback form
       // ($transaction(async (tx) => {...})) — create() uses the latter for its atomic claim.
@@ -157,6 +174,7 @@ describe('PickupRequestsService', () => {
     };
     receiptsService = {
       issueAndSendQuietly: jest.fn().mockResolvedValue(undefined),
+      issueForPickupAndSendQuietly: jest.fn().mockResolvedValue(true),
     };
     pushService = { sendToAdminUser: jest.fn().mockResolvedValue(undefined) };
     addressBook = { remember: jest.fn().mockResolvedValue(undefined) };
@@ -341,10 +359,10 @@ describe('PickupRequestsService', () => {
       );
     });
 
-    it('broadcasts to every active partner and leaves the request unassigned', async () => {
+    it('leaves the request unassigned for staff and tells the admins, not the partners', async () => {
       prisma.adminUser.findMany.mockResolvedValue([
-        { id: 'partner-1' },
-        { id: 'partner-2' },
+        { id: 'admin-1' },
+        { id: 'admin-2' },
       ]);
 
       await service.create(
@@ -364,7 +382,16 @@ describe('PickupRequestsService', () => {
         'customer-1',
       );
 
+      expect(prisma.adminUser.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { role: { in: ['ADMIN', 'SUPER_ADMIN'] }, isActive: true },
+        }),
+      );
       expect(pushService.sendToAdminUser).toHaveBeenCalledTimes(2);
+      expect(pushService.sendToAdminUser).toHaveBeenCalledWith(
+        'admin-1',
+        expect.objectContaining({ url: '/admin/pickup-assignments' }),
+      );
       expect(prisma.pickupRequest.update).not.toHaveBeenCalled();
       expect(notificationsService.enqueue).not.toHaveBeenCalledWith(
         'customer-1',
@@ -376,7 +403,7 @@ describe('PickupRequestsService', () => {
   });
 
   describe('warehouse drop-offs', () => {
-    it('are not broadcast to partners', async () => {
+    it('are not sent for assignment', async () => {
       prisma.adminUser.findMany.mockResolvedValue([{ id: 'partner-1' }]);
       await service.create(
         {
@@ -409,6 +436,97 @@ describe('PickupRequestsService', () => {
       await expect(
         service.findOneForPartner('pr-1', 'admin-1', true),
       ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('dispatch with a destination and carrier', () => {
+    const dispatchDto = {
+      customerId: 'customer-1',
+      submissionKey: 'key-2',
+      partnerId: 'partner-1',
+      pickup: {
+        pickupContactName: 'Jane',
+        pickupContactPhone: '+911234567890',
+        pickupAddressLine1: 'Flat 4, MG Road',
+        pickupCity: 'Hyderabad',
+        pickupState: 'Telangana',
+        pickupPostalCode: '500001',
+        pickupLatitude: 17.4,
+        pickupLongitude: 78.5,
+        pickupDate: '2026-09-18',
+        pickupTimeSlot: '09:00-12:00',
+      },
+    };
+    let quoteCreate: jest.Mock;
+
+    beforeEach(() => {
+      prisma.adminUser.findUnique.mockResolvedValue({
+        id: 'partner-1',
+        role: 'PICKUP_PARTNER',
+        isActive: true,
+      });
+      quoteCreate = jest.fn().mockResolvedValue({ id: 'quote-9' });
+      Object.assign(prisma.quote, {
+        findFirst: jest.fn().mockResolvedValue(null),
+        create: quoteCreate,
+      });
+      Object.assign(prisma, {
+        country: { findFirst: jest.fn().mockResolvedValue({ code: 'US' }) },
+        zoneCountry: {
+          findMany: jest
+            .fn()
+            .mockResolvedValue([
+              { rateProvider: { id: 'provider-dhl', name: 'DHL Express' } },
+              { rateProvider: { id: 'provider-fedex', name: 'FedEx' } },
+            ]),
+        },
+      });
+      prisma.pickupRequest.create.mockResolvedValue(basePickupRequest);
+    });
+
+    it('lists the carriers that ship to a country', async () => {
+      await expect(
+        service.carriersForCountry('United States'),
+      ).resolves.toEqual([
+        { id: 'provider-dhl', name: 'DHL Express' },
+        { id: 'provider-fedex', name: 'FedEx' },
+      ]);
+    });
+
+    it('books the country on the quote and the carrier on the pickup', async () => {
+      await service.createForAdmin(
+        {
+          ...dispatchDto,
+          destinationCountry: 'United States',
+          rateProviderId: 'provider-fedex',
+        } as never,
+        'admin-1',
+      );
+      expect(quoteCreate).toHaveBeenCalledWith({
+        data: expect.objectContaining({ destCountry: 'United States' }),
+      });
+      expect(prisma.pickupRequest.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            rateProviderId: 'provider-fedex',
+            rateProviderName: 'FedEx',
+          }),
+        }),
+      );
+    });
+
+    it('refuses a carrier that does not ship to the country', async () => {
+      await expect(
+        service.createForAdmin(
+          {
+            ...dispatchDto,
+            destinationCountry: 'United States',
+            rateProviderId: 'provider-ups',
+          } as never,
+          'admin-1',
+        ),
+      ).rejects.toThrow(/does not ship to United States/);
+      expect(quoteCreate).not.toHaveBeenCalled();
     });
   });
 
@@ -618,24 +736,70 @@ describe('PickupRequestsService', () => {
     });
   });
 
-  describe('saveAadhaar', () => {
-    const photo = { buffer: Buffer.from('x'), mimetype: 'image/jpeg' } as never;
+  describe('savePhotos', () => {
+    // Not a real image: sharp cannot decode it, so it is stored as sent (see compressPhoto).
+    const photo = (name = 'x') =>
+      ({ buffer: Buffer.from(name), mimetype: 'image/jpeg' }) as never;
 
-    it('replaces the customer photo and deletes the old one', async () => {
-      await service.saveAadhaar('pr-1', photo, 'partner-1');
+    it("stores several ID photos on the customer, labelled, keeping what's on file", async () => {
+      await service.savePhotos(
+        'pr-1',
+        'KYC',
+        [photo('a'), photo('b')],
+        ['Front', 'Back'],
+        'partner-1',
+      );
+      expect(storage.put).toHaveBeenCalledTimes(2);
       expect(storage.put).toHaveBeenCalledWith(
-        expect.stringMatching(/^kyc\/aadhaar\/customer-1\/.+\.jpg$/),
+        expect.stringMatching(/^kyc\/customer-1\/kyc-.+\.jpg$/),
         expect.any(Buffer),
         'image/jpeg',
       );
-      expect(storage.delete).toHaveBeenCalledWith(
-        'kyc/aadhaar/customer-1/a.jpg',
+      expect(prisma.pickupPhoto.createMany).toHaveBeenCalledWith({
+        data: [
+          expect.objectContaining({
+            kind: 'KYC',
+            customerId: 'customer-1',
+            pickupRequestId: 'pr-1',
+            label: 'Front',
+          }),
+          expect.objectContaining({ label: 'Back' }),
+        ],
+      });
+      // Adding is not replacing: the photo already on file stays.
+      expect(storage.delete).not.toHaveBeenCalled();
+    });
+
+    it('numbers several photos sent under one label', async () => {
+      await service.savePhotos(
+        'pr-1',
+        'PARCEL',
+        [photo(), photo(), photo()],
+        ['Box'],
+        'partner-1',
       );
+      const rows = (
+        prisma.pickupPhoto.createMany.mock.calls[0][0] as {
+          data: { label: string }[];
+        }
+      ).data;
+      expect(rows.map((r) => r.label)).toEqual(['Box', 'Box 2', 'Box 3']);
+    });
+
+    it('refuses more photos than a document may hold', async () => {
+      prisma.pickupRequest.findUnique.mockResolvedValue({
+        ...basePickupRequest,
+        photos: Array.from({ length: 20 }, (_, i) => ({ id: `p${i}`, kind: 'PARCEL' })),
+      });
+      await expect(
+        service.savePhotos('pr-1', 'PARCEL', [photo()], undefined, 'partner-1'),
+      ).rejects.toThrow(BadRequestException);
+      expect(storage.put).not.toHaveBeenCalled();
     });
 
     it("is refused on a pickup that is not this partner's", async () => {
       await expect(
-        service.saveAadhaar('pr-1', photo, 'someone-else'),
+        service.savePhotos('pr-1', 'KYC', [photo()], undefined, 'someone-else'),
       ).rejects.toThrow(NotFoundException);
       expect(storage.put).not.toHaveBeenCalled();
     });
@@ -646,9 +810,8 @@ describe('PickupRequestsService', () => {
         ...basePickupRequest,
         arrivedAt: null,
       });
-
       await expect(
-        service.saveAadhaar('pr-1', photo, 'partner-1'),
+        service.savePhotos('pr-1', 'KYC', [photo()], undefined, 'partner-1'),
       ).rejects.toThrow(BadRequestException);
       expect(storage.put).not.toHaveBeenCalled();
     });
@@ -658,35 +821,30 @@ describe('PickupRequestsService', () => {
         ...basePickupRequest,
         status: 'COMPLETED',
       });
-
       await expect(
-        service.saveAadhaar('pr-1', photo, 'partner-1'),
+        service.savePhotos('pr-1', 'PARCEL', [photo()], undefined, 'partner-1'),
       ).rejects.toThrow(BadRequestException);
       expect(storage.put).not.toHaveBeenCalled();
     });
 
     // The gap this closed: an order's pickup request is COMPLETED, so every guard above refused
-    // and a missing Aadhaar could never be added afterwards.
-    it('lets an admin attach one after the pickup is completed', async () => {
+    // and a missing ID could never be added afterwards.
+    it('lets an admin attach one after the pickup is completed, and says so on the audit trail', async () => {
       prisma.pickupRequest.findUnique.mockResolvedValue({
         ...basePickupRequest,
         status: 'COMPLETED',
         arrivedAt: null,
       });
-
-      await service.saveAadhaar('pr-1', photo, 'admin-1', true, true);
-
+      await service.savePhotos(
+        'pr-1',
+        'KYC',
+        [photo()],
+        undefined,
+        'admin-1',
+        true,
+        true,
+      );
       expect(storage.put).toHaveBeenCalled();
-    });
-
-    it('records on the audit trail that an admin attached it, not the partner', async () => {
-      prisma.pickupRequest.findUnique.mockResolvedValue({
-        ...basePickupRequest,
-        status: 'COMPLETED',
-      });
-
-      await service.saveAadhaar('pr-1', photo, 'admin-1', true, true);
-
       expect(prisma.auditLog.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
@@ -697,66 +855,61 @@ describe('PickupRequestsService', () => {
     });
   });
 
-  describe('saveParcelPhoto', () => {
-    const photo = { buffer: Buffer.from('x'), mimetype: 'image/jpeg' } as never;
-
-    it('lets an admin add the missing photo to a completed pickup', async () => {
-      prisma.pickupRequest.findUnique.mockResolvedValue({
-        ...basePickupRequest,
-        status: 'COMPLETED',
-        parcelPhotoKey: null,
+  describe('deletePhoto', () => {
+    it("removes one of the customer's ID photos and its stored file", async () => {
+      prisma.pickupPhoto.findUnique.mockResolvedValue({
+        id: 'photo-kyc',
+        kind: 'KYC',
+        customerId: 'customer-1',
+        pickupRequestId: 'pr-older',
+        key: 'kyc/customer-1/kyc-1.jpg',
+        label: 'Front',
       });
-
-      await service.saveParcelPhoto('pr-1', photo, 'admin-1', true, true);
-
-      expect(storage.put).toHaveBeenCalledWith(
-        expect.stringMatching(/^pickups\/pr-1\/parcel-.+\.jpg$/),
-        expect.any(Buffer),
-        'image/jpeg',
-      );
+      await service.deletePhoto('pr-1', 'photo-kyc', 'partner-1');
+      expect(prisma.pickupPhoto.delete).toHaveBeenCalledWith({
+        where: { id: 'photo-kyc' },
+      });
+      expect(storage.delete).toHaveBeenCalledWith('kyc/customer-1/kyc-1.jpg');
     });
 
-    it('refuses a partner on a completed pickup', async () => {
-      prisma.pickupRequest.findUnique.mockResolvedValue({
-        ...basePickupRequest,
-        status: 'COMPLETED',
+    it('refuses a parcel photo from another pickup', async () => {
+      prisma.pickupPhoto.findUnique.mockResolvedValue({
+        id: 'photo-x',
+        kind: 'PARCEL',
+        customerId: 'customer-1',
+        pickupRequestId: 'pr-2',
+        key: 'pickups/pr-2/parcel-1.jpg',
+        label: 'Parcel',
       });
-
       await expect(
-        service.saveParcelPhoto('pr-1', photo, 'partner-1'),
-      ).rejects.toThrow(BadRequestException);
-      expect(storage.put).not.toHaveBeenCalled();
+        service.deletePhoto('pr-1', 'photo-x', 'partner-1'),
+      ).rejects.toThrow(NotFoundException);
+      expect(storage.delete).not.toHaveBeenCalled();
     });
   });
 
-  describe('claim', () => {
-    it('assigns the claiming partner and WhatsApps the customer', async () => {
-      await service.claim('pr-1', 'partner-1');
-
-      expect(prisma.pickupRequest.updateMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: {
-            id: 'pr-1',
-            status: 'PENDING_ASSIGNMENT',
-            assignedPartnerId: null,
-            dropAtWarehouse: false,
-          },
-        }),
+  describe('setKycDocument', () => {
+    it('stores the type and the number, tidied', async () => {
+      await service.setKycDocument(
+        'pr-1',
+        { type: 'AADHAAR', number: '1234 5678 9012' },
+        'partner-1',
       );
-      expect(notificationsService.enqueue).toHaveBeenCalledWith(
-        'customer-1',
-        'WHATSAPP',
-        'pickup_partner_assigned',
-        {},
-      );
+      expect(prisma.customer.update).toHaveBeenCalledWith({
+        where: { id: 'customer-1' },
+        data: { kycDocumentType: 'AADHAAR', kycDocumentNumber: '123456789012' },
+      });
     });
 
-    it('rejects the partner who loses the race', async () => {
-      prisma.pickupRequest.updateMany.mockResolvedValue({ count: 0 });
-      await expect(service.claim('pr-1', 'partner-2')).rejects.toThrow(
-        BadRequestException,
-      );
-      expect(notificationsService.enqueue).not.toHaveBeenCalled();
+    it('refuses a number that does not fit the document', async () => {
+      await expect(
+        service.setKycDocument(
+          'pr-1',
+          { type: 'PAN', number: '12345' },
+          'partner-1',
+        ),
+      ).rejects.toThrow(/PAN/);
+      expect(prisma.customer.update).not.toHaveBeenCalled();
     });
   });
 
@@ -1038,18 +1191,55 @@ describe('PickupRequestsService', () => {
       );
     });
 
-    it("refuses to verify until the customer's Aadhaar and a parcel photo are on file", async () => {
+    it('lets the partner go back and change the parcel before payment, dropping an old discount', async () => {
       prisma.pickupRequest.findUnique.mockResolvedValue({
         ...basePickupRequest,
-        customer: { ...basePickupRequest.customer, aadhaarKey: null },
+        verifiedAt: new Date(),
+        doorDiscountAmount: 100,
+      });
+      await service.verify('pr-1', VERIFY_DTO, 'partner-1');
+      expect(prisma.pickupRequest.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            doorDiscountAmount: null,
+            doorDiscountApprovedByAdminId: null,
+          }),
+        }),
+      );
+    });
+
+    it('refuses to change the parcel once payment is settled', async () => {
+      prisma.pickupRequest.findUnique.mockResolvedValue({
+        ...basePickupRequest,
+        verifiedAt: new Date(),
+        paymentCollectedAt: new Date(),
       });
       await expect(
         service.verify('pr-1', VERIFY_DTO, 'partner-1'),
-      ).rejects.toThrow(/Aadhaar/);
+      ).rejects.toThrow(/already been settled/);
+      expect(prisma.pickupRequest.update).not.toHaveBeenCalled();
+    });
+
+    it("refuses to verify until the customer's ID and a parcel photo are on file", async () => {
+      prisma.pickupRequest.findUnique.mockResolvedValue({
+        ...basePickupRequest,
+        customer: { ...basePickupRequest.customer, kycDocumentNumber: null },
+      });
+      await expect(
+        service.verify('pr-1', VERIFY_DTO, 'partner-1'),
+      ).rejects.toThrow(/document type and number/);
 
       prisma.pickupRequest.findUnique.mockResolvedValue({
         ...basePickupRequest,
-        parcelPhotoKey: null,
+        customer: { ...basePickupRequest.customer, photos: [] },
+      });
+      await expect(
+        service.verify('pr-1', VERIFY_DTO, 'partner-1'),
+      ).rejects.toThrow(/ID document/);
+
+      prisma.pickupRequest.findUnique.mockResolvedValue({
+        ...basePickupRequest,
+        photos: [],
       });
       await expect(
         service.verify('pr-1', VERIFY_DTO, 'partner-1'),
@@ -1169,6 +1359,184 @@ describe('PickupRequestsService', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
+    describe('split payment and receipt', () => {
+      const verified = () =>
+        prisma.pickupRequest.findUnique.mockResolvedValue({
+          ...basePickupRequest,
+          verifiedAt: new Date(),
+          verifiedPrice: decimalLike(2400),
+        });
+
+      it('records cash and UPI separately, totalled, under the larger method', async () => {
+        verified();
+        await service.collectPayment(
+          'pr-1',
+          {
+            payments: [
+              { method: 'CASH', amount: 2000 },
+              { method: 'UPI', amount: 400, reference: 'UTR123' },
+            ],
+          } as never,
+          'partner-1',
+        );
+        expect(prisma.pickupRequest.updateMany).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({
+              paymentMethod: 'CASH',
+              collectedAmount: 2400,
+              paymentReference: 'UTR123',
+              paymentSplits: [
+                { method: 'CASH', amount: 2000, reference: null },
+                { method: 'UPI', amount: 400, reference: 'UTR123' },
+              ],
+            }),
+          }),
+        );
+      });
+
+      it('holds the split total to the same tolerance as a single payment', async () => {
+        verified();
+        await expect(
+          service.collectPayment(
+            'pr-1',
+            {
+              payments: [
+                { method: 'CASH', amount: 1000 },
+                { method: 'UPI', amount: 400 },
+              ],
+            } as never,
+            'partner-1',
+          ),
+        ).rejects.toThrow(/too far/);
+      });
+
+      it('refuses the same method twice', async () => {
+        verified();
+        await expect(
+          service.collectPayment(
+            'pr-1',
+            {
+              payments: [
+                { method: 'CASH', amount: 2000 },
+                { method: 'CASH', amount: 400 },
+              ],
+            } as never,
+            'partner-1',
+          ),
+        ).rejects.toThrow(/only once/);
+      });
+
+      it('sends the receipt PDF at the door, with no extra text message', async () => {
+        verified();
+        await service.collectPayment(
+          'pr-1',
+          { payments: [{ method: 'CASH', amount: 2400 }] } as never,
+          'partner-1',
+        );
+        expect(
+          receiptsService.issueForPickupAndSendQuietly,
+        ).toHaveBeenCalledWith('pr-1', 'partner-1');
+        expect(notificationsService.enqueue).not.toHaveBeenCalledWith(
+          'customer-1',
+          'WHATSAPP',
+          'payment_collected',
+          expect.anything(),
+        );
+      });
+
+      it('falls back to a text message when the receipt could not be issued', async () => {
+        verified();
+        receiptsService.issueForPickupAndSendQuietly.mockResolvedValue(false);
+        await service.collectPayment(
+          'pr-1',
+          { payments: [{ method: 'CASH', amount: 2400 }] } as never,
+          'partner-1',
+        );
+        expect(notificationsService.enqueue).toHaveBeenCalledWith(
+          'customer-1',
+          'WHATSAPP',
+          expect.any(String),
+          { amount: '2400' },
+        );
+      });
+    });
+
+    describe('door discount', () => {
+      const verified = (extra = {}) =>
+        prisma.pickupRequest.findUnique.mockResolvedValue({
+          ...basePickupRequest,
+          verifiedAt: new Date(),
+          verifiedPrice: decimalLike(2555),
+          ...extra,
+        });
+
+      it('takes the discount off what is collected, with the approving admin on record', async () => {
+        verified();
+        prisma.adminUser.findFirst.mockResolvedValue({ id: 'admin-1' });
+        await service.applyDoorDiscount(
+          'pr-1',
+          {
+            amount: 155,
+            reason: 'Regular customer',
+            approvedByAdminId: 'admin-1',
+          },
+          'partner-1',
+        );
+        expect(prisma.pickupRequest.update).toHaveBeenCalledWith({
+          where: { id: 'pr-1' },
+          data: expect.objectContaining({
+            doorDiscountAmount: 155,
+            doorDiscountApprovedByAdminId: 'admin-1',
+          }),
+        });
+
+        // 2,555 less 155 is what the tolerance is now held to.
+        verified({ doorDiscountAmount: 155 });
+        await expect(
+          service.collectPayment(
+            'pr-1',
+            { payments: [{ method: 'CASH', amount: 2400 }] } as never,
+            'partner-1',
+          ),
+        ).resolves.toBeDefined();
+      });
+
+      it('needs an admin to approve it', async () => {
+        verified();
+        prisma.adminUser.findFirst.mockResolvedValue(null);
+        await expect(
+          service.applyDoorDiscount(
+            'pr-1',
+            { amount: 155, reason: 'Regular customer' },
+            'partner-1',
+          ),
+        ).rejects.toThrow(/admin/);
+        expect(prisma.pickupRequest.update).not.toHaveBeenCalled();
+      });
+
+      it('cannot wipe out the whole price', async () => {
+        verified();
+        await expect(
+          service.applyDoorDiscount(
+            'pr-1',
+            { amount: 2555, reason: 'x', approvedByAdminId: 'admin-1' },
+            'partner-1',
+          ),
+        ).rejects.toThrow(/leave something to pay/);
+      });
+
+      it('is refused once the payment is settled', async () => {
+        verified({ paymentCollectedAt: new Date() });
+        await expect(
+          service.applyDoorDiscount(
+            'pr-1',
+            { amount: 100, reason: 'x', approvedByAdminId: 'admin-1' },
+            'partner-1',
+          ),
+        ).rejects.toThrow(BadRequestException);
+      });
+    });
+
     describe('part-payment', () => {
       const verified = () => {
         prisma.pickupRequest.findUnique.mockResolvedValue({
@@ -1277,11 +1645,10 @@ describe('PickupRequestsService', () => {
           }),
         }),
       );
-      expect(notificationsService.enqueue).toHaveBeenCalledWith(
-        'customer-1',
-        'WHATSAPP',
-        'payment_collected',
-        { amount: '970' },
+      // The receipt PDF is what tells the customer now (see 'split payment and receipt').
+      expect(receiptsService.issueForPickupAndSendQuietly).toHaveBeenCalledWith(
+        'pr-1',
+        'partner-1',
       );
     });
 

@@ -7,6 +7,7 @@ import { ArrowLeft, CheckCircle2, Clock, Link2, UserRound } from "lucide-react";
 import type {
   AddressBookDto,
   B2bOrderResultDto,
+  CountryDto,
   CustomerDto,
   PickupSpotsDto,
   PickupTimeSlot,
@@ -26,6 +27,8 @@ import { PincodeInput } from "@/components/ui/pincode-input";
 import { DateField } from "@/components/ui/date-field";
 import { MapPinField } from "@/components/ui/map-pin-picker";
 import { PartnerPicker } from "@/components/shipment/partner-picker";
+import { searchCountries } from "@/lib/country-search";
+import { cn } from "@/lib/utils/cn";
 
 const TIME_SLOTS: { value: PickupTimeSlot; label: string }[] = [
   { value: "09:00-12:00", label: "9:00 AM - 12:00 PM" },
@@ -95,6 +98,13 @@ export default function AdminNewOrderPage() {
   const [isResolvingLink, setIsResolvingLink] = useState(false);
   const [linkNote, setLinkNote] = useState<string | null>(null);
   const [partnerId, setPartnerId] = useState<string | null>(null);
+
+  // --- Ship to: the country, then a carrier that ships there ---
+  const [countries, setCountries] = useState<CountryDto[]>([]);
+  const [destinationCountry, setDestinationCountry] = useState("");
+  const [carriers, setCarriers] = useState<{ id: string; name: string }[] | null>(null);
+  const [carriersFailed, setCarriersFailed] = useState(false);
+  const [rateProviderId, setRateProviderId] = useState("");
   const [results, setResults] = useState<B2bOrderResultDto[] | null>(null);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -109,6 +119,41 @@ export default function AdminNewOrderPage() {
       .catch(() => showToast({ variant: "error", title: "Could not load customers", description: "Refresh the page to try again." }))
       .finally(() => setCustomersLoading(false));
   }, [showToast]);
+
+  useEffect(() => {
+    apiClient
+      .get<CountryDto[]>("/countries")
+      .then((all) => setCountries(all.filter((c) => c.isActive)))
+      .catch(() => setCountries([]));
+  }, []);
+
+  // The carriers for the chosen country; a carrier picked for another country is dropped.
+  useEffect(() => {
+    if (!destinationCountry) return;
+    let cancelled = false;
+    apiClient
+      .get<{ id: string; name: string }[]>(
+        `/admin/pickup-requests/carriers?country=${encodeURIComponent(destinationCountry)}`,
+      )
+      .then((list) => {
+        if (cancelled) return;
+        setCarriers(list);
+        setCarriersFailed(false);
+        setRateProviderId((current) => (list.some((c) => c.id === current) ? current : list.length === 1 ? list[0].id : ""));
+      })
+      .catch(() => {
+        if (!cancelled) setCarriersFailed(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [destinationCountry]);
+
+  function chooseCountry(name: string) {
+    setDestinationCountry(name);
+    setCarriers(null);
+    setCarriersFailed(false);
+  }
 
   const filteredCustomers = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -238,6 +283,10 @@ export default function AdminNewOrderPage() {
     if (pickup.mapsUrl.trim() && !/^https:\/\//.test(pickup.mapsUrl.trim())) {
       next.mapsUrl = "Paste the full https:// Google Maps link.";
     }
+    if (!destinationCountry) next.destinationCountry = "Choose the destination country.";
+    else if (carriers && carriers.length > 0 && !rateProviderId) {
+      next.carrier = `Choose the carrier for ${destinationCountry}.`;
+    }
     if (!partnerId) next.partner = "Choose who collects this pickup.";
 
     setErrors(next);
@@ -261,6 +310,8 @@ export default function AdminNewOrderPage() {
       customerId: customer.id,
       submissionKey,
       partnerId,
+      destinationCountry,
+      rateProviderId: rateProviderId || undefined,
       pickup: {
         pickupContactName: pickup.contactName.trim(),
         pickupContactPhone: pickup.contactPhone.trim(),
@@ -277,8 +328,8 @@ export default function AdminNewOrderPage() {
         pickupTimeSlot: pickup.timeSlot,
         pickupInstructions: pickup.instructions.trim() || undefined,
       },
-      // No orders: the partner takes the destination, recipient, boxes, contents and price
-      // at the door.
+      // No orders: the partner takes the recipient, boxes and contents at the door, and the price
+      // follows from the carrier's rates for what they weigh.
     };
     try {
       const created = await apiClient.post<B2bOrderResultDto[]>(
@@ -289,7 +340,7 @@ export default function AdminNewOrderPage() {
       showToast({
         variant: "success",
         title: "Pickup booked and assigned",
-        description: "The partner takes the parcel and delivery details at the door.",
+        description: "The partner takes the parcel and recipient details at the door.",
       });
     } catch (err) {
       setSubmitError(errorMessage(err, "Couldn't book this order. Please try again."));
@@ -438,8 +489,10 @@ export default function AdminNewOrderPage() {
                       : `Pickup for ${customer.name}`}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {r.status === "BOOKED" && !r.destinationCountry
-                      ? "Assigned to the partner. They take the destination, parcel and price at the door."
+                    {r.status === "BOOKED" && r.price === null
+                      ? r.carrier
+                        ? `${r.carrier}: assigned to the partner. The price follows from what they weigh at the door.`
+                        : "Assigned to the partner. They take the parcel details and agree the price at the door."
                       : r.status === "BOOKED"
                       ? `${r.carrier ?? "Manually priced"} · ${r.currency} ${Math.round(
                           r.price ?? 0,
@@ -594,6 +647,76 @@ export default function AdminNewOrderPage() {
                 </div>
               </div>
               {field("instructions", "Instructions for the partner (optional)")}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Ship to</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="destination-country">Destination country</Label>
+                <NativeSelect
+                  id="destination-country"
+                  searchable
+                  searchPlaceholder="Search countries"
+                  rank={(q) => searchCountries(countries, q).map((c) => c.name)}
+                  value={destinationCountry}
+                  onChange={(e) => chooseCountry(e.target.value)}
+                  aria-invalid={Boolean(errors.destinationCountry)}
+                >
+                  <option value="">Select a country…</option>
+                  {countries.map((c) => (
+                    <option key={c.id} value={c.name}>
+                      {c.name}
+                    </option>
+                  ))}
+                </NativeSelect>
+                {errors.destinationCountry && <FieldError>{errors.destinationCountry}</FieldError>}
+              </div>
+
+              {destinationCountry && (
+                <div className="space-y-1.5" aria-invalid={Boolean(errors.carrier)} tabIndex={-1}>
+                  <p id="carrier-label" className="text-sm font-medium text-foreground">
+                    Carrier
+                  </p>
+                  {carriersFailed ? (
+                    <p className="text-sm text-danger">Couldn&apos;t load the carriers. Choose the country again.</p>
+                  ) : carriers === null ? (
+                    <p className="text-sm text-muted-foreground">Loading carriers…</p>
+                  ) : carriers.length === 0 ? (
+                    <p className="text-sm text-warning">
+                      No carrier has a rate card for {destinationCountry}. The partner agrees the price at the door.
+                    </p>
+                  ) : (
+                    <div role="radiogroup" aria-labelledby="carrier-label" className="flex flex-wrap gap-2">
+                      {carriers.map((c) => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          role="radio"
+                          aria-checked={rateProviderId === c.id}
+                          onClick={() => setRateProviderId(c.id)}
+                          className={cn(
+                            "min-h-10 rounded-lg border px-4 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                            rateProviderId === c.id
+                              ? "border-primary bg-primary/10 text-primary"
+                              : "border-border text-foreground hover:bg-muted",
+                          )}
+                        >
+                          {c.name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {errors.carrier && <FieldError>{errors.carrier}</FieldError>}
+                  <p className="text-xs text-muted-foreground">
+                    Only carriers that ship to this country are listed. The partner weighs the parcel at the door
+                    and the price comes from this carrier&apos;s rates.
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
 

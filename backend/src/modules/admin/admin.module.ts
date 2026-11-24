@@ -30,6 +30,7 @@ import { PricingModule } from '../pricing/pricing.module';
 import { RateCardsModule } from '../rate-cards/rate-cards.module';
 import { PickupRequestsModule } from '../pickup-requests/pickup-requests.module';
 import { MailModule } from '../mail/mail.module';
+import { InvoicesModule } from '../invoices/invoices.module';
 
 @Module({
   imports: [
@@ -40,6 +41,8 @@ import { MailModule } from '../mail/mail.module';
     PricingModule,
     RateCardsModule,
     PickupRequestsModule,
+    // Mapping an AWB sends the order's GST invoice (AdminShipmentsController).
+    InvoicesModule,
     // PickupPartnersService emails a new partner their generated credentials.
     MailModule,
   ],

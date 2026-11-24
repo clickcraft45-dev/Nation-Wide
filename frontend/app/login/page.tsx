@@ -76,7 +76,7 @@ function LoginPageInner() {
           ? "/b2b"
           : "/dashboard"
         : user.role === "PICKUP_PARTNER"
-          ? "/partner/requests"
+          ? "/partner/dashboard"
           : "/admin/dashboard";
     router.replace(isSafeRedirectTarget(redirectParam) ? redirectParam : fallback);
   }, [isLoading, user, router, redirectParam]);

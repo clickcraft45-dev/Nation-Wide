@@ -76,6 +76,7 @@ export const ADMIN_NAV_GROUPS: NavGroup[] = [
     label: "Operations",
     items: [
       { label: "Orders", href: "/admin/orders", icon: Package },
+      { label: "Pickup Assignments", href: "/admin/pickup-assignments", icon: Inbox },
       { label: "Pickup Requests", href: "/admin/pickup-requests", icon: ClipboardList },
       { label: "Warehouse Drop-offs", href: "/admin/warehouse-dropoffs", icon: Warehouse },
       // One directory for customers, businesses, partners and staff — the slider picks the
@@ -183,7 +184,6 @@ export function filterNavGroupsByRole(groups: NavGroup[], role: Role): NavGroup[
 // A Pickup Partner's dashboard is a wholly separate audience from Orders/Customers/Pricing/etc
 // — deliberately its own short list, not a role-filtered slice of ADMIN_NAV_ITEMS.
 export const PARTNER_NAV_ITEMS: NavItem[] = [
-  { label: "Requests", href: "/partner/requests", icon: Inbox },
   { label: "Dashboard", href: "/partner/dashboard", icon: LayoutDashboard },
   { label: "Pickups", href: "/partner/pickups", icon: CalendarClock },
   { label: "History", href: "/partner/history", icon: History },

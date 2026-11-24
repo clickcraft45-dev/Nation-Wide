@@ -1,5 +1,5 @@
 import type { Receipt } from '@prisma/client';
-import type { ReceiptDto } from '@nationwide/shared-types';
+import type { PaymentSplitDto, ReceiptDto } from '@nationwide/shared-types';
 
 type ReceiptWithRelations = Receipt & {
   customer?: { name: string; phone: string } | null;
@@ -28,6 +28,7 @@ export function toReceiptDto(receipt: ReceiptWithRelations): ReceiptDto {
     currency: receipt.currency,
     amount: receipt.amount,
     paymentMethod: receipt.paymentMethod,
+    paymentSplits: receipt.paymentSplits as PaymentSplitDto[] | null,
     receivedAt: receipt.receivedAt.toISOString(),
 
     sentAt: receipt.sentAt?.toISOString() ?? null,

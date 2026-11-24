@@ -6,7 +6,6 @@ import { ArrowLeft, CalendarPlus, Check, MapPinned, Phone } from "lucide-react";
 import {
   chargeableWeightKg,
   type CountryDto,
-  type PickupDocumentsDto,
   type PickupRequestDto,
   type RecalculatePreviewDto,
   type PaymentMethodCode,
@@ -36,12 +35,7 @@ import {
   type RecipientErrors,
   type RecipientForm,
 } from "@/components/quote/recipient-fields";
-import {
-  googleCalendarUrl,
-  isOpenRequest,
-  mapsUrl,
-  useClaimPickup,
-} from "@/components/partner/pickup-card";
+import { googleCalendarUrl, mapsUrl } from "@/components/partner/pickup-card";
 import {
   PackagesEditor,
   packagesFrom,
@@ -56,11 +50,27 @@ import {
   validateItems,
   type ItemForm,
 } from "@/components/shipment/items-editor";
-import { PhotoCapture } from "@/components/shipment/photo-capture";
+import { PickupPhotos } from "@/components/shipment/photo-capture";
+import {
+  AmountToCollect,
+  DoorDiscount,
+  PaymentMethodFields,
+  describePayments,
+  emptySplit,
+  splitProblem,
+  toPayments,
+  type MethodChoice,
+  type SplitForm,
+} from "@/components/partner/payment-fields";
+import { KycDocumentFields } from "@/components/shipment/kyc-document-fields";
 const PARTNER_PAYMENT_METHODS: { value: PaymentMethodCode; label: string }[] = [
   { value: "CASH", label: "Cash" },
   { value: "UPI", label: "UPI" },
 ];
+
+function methodLabel(method: PaymentMethodCode | null): string {
+  return PARTNER_PAYMENT_METHODS.find((m) => m.value === method)?.label ?? method ?? "—";
+}
 
 function formatMoney(amount: number, currency: string): string {
   return `${currency} ${Math.round(amount).toLocaleString("en-IN")}`;
@@ -79,7 +89,7 @@ const STEPPER_STEPS = [{ label: "Arrived" }, { label: "Payment" }, { label: "Com
  * The step-by-step handling of one pickup: arrive/receive -> verify weight & price -> collect
  * payment -> complete (creates the order) or reject.
  *
- * Shared by the partner app (their own pickups, plus accepting an open request) and the admin
+ * Shared by the partner app (the pickups staff assigned to them) and the admin
  * Warehouse Drop-offs tab, where staff do the same steps at the warehouse counter. Only the API
  * base and a few labels differ; the server decides who may act on which pickup.
  */
@@ -94,7 +104,6 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
   const [error, setError] = useState<string | null>(null);
 
   const [isArriving, setIsArriving] = useState(false);
-  const { claim, isClaiming } = useClaimPickup();
 
   // Verification form state. The boxes are weighed and measured one by one; the price follows
   // their chargeable weight (the greater of actual and volumetric, per box).
@@ -108,6 +117,9 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
   const [preview, setPreview] = useState<RecalculatePreviewDto | null>(null);
   const [isRecalculating, setIsRecalculating] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
+  // Back from the payment step to change the boxes, contents or recipient. Allowed until money is
+  // taken; verifying again re-prices the parcel.
+  const [editingVerification, setEditingVerification] = useState(false);
   const [verifyError, setVerifyError] = useState<string | null>(null);
   const requireDimensions = verifiedShipmentType !== "DOCUMENT";
   const packagesProblem = validatePackages(boxes, requireDimensions);
@@ -115,8 +127,8 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
   const debouncedWeight = useDebouncedValue(chargeableKg, 500);
 
   // Payment form state.
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethodCode>("CASH");
-  const [paymentReference, setPaymentReference] = useState("");
+  const [methodChoice, setMethodChoice] = useState<MethodChoice>("CASH");
+  const [splitForm, setSplitForm] = useState<SplitForm>(emptySplit);
   const [isCollectingPayment, setIsCollectingPayment] = useState(false);
   // "Take the payment later": nobody pays at the door, and an admin has to be named as having
   // approved it. The list is fetched when the payment step is reached.
@@ -211,7 +223,7 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
   // remember to tap a "Recalculate" button. Server-side is still the source of truth; this
   // is a preview only, nothing is persisted until "Confirm Verification".
   useEffect(() => {
-    if (!pickup || pickup.arrivedAt === null || pickup.verifiedAt) return;
+    if (!pickup || pickup.arrivedAt === null || (pickup.verifiedAt && !editingVerification)) return;
     const weightKg = debouncedWeight;
     if (!weightKg || weightKg <= 0) {
       // Dropping a now-stale preview when the inputs stop being valid — one render, not a loop.
@@ -239,20 +251,7 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedWeight, verifiedShipmentType, pickup?.id]);
-
-  async function uploadPhoto(kind: "aadhaar" | "parcel-photo", file: File) {
-    const form = new FormData();
-    form.append("file", file);
-    const updated = await apiClient.postForm<PickupRequestDto>(`${api}/${id}/${kind}`, form);
-    setPickup(updated);
-    showToast({ variant: "success", title: kind === "aadhaar" ? "Aadhaar saved" : "Parcel photo saved" });
-  }
-
-  async function documentUrl(kind: keyof PickupDocumentsDto): Promise<string | null> {
-    const docs = await apiClient.get<PickupDocumentsDto>(`${api}/${id}/documents`);
-    return docs[kind];
-  }
+  }, [debouncedWeight, verifiedShipmentType, pickup?.id, editingVerification]);
 
   async function handleArrive() {
     setIsArriving(true);
@@ -267,12 +266,6 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
     } finally {
       setIsArriving(false);
     }
-  }
-
-  async function handleClaim() {
-    const updated = await claim(id);
-    if (updated) setPickup(updated);
-    else load();
   }
 
   async function handleVerify() {
@@ -321,7 +314,11 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
         },
       );
       setPickup(updated);
-      showToast({ variant: "success", title: "Parcel verified" });
+      setEditingVerification(false);
+      showToast({
+        variant: "success",
+        title: editingVerification ? "Parcel details updated: the price is recalculated" : "Parcel verified",
+      });
     } catch (err) {
       // A 400 carries the server's own reason (no rate for this weight, a missing photo, …).
       setVerifyError(
@@ -348,6 +345,12 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
       });
       return;
     }
+    const takenNow = isPartial ? partPaid : pickup.payableAmount;
+    const problem = isDue ? null : splitProblem(methodChoice, takenNow, splitForm);
+    if (problem) {
+      showToast({ variant: "error", title: problem });
+      return;
+    }
     setIsCollectingPayment(true);
     try {
       const updated = await apiClient.patch<PickupRequestDto>(
@@ -359,9 +362,7 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
               dueNote: dueNote.trim() || undefined,
             }
           : {
-              paymentMethod,
-              collectedAmount: isPartial ? partPaid : pickup.payableAmount,
-              paymentReference: paymentReference.trim() || undefined,
+              payments: toPayments(methodChoice, takenNow, splitForm),
               ...(isPartial
                 ? {
                     deferRemainder: true,
@@ -377,8 +378,8 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
         title: isDue
           ? "Recorded as due: payment to follow"
           : isPartial
-            ? `Collected ${formatMoney(partPaid, pickup.currency)}: remainder recorded as due`
-            : "Payment collected",
+            ? `Collected ${formatMoney(partPaid, pickup.currency)}: remainder recorded as due. Receipt sent on WhatsApp.`
+            : "Payment collected. Receipt sent to the customer on WhatsApp.",
       });
     } catch {
       showToast({
@@ -447,9 +448,10 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
   }
 
   const isTerminal = ["COMPLETED", "CANCELLED", "REJECTED"].includes(pickup.status);
-  const isOpen = mode === "partner" && isOpenRequest(pickup);
   const atWarehouse = pickup.dropAtWarehouse;
-  const canReject = !isTerminal && !isOpen;
+  const canReject = !isTerminal;
+  const kycReady = pickup.kycDocument !== null && pickup.kycPhotos.length > 0;
+  const photosReady = kycReady && pickup.parcelPhotos.length > 0;
   const calendarUrl = mode === "partner" ? googleCalendarUrl(pickup) : null;
   const step: Step = !pickup.arrivedAt
     ? "arrived"
@@ -457,8 +459,8 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
       !pickup.paymentCollectedAt && !pickup.paymentDeferredAt
       ? "verify"
       : "complete";
-  const showVerificationForm = step === "verify" && !pickup.verifiedAt;
-  const showPaymentForm = step === "verify" && !!pickup.verifiedAt;
+  const showVerificationForm = step === "verify" && (!pickup.verifiedAt || editingVerification);
+  const showPaymentForm = step === "verify" && !!pickup.verifiedAt && !editingVerification;
 
   return (
     <div className="space-y-5 pb-6">
@@ -477,7 +479,7 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
         <PickupRequestStatusBadge status={pickup.status} />
       </div>
 
-      {!isTerminal && !isOpen && (
+      {!isTerminal && (
         <Stepper
           steps={atWarehouse ? [{ label: "Received" }, ...STEPPER_STEPS.slice(1)] : STEPPER_STEPS} currentIndex={STEP_ORDER.indexOf(step)} />
       )}
@@ -607,17 +609,10 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
             </CardContent>
           </Card>
 
-          {isOpen ? (
-            <Button size="lg" className="w-full" onClick={handleClaim} isLoading={isClaiming}>
-              <Check className="h-5 w-5" aria-hidden />
-              Accept Pickup
-            </Button>
-          ) : (
-            <Button size="lg" className="w-full" onClick={handleArrive} isLoading={isArriving}>
-              <Check className="h-5 w-5" aria-hidden />
-              {atWarehouse ? "Parcel Received at Warehouse" : "Arrived at Pickup"}
-            </Button>
-          )}
+          <Button size="lg" className="w-full" onClick={handleArrive} isLoading={isArriving}>
+            <Check className="h-5 w-5" aria-hidden />
+            {atWarehouse ? "Parcel Received at Warehouse" : "Arrived at Pickup"}
+          </Button>
         </div>
       )}
 
@@ -626,6 +621,16 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
         <div className="space-y-4">
           {showVerificationForm && (
             <>
+              {editingVerification && (
+                <div className="flex items-center justify-between gap-3 rounded-lg border border-warning-border bg-warning-bg px-3 py-2 text-sm">
+                  <p className="text-foreground">
+                    Changing the parcel details. Confirm again to re-price{pickup.doorDiscount ? "; the discount will need approving again" : ""}.
+                  </p>
+                  <Button type="button" variant="ghost" size="lg" onClick={() => setEditingVerification(false)}>
+                    Cancel
+                  </Button>
+                </div>
+              )}
               <Card>
                 <CardContent className="space-y-4 pt-5">
                   <p className="text-sm font-medium text-foreground">Parcel Weight</p>
@@ -704,19 +709,25 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
                     {isRecalculating && <p className="text-muted-foreground">Recalculating…</p>}
                     {!isRecalculating && preview && (
                       <div className="space-y-1">
+                        {/* Staff booked this without a price (only the carrier): there is no quote
+                            to compare against, so the rate-card price is simply the price. */}
+                        {preview.estimatedPrice > 0 && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-muted-foreground">Original Quote</span>
+                            <span>{formatMoney(preview.estimatedPrice, preview.currency)}</span>
+                          </div>
+                        )}
                         <div className="flex items-center justify-between">
-                          <span className="text-muted-foreground">Original Quote</span>
-                          <span>{formatMoney(preview.estimatedPrice, preview.currency)}</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-muted-foreground">Updated Amount</span>
+                          <span className="text-muted-foreground">
+                            {preview.estimatedPrice > 0 ? "Updated Amount" : `Price (${pickup.rateProviderName ?? "carrier"})`}
+                          </span>
                           <span className="text-base font-semibold text-foreground">
                             {preview.recalculatedPrice === null
                               ? "No rate available"
                               : formatMoney(preview.recalculatedPrice, preview.currency)}
                           </span>
                         </div>
-                        {preview.difference !== null && preview.difference !== 0 && (
+                        {preview.estimatedPrice > 0 && preview.difference !== null && preview.difference !== 0 && (
                           <div className="flex items-center justify-between">
                             <span className="text-muted-foreground">Difference</span>
                             <span className={preview.difference > 0 ? "font-medium text-danger" : "font-medium text-success"}>
@@ -727,7 +738,7 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
                         )}
                         {/* The customer WILL ask why it changed, and "the system says so" is not
                             an answer anyone can give at a doorstep. */}
-                        {preview.changes.length > 0 && (
+                        {preview.estimatedPrice > 0 && preview.changes.length > 0 && (
                           <div className="mt-2 space-y-1 border-t border-border pt-2">
                             <p className="text-xs font-medium text-foreground">
                               Why the price changed
@@ -790,27 +801,44 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
               </Card>
 
               <Card>
-                <CardContent className="space-y-3 pt-5">
-                  <p className="text-sm font-medium text-foreground">Photos</p>
-                  <PhotoCapture
-                    title="Customer's Aadhaar card"
-                    hint={
-                      pickup.aadhaarOnFile
-                        ? "Already on file from an earlier pickup. Replace it only if it has changed."
-                        : "Photograph the front of the card. It is kept for the customer's future pickups."
-                    }
-                    onFileLabel="Take Aadhaar photo"
-                    hasFile={pickup.aadhaarOnFile}
-                    onFile={(file) => uploadPhoto("aadhaar", file)}
-                    getViewUrl={() => documentUrl("aadhaarUrl")}
+                <CardContent className="space-y-4 pt-5">
+                  <div>
+                    <h2 className="text-sm font-medium text-foreground">Shipper&apos;s ID document</h2>
+                    <p className="text-xs text-muted-foreground">
+                      {pickup.kycDocument
+                        ? "On file from an earlier pickup. Check it against the card and change anything that's different."
+                        : "Customs needs the shipper's ID on every export. It is kept for the customer's next pickup."}
+                    </p>
+                  </div>
+                  <KycDocumentFields
+                    pickupId={pickup.id}
+                    apiBase={api}
+                    value={pickup.kycDocument}
+                    onChange={setPickup}
                   />
-                  <PhotoCapture
-                    title="Parcel photo"
-                    hint="The packed box, with any labels visible."
-                    onFileLabel="Take parcel photo"
-                    hasFile={pickup.parcelPhotoOnFile}
-                    onFile={(file) => uploadPhoto("parcel-photo", file)}
-                    getViewUrl={() => documentUrl("parcelPhotoUrl")}
+                  <PickupPhotos
+                    pickupId={pickup.id}
+                    apiBase={api}
+                    kind="KYC"
+                    title="Document photos"
+                    hint="Photograph the front and the back. Add more if the details run over."
+                    photos={pickup.kycPhotos}
+                    onChange={setPickup}
+                  />
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="space-y-3 pt-5">
+                  <h2 className="text-sm font-medium text-foreground">Parcel photos</h2>
+                  <PickupPhotos
+                    pickupId={pickup.id}
+                    apiBase={api}
+                    kind="PARCEL"
+                    title="The packed parcel"
+                    hint="Every box, with its labels visible. Label each photo so it can be found later."
+                    photos={pickup.parcelPhotos}
+                    onChange={setPickup}
                   />
                 </CardContent>
               </Card>
@@ -872,18 +900,17 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
                 className="w-full"
                 onClick={handleVerify}
                 isLoading={isVerifying}
-                disabled={
-                  !parcelPhysicallyChecked ||
-                  !recipientConfirmed ||
-                  !pickup.aadhaarOnFile ||
-                  !pickup.parcelPhotoOnFile
-                }
+                disabled={!parcelPhysicallyChecked || !recipientConfirmed || !photosReady}
               >
-                Confirm Verification
+                {editingVerification ? "Save Changes & Re-price" : "Confirm Verification"}
               </Button>
-              {(!pickup.aadhaarOnFile || !pickup.parcelPhotoOnFile) && (
+              {!photosReady && (
                 <p className="text-center text-xs text-muted-foreground">
-                  Add the Aadhaar and parcel photos to continue.
+                  {!pickup.kycDocument
+                    ? "Save the shipper's ID document type and number to continue."
+                    : pickup.kycPhotos.length === 0
+                      ? "Add a photo of the ID document to continue."
+                      : "Add a photo of the parcel to continue."}
                 </p>
               )}
             </>
@@ -893,24 +920,32 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
             <>
               <Card>
                 <CardContent className="space-y-4 pt-5">
-                  <div className="text-center">
-                    <p className="text-xs text-muted-foreground">Amount To Collect</p>
-                    <p className="text-3xl font-bold text-foreground">
-                      {formatMoney(pickup.payableAmount, pickup.currency)}
-                    </p>
-                    {/* The customer will say "I used a code" — the figure has to show why it is
-                        lower than the price, or the partner cannot confirm it. */}
-                    {pickup.discountAmount ? (
-                      <p className="mt-1 text-xs text-success">
-                        {formatMoney(
-                          pickup.verifiedPrice ?? pickup.estimatedPrice,
-                          pickup.currency,
-                        )}{" "}
-                        less {formatMoney(pickup.discountAmount, pickup.currency)}
-                        {pickup.couponCode ? ` (${pickup.couponCode})` : ""}
-                      </p>
-                    ) : null}
-                  </div>
+                  {/* The customer will say "I used a code" — the figure has to show why it is
+                      lower than the price, or the partner cannot confirm it. */}
+                  <AmountToCollect pickup={pickup} />
+
+                  {/* The way back to the boxes, contents and recipient: "Back to pickups" leaves
+                      the pickup altogether. */}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="lg"
+                    className="w-full"
+                    onClick={() => {
+                      setEditingVerification(true);
+                      window.scrollTo({ top: 0, behavior: "smooth" });
+                    }}
+                  >
+                    <ArrowLeft className="h-4 w-4" aria-hidden />
+                    Change boxes, contents or recipient
+                  </Button>
+
+                  <DoorDiscount
+                    pickup={pickup}
+                    apiBase={api}
+                    approvers={dueApprovers}
+                    onChange={setPickup}
+                  />
 
                   <div>
                     <Label>Payment</Label>
@@ -1001,37 +1036,28 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
                   )}
 
                   {takesMoney && (
-                  <div>
-                    <Label>Payment Method</Label>
-                    <div className="mt-1.5 grid grid-cols-2 gap-3">
-                      {PARTNER_PAYMENT_METHODS.map((m) => (
-                        <button
-                          key={m.value}
-                          type="button"
-                          onClick={() => setPaymentMethod(m.value)}
-                          className={cn(
-                            "rounded-lg border-2 py-4 text-center text-sm font-semibold",
-                            paymentMethod === m.value
-                              ? "border-primary bg-primary/5 text-primary"
-                              : "border-border text-muted-foreground",
-                          )}
-                        >
-                          {m.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                    <PaymentMethodFields
+                      idPrefix={`${pickup.id}-pay`}
+                      total={isPartial ? Number(partialAmount) || 0 : pickup.payableAmount}
+                      choice={methodChoice}
+                      onChoice={setMethodChoice}
+                      form={splitForm}
+                      onForm={setSplitForm}
+                    />
                   )}
 
-                  {takesMoney && paymentMethod === "UPI" && (
-                    <div className="space-y-1.5">
-                      <Label htmlFor="payment-reference">UPI Reference Number (optional)</Label>
-                      <Input
-                        id="payment-reference"
-                        value={paymentReference}
-                        onChange={(e) => setPaymentReference(e.target.value)}
-                      />
-                    </div>
+                  {/* Proof for the office's UPI reconciliation; never required, so a partner
+                      with no signal for the upload is not stuck at the door. */}
+                  {takesMoney && methodChoice !== "CASH" && (
+                    <PickupPhotos
+                      pickupId={pickup.id}
+                      apiBase={api}
+                      kind="PAYMENT"
+                      title="Payment screenshot (optional)"
+                      hint="The customer's UPI success screen, with the amount and reference visible."
+                      photos={pickup.paymentPhotos}
+                      onChange={setPickup}
+                    />
                   )}
                 </CardContent>
               </Card>
@@ -1044,17 +1070,17 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
                         dueApprovers.find((a) => a.id === dueApprovedByAdminId)?.name ?? "—"
                       }. The customer sees this as due in their portal.`
                     : isPartial
-                      ? `Collecting ${formatMoney(Number(partialAmount) || 0, pickup.currency)} by ${
-                          PARTNER_PAYMENT_METHODS.find((m) => m.value === paymentMethod)?.label
-                        }, leaving ${formatMoney(
+                      ? `Collecting ${formatMoney(Number(partialAmount) || 0, pickup.currency)} by ${describePayments(
+                          toPayments(methodChoice, Number(partialAmount) || 0, splitForm),
+                        )}, leaving ${formatMoney(
                           pickup.payableAmount - (Number(partialAmount) || 0),
                           pickup.currency,
                         )} owing, approved by ${
                           dueApprovers.find((a) => a.id === dueApprovedByAdminId)?.name ?? "—"
                         }.`
-                      : `Amount: ${formatMoney(pickup.payableAmount, pickup.currency)} · Method: ${
-                          PARTNER_PAYMENT_METHODS.find((m) => m.value === paymentMethod)?.label
-                        }. Are you sure the payment has been received?`
+                      : `Amount: ${formatMoney(pickup.payableAmount, pickup.currency)} · ${describePayments(
+                          toPayments(methodChoice, pickup.payableAmount, splitForm),
+                        )}. The receipt goes to the customer on WhatsApp. Are you sure the payment has been received?`
                 }
                 confirmLabel={isDue ? "Confirm Due" : "Confirm Payment"}
                 onConfirm={handleCollectPayment}
@@ -1088,14 +1114,36 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
                 label="Service"
                 value={shipmentLabel(pickup.verifiedShipmentType ?? pickup.shipmentType)}
               />
+              {pickup.payableAmount < (pickup.verifiedPrice ?? pickup.estimatedPrice) && (
+                <SummaryRow
+                  label="Price"
+                  value={formatMoney(pickup.verifiedPrice ?? pickup.estimatedPrice, pickup.currency)}
+                />
+              )}
+              {pickup.discountAmount ? (
+                <SummaryRow
+                  label={`Coupon${pickup.couponCode ? ` ${pickup.couponCode}` : ""}`}
+                  value={`−${formatMoney(pickup.discountAmount, pickup.currency)}`}
+                />
+              ) : null}
+              {pickup.doorDiscount && (
+                <SummaryRow
+                  label="Discount at pickup"
+                  value={`−${formatMoney(pickup.doorDiscount.amount, pickup.currency)}`}
+                />
+              )}
               <SummaryRow
                 label="Final Amount"
-                value={formatMoney(pickup.verifiedPrice ?? pickup.estimatedPrice, pickup.currency)}
+                value={formatMoney(pickup.payableAmount, pickup.currency)}
                 emphasize
               />
               <SummaryRow
                 label="Payment"
-                value={PARTNER_PAYMENT_METHODS.find((m) => m.value === pickup.paymentMethod)?.label ?? pickup.paymentMethod ?? "—"}
+                value={
+                  pickup.paymentSplits?.length
+                    ? describePayments(pickup.paymentSplits)
+                    : methodLabel(pickup.paymentMethod)
+                }
               />
               <SummaryRow
                 label="Payment Status"

@@ -1,23 +1,14 @@
 "use client";
 
-import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { CalendarPlus, Clock, MapPin, Navigation, Phone, Scale } from "lucide-react";
 import type { PickupRequestDto } from "@nationwide/shared-types";
-import { apiClient, errorMessage } from "@/lib/api-client";
 import { SITE_URL } from "@/lib/constants/site";
 import { PickupRequestStatusBadge } from "@/components/ui/status-badge";
-import { Button } from "@/components/ui/button";
-import { useToast } from "@/components/ui/toast";
 import { formatDateTime } from "@/lib/utils/format-date-time";
 
 function shipmentLabel(type: PickupRequestDto["shipmentType"]): string {
   return type.charAt(0) + type.slice(1).toLowerCase();
-}
-
-/** A broadcast request no partner has taken yet — any partner may accept it. */
-export function isOpenRequest(pickup: PickupRequestDto): boolean {
-  return pickup.status === "PENDING_ASSIGNMENT" && pickup.assignedPartnerId === null;
 }
 
 /**
@@ -100,41 +91,17 @@ export function googleCalendarUrl(pickup: PickupRequestDto): string | null {
   return `https://calendar.google.com/calendar/render?${params.toString()}`;
 }
 
-/** Claims an open request; resolves to the updated pickup, or null when someone else got it first. */
-export function useClaimPickup() {
-  const { showToast } = useToast();
-  const [isClaiming, setIsClaiming] = useState(false);
-
-  async function claim(id: string): Promise<PickupRequestDto | null> {
-    setIsClaiming(true);
-    try {
-      const updated = await apiClient.patch<PickupRequestDto>(`/partner/pickup-requests/${id}/claim`, {});
-      showToast({ variant: "success", title: "Pickup accepted: the customer has been notified" });
-      return updated;
-    } catch (err) {
-      showToast({ variant: "error", title: errorMessage(err, "Couldn't accept this pickup.") });
-      return null;
-    } finally {
-      setIsClaiming(false);
-    }
-  }
-
-  return { claim, isClaiming };
-}
-
 // One pickup, one large tappable card — the primary unit of the mobile home/list screens.
 // Deliberately dense but single-column: everything the partner needs to recognize a stop is
 // visible without opening it, nothing requires horizontal scrolling.
 //
 // This is a clickable div rather than a Link because the card also embeds real anchors
 // (tap-to-call, directions) — nesting an <a> inside next/link's <a> would be invalid HTML.
-export function PickupCard({ pickup, onClaimFailed }: { pickup: PickupRequestDto; onClaimFailed?: () => void }) {
+export function PickupCard({ pickup }: { pickup: PickupRequestDto }) {
   const router = useRouter();
-  const { claim, isClaiming } = useClaimPickup();
   const weight = pickup.verifiedWeightKg ?? pickup.estimatedWeightKg;
   const amount = pickup.verifiedPrice ?? pickup.estimatedPrice;
   const href = `/partner/pickups/${pickup.id}`;
-  const open = isOpenRequest(pickup);
   const pending = pendingStep(pickup);
   const calendarUrl = googleCalendarUrl(pickup);
 
@@ -235,22 +202,6 @@ export function PickupCard({ pickup, onClaimFailed }: { pickup: PickupRequestDto
           {pickup.currency} {Math.round(amount).toLocaleString("en-IN")}
         </p>
       </div>
-
-      {open && (
-        <Button
-          size="lg"
-          className="mt-3 w-full"
-          isLoading={isClaiming}
-          onClick={async (e) => {
-            e.stopPropagation();
-            const updated = await claim(pickup.id);
-            if (updated) router.push(href);
-            else onClaimFailed?.();
-          }}
-        >
-          Accept Pickup
-        </Button>
-      )}
     </div>
   );
 }

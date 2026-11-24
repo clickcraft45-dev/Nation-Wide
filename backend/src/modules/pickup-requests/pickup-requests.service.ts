@@ -11,7 +11,13 @@ import {
   chargeableWeightKg,
   isPickupSlotOpen,
   localDateIso,
+  MAX_PHOTOS_PER_KIND,
+  kycNumberProblem,
+  normalizeKycNumber,
   type B2bOrderResultDto,
+  type PaymentMethodCode,
+  type PaymentSplitDto,
+  type PickupPhotoKind,
   type B2bRequestSummaryDto,
   type PickupDocumentsDto,
   type PickupRequestStatusCode,
@@ -43,6 +49,7 @@ import { QueryPickupRequestsDto } from './dto/query-pickup-requests.dto';
 import { RecalculateWeightDto } from './dto/recalculate-weight.dto';
 import { VerifyPickupRequestDto } from './dto/verify-pickup-request.dto';
 import { CollectPaymentDto } from './dto/collect-payment.dto';
+import { DoorDiscountDto } from './dto/door-discount.dto';
 import { AcceptParcelDto } from './dto/accept-parcel.dto';
 import { RejectParcelDto } from './dto/reject-parcel.dto';
 import { RecipientAddressDto } from './dto/recipient-address.dto';
@@ -53,16 +60,39 @@ import {
   BookableOrderDto,
 } from './dto/b2b-create-orders.dto';
 import { resolveMapsUrl } from './maps-url';
+import { compressPhoto } from './image-upload';
+import { KycDocumentDto } from './dto/pickup-photos.dto';
+
+// What a photo row carries out to the app. The S3 key stays in the database; see documents().
+const photoSummary = {
+  select: { id: true, kind: true, label: true, createdAt: true },
+  orderBy: { createdAt: 'asc' },
+} as const;
 
 const withDetails = {
   include: {
-    // aadhaarKey is read only to say whether one is on file — the mapper never exposes the key.
-    customer: { select: { name: true, phone: true, aadhaarKey: true } },
+    customer: {
+      select: {
+        name: true,
+        phone: true,
+        kycDocumentType: true,
+        kycDocumentNumber: true,
+        // The customer's own: taken on an earlier pickup, they carry over to this one.
+        photos: { where: { kind: 'KYC' as const }, ...photoSummary },
+      },
+    },
+    // The pickup's own photos: the parcel, and any proof of payment. Split by kind in the mapper.
+    photos: {
+      where: { kind: { in: ['PARCEL' as const, 'PAYMENT' as const] } },
+      ...photoSummary,
+    },
     assignedPartner: {
       select: { id: true, name: true, email: true, phone: true },
     },
     // Named on the pickup and on the customer's order: who let this parcel go unpaid.
     paymentDueApprovedBy: { select: { name: true } },
+    // Named on the pickup and the receipt: who let the partner take money off at the door.
+    doorDiscountApprovedBy: { select: { name: true, email: true } },
     // The code the customer applied when booking — shown to them, to the partner at the door,
     // and printed on the invoice.
     coupon: { select: { code: true } },
@@ -195,14 +225,6 @@ const NON_TERMINAL_STATUSES: PickupRequestStatusCode[] = [
 const COLLECTED_AMOUNT_TOLERANCE_RATIO = 0.05;
 const COLLECTED_AMOUNT_TOLERANCE_FLOOR = 50;
 
-const IMAGE_EXTENSIONS: Record<string, string> = {
-  'image/jpeg': 'jpg',
-  'image/png': 'png',
-  'image/webp': 'webp',
-  'image/heic': 'heic',
-  'image/heif': 'heif',
-};
-
 /** What a booking charges, and what that writes back onto the quote. */
 interface BookingPricing {
   rateProviderId: string | null;
@@ -295,14 +317,25 @@ export class PickupRequestsService {
     private readonly coupons: CouponsService,
   ) {}
 
-  /** What the customer actually pays: the priced amount, less any coupon applied at booking. */
+  /**
+   * What the customer actually pays: the priced amount, less any coupon applied at booking and
+   * any discount the partner gave at the door.
+   */
   private payableFor(pickupRequest: {
     verifiedPrice: number | null;
     estimatedPrice: number;
     discountAmount: number | null;
+    doorDiscountAmount: number | null;
   }): number {
     const price = pickupRequest.verifiedPrice ?? pickupRequest.estimatedPrice;
-    return round2(Math.max(0, price - (pickupRequest.discountAmount ?? 0)));
+    return round2(
+      Math.max(
+        0,
+        price -
+          (pickupRequest.discountAmount ?? 0) -
+          (pickupRequest.doorDiscountAmount ?? 0),
+      ),
+    );
   }
 
   async create(
@@ -424,20 +457,18 @@ export class PickupRequestsService {
       { termsUrl: `${publicFrontendUrl(this.config)}/terms` },
     );
 
-    // Broadcast, not auto-assign (Rapido/Blinkit style): the request stays PENDING_ASSIGNMENT
-    // and every active partner sees it until one claims it. An admin can still hand-assign.
-    // Warehouse drop-offs are handled by admin at the warehouse — nothing for a partner to do.
+    // Partners never pick requests up themselves: the request waits, PENDING_ASSIGNMENT, on the
+    // admin Pickup Assignments page until staff hand it to one. Warehouse drop-offs are handled
+    // by admin at the warehouse, so there is nothing to assign.
     const full = await this.findOne(created.id);
-    if (!dto.dropAtWarehouse) await this.broadcastToPartners(full);
-
+    if (!dto.dropAtWarehouse) await this.notifyAdminsToAssign(full);
     return full;
-    return this.findOne(created.id);
   }
 
   /**
    * The one place a priced quote becomes a pickup request: claims the quote (atomically, so a
    * retried submit cannot book it twice) and creates the pickup in the same transaction. Shared by
-   * staff booking (assigned to a chosen partner) and the B2B portal (broadcast to every partner).
+   * staff booking (assigned to a chosen partner) and the B2B portal (left for staff to assign).
    */
   private async commitBooking(params: {
     quote: { id: string; status: string; weightKg: number };
@@ -514,17 +545,17 @@ export class PickupRequestsService {
     }));
   }
 
-  // Every active partner sees an unclaimed request until one takes it (see claim).
-  private async broadcastToPartners(
+  // A new request waits for staff to choose a partner; this tells them it is there.
+  private async notifyAdminsToAssign(
     pickupRequest: PickupRequestWithDetails,
   ): Promise<void> {
-    const partners = await this.prisma.adminUser.findMany({
-      where: { role: 'PICKUP_PARTNER', isActive: true },
+    const admins = await this.prisma.adminUser.findMany({
+      where: { role: { in: ['ADMIN', 'SUPER_ADMIN'] }, isActive: true },
       select: { id: true },
     });
-    for (const partner of partners) {
-      void this.pushService.sendToAdminUser(partner.id, {
-        title: 'New pickup request',
+    for (const admin of admins) {
+      void this.pushService.sendToAdminUser(admin.id, {
+        title: 'Pickup request to assign',
         body: [
           pickupRequest.pickupContactName,
           pickupRequest.pickupCity,
@@ -532,7 +563,7 @@ export class PickupRequestsService {
         ]
           .filter(Boolean)
           .join(' · '),
-        url: `/partner/pickups/${pickupRequest.id}`,
+        url: '/admin/pickup-assignments',
         tag: `pickup-${pickupRequest.id}`,
       });
     }
@@ -544,7 +575,7 @@ export class PickupRequestsService {
    * request (they go to different countries and are priced and tracked separately), all collected
    * from the same address.
    *
-   * A shipment no rate card covers is NOT broadcast: its quote is left for an admin to price, the
+   * A shipment no rate card covers is NOT sent for assignment: its quote is left for an admin to price, the
    * same rule QuotesService.create applies to a customer's own unpriced quote. The caller is told
    * per shipment which happened.
    */
@@ -703,7 +734,7 @@ export class PickupRequestsService {
         if (opts.partnerId) {
           await this.announceAssignment(pickupRequest, opts.partnerId);
         } else {
-          await this.broadcastToPartners(pickupRequest);
+          await this.notifyAdminsToAssign(pickupRequest);
         }
       }
     }
@@ -811,6 +842,40 @@ export class PickupRequestsService {
   }
 
   /**
+   * The carriers that ship to a country: those whose zones list it (or, for a region such as
+   * "Azores (Portugal)", its parent country). Staff choose one when they already know the
+   * destination; the rate card then prices the parcel at the door.
+   */
+  async carriersForCountry(
+    countryName: string,
+  ): Promise<{ id: string; name: string }[]> {
+    const country = await this.prisma.country.findFirst({
+      where: {
+        isActive: true,
+        name: { equals: countryName.trim(), mode: 'insensitive' },
+      },
+      select: { code: true },
+    });
+    if (!country) return [];
+    const codes = country.code.includes('-')
+      ? [country.code, country.code.split('-')[0]]
+      : [country.code];
+    const zones = await this.prisma.zoneCountry.findMany({
+      where: {
+        country: { isActive: true, code: { in: codes } },
+        rateProvider: { isActive: true },
+      },
+      select: { rateProvider: { select: { id: true, name: true } } },
+    });
+    const carriers = new Map(
+      zones.map((z) => [z.rateProvider.id, z.rateProvider.name]),
+    );
+    return [...carriers]
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  /**
    * Staff send a partner to collect, with nothing known yet but who and where. The partner takes
    * the destination, recipient, boxes and contents at the door and names the price there (the
    * pickup carries no carrier and no estimate, which is what the partner app reads as "price it
@@ -832,6 +897,27 @@ export class PickupRequestsService {
         })
       : null;
 
+    // Staff may already know where it is going and by which carrier. The carrier has to ship
+    // there: a carrier with no zone for the country could never price the parcel.
+    const destinationCountry = dto.destinationCountry?.trim() ?? '';
+    let carrier: { id: string; name: string } | null = null;
+    if (dto.rateProviderId) {
+      if (!destinationCountry) {
+        throw new BadRequestException(
+          'Choose the destination country before the carrier',
+        );
+      }
+      carrier =
+        (await this.carriersForCountry(destinationCountry)).find(
+          (c) => c.id === dto.rateProviderId,
+        ) ?? null;
+      if (!carrier) {
+        throw new BadRequestException(
+          `That carrier does not ship to ${destinationCountry}`,
+        );
+      }
+    }
+
     let pickupRequest = existing;
     if (!pickupRequest) {
       let { pickupLatitude, pickupLongitude } = dto.pickup;
@@ -852,8 +938,8 @@ export class PickupRequestsService {
             customerId: dto.customerId,
             shipmentType: 'PACKAGE',
             weightKg: 0,
-            // Taken at the door (verify sets it).
-            destCountry: '',
+            // Taken at the door (verify sets it) unless staff gave it.
+            destCountry: destinationCountry,
             status: 'PICKUP_REQUESTED',
             submissionKey: dto.submissionKey,
           },
@@ -862,8 +948,10 @@ export class PickupRequestsService {
           data: {
             quoteId: quote.id,
             customerId: dto.customerId,
-            rateProviderId: null,
-            rateProviderName: null,
+            // With a carrier, the door price comes from its rate card (verify reprices against
+            // it); without one, the partner names the price.
+            rateProviderId: carrier?.id ?? null,
+            rateProviderName: carrier?.name ?? null,
             shipmentType: 'PACKAGE',
             estimatedWeightKg: 0,
             estimatedPrice: 0,
@@ -883,7 +971,12 @@ export class PickupRequestsService {
           entity: 'PickupRequest',
           entityId: pickupRequest.id,
           before: {},
-          after: { partnerId: dto.partnerId, customerId: dto.customerId },
+          after: {
+            partnerId: dto.partnerId,
+            customerId: dto.customerId,
+            destinationCountry: destinationCountry || null,
+            rateProviderId: carrier?.id ?? null,
+          },
         },
       });
       await this.notificationsService.enqueue(
@@ -898,60 +991,14 @@ export class PickupRequestsService {
     return {
       index: 0,
       recipientName: '',
-      destinationCountry: '',
+      destinationCountry: pickupRequest.quote.destCountry,
       status: 'BOOKED',
       quoteId: pickupRequest.quoteId,
       pickupRequestId: pickupRequest.id,
-      carrier: null,
+      carrier: pickupRequest.rateProviderName,
       price: null,
       currency: 'INR',
     };
-  }
-
-  // A partner taking an open request. The WHERE re-checks "still unclaimed" against the database,
-  // so when two partners tap Accept at the same moment exactly one wins and the other gets a
-  // clear "already taken" instead of both believing the pickup is theirs.
-  async claim(
-    id: string,
-    partnerId: string,
-  ): Promise<PickupRequestWithDetails> {
-    const won = await this.prisma.pickupRequest.updateMany({
-      where: {
-        id,
-        status: 'PENDING_ASSIGNMENT',
-        assignedPartnerId: null,
-        dropAtWarehouse: false,
-      },
-      data: {
-        assignedPartnerId: partnerId,
-        assignedAt: new Date(),
-        status: 'ASSIGNED',
-      },
-    });
-    if (won.count === 0) {
-      throw new BadRequestException(
-        'This pickup request has already been taken by another partner',
-      );
-    }
-
-    const pickupRequest = await this.findOne(id);
-    await this.prisma.auditLog.create({
-      data: {
-        actorId: partnerId,
-        action: 'PICKUP_REQUEST_PARTNER_ASSIGNED',
-        entity: 'PickupRequest',
-        entityId: id,
-        before: { assignedPartnerId: null },
-        after: { assignedPartnerId: partnerId },
-      },
-    });
-    await this.notificationsService.enqueue(
-      pickupRequest.customerId,
-      'WHATSAPP',
-      NOTIFICATION_TEMPLATES.PICKUP_PARTNER_ASSIGNED,
-      {},
-    );
-    return pickupRequest;
   }
 
   findAllForCustomer(customerId: string): Promise<PickupRequestWithDetails[]> {
@@ -1088,16 +1135,9 @@ export class PickupRequestsService {
     partnerId: string,
     query: QueryPickupRequestsDto,
   ): Promise<PickupRequestWithDetails[]> {
-    // Their own pickups plus every open, unclaimed request up for grabs.
+    // Only what staff assigned to them: partners do not see, or take, unassigned requests.
     const where: Prisma.PickupRequestWhereInput = {
-      OR: [
-        { assignedPartnerId: partnerId },
-        {
-          assignedPartnerId: null,
-          status: 'PENDING_ASSIGNMENT',
-          dropAtWarehouse: false,
-        },
-      ],
+      assignedPartnerId: partnerId,
     };
     if (query.status) where.status = query.status;
     return this.prisma.pickupRequest.findMany({
@@ -1105,23 +1145,6 @@ export class PickupRequestsService {
       orderBy: { pickupDate: 'asc' },
       ...withDetails,
     });
-  }
-
-  // Read-only view: an open request is visible to every partner so they can decide to claim it.
-  // Every action below still goes through findOneForPartner, which requires the claim first.
-  async findOneVisibleToPartner(
-    id: string,
-    partnerId: string,
-  ): Promise<PickupRequestWithDetails> {
-    const pickupRequest = await this.findOne(id);
-    const isOpen =
-      pickupRequest.assignedPartnerId === null &&
-      pickupRequest.status === 'PENDING_ASSIGNMENT' &&
-      !pickupRequest.dropAtWarehouse;
-    if (!isOpen && pickupRequest.assignedPartnerId !== partnerId) {
-      throw new NotFoundException(`Pickup request ${id} not found`);
-    }
-    return pickupRequest;
   }
 
   // Who may work a pickup: its assigned partner, or — for a warehouse drop-off, which never goes
@@ -1256,14 +1279,29 @@ export class PickupRequestsService {
     if (!pickupRequest.arrivedAt) {
       throw new BadRequestException('Mark arrival before verifying the parcel');
     }
-    // Customs will not clear an export without the shipper's ID, and a photo of the box is the
-    // only record of what was actually handed over — both needed before any money changes hands.
-    if (!pickupRequest.customer.aadhaarKey) {
+    // Going back to change the boxes or contents after seeing the price is fine until money
+    // changes hands; after that the charged amount is fixed.
+    if (pickupRequest.paymentCollectedAt || pickupRequest.paymentDeferredAt) {
       throw new BadRequestException(
-        "Add the customer's Aadhaar card before verifying the parcel",
+        'Payment has already been settled, so the parcel details can no longer change',
       );
     }
-    if (!pickupRequest.parcelPhotoKey) {
+    // Customs will not clear an export without the shipper's ID, and a photo of the box is the
+    // only record of what was actually handed over — both needed before any money changes hands.
+    if (
+      !pickupRequest.customer.kycDocumentType ||
+      !pickupRequest.customer.kycDocumentNumber
+    ) {
+      throw new BadRequestException(
+        "Enter the customer's ID document type and number before verifying the parcel",
+      );
+    }
+    if (pickupRequest.customer.photos.length === 0) {
+      throw new BadRequestException(
+        "Add a photo of the customer's ID document before verifying the parcel",
+      );
+    }
+    if (!pickupRequest.photos.some((p) => p.kind === 'PARCEL')) {
       throw new BadRequestException(
         'Take a photo of the parcel before verifying it',
       );
@@ -1344,6 +1382,12 @@ export class PickupRequestsService {
         verifiedNationwideCut: breakdown?.nationwideCut ?? null,
         verificationNotes: dto.verificationNotes ?? null,
         verifiedAt: new Date(),
+        // A discount was approved against the old price; re-verifying re-prices, so it goes and
+        // has to be given (and approved) again.
+        doorDiscountAmount: null,
+        doorDiscountReason: null,
+        doorDiscountApprovedByAdminId: null,
+        doorDiscountAt: null,
         status: 'VERIFICATION_PENDING',
       },
     });
@@ -1394,11 +1438,32 @@ export class PickupRequestsService {
       return this.deferPayment(pickupRequest, dto, partnerId);
     }
     // Everything below is a real collection, so the amounts are present — the DTO makes them
-    // required whenever deferred is not set.
-    const collectedAmount = dto.collectedAmount as number;
-    const paymentMethod = dto.paymentMethod as NonNullable<
-      CollectPaymentDto['paymentMethod']
-    >;
+    // required whenever deferred is not set. An older app build sends one method and amount.
+    const splits: PaymentSplitDto[] = dto.payments ?? [
+      {
+        method: dto.paymentMethod as PaymentMethodCode,
+        amount: dto.collectedAmount as number,
+        reference: dto.paymentReference,
+      },
+    ];
+    if (new Set(splits.map((p) => p.method)).size !== splits.length) {
+      throw new BadRequestException(
+        'Each payment method can appear only once — add the amounts together',
+      );
+    }
+    const collectedAmount = round2(
+      splits.reduce((sum, p) => sum + p.amount, 0),
+    );
+    // The largest part names the payment wherever only one method fits (the order, analytics).
+    const paymentMethod = [...splits].sort((a, b) => b.amount - a.amount)[0]
+      .method;
+    const paymentReference =
+      splits
+        .map((p) => p.reference?.trim())
+        .filter(Boolean)
+        .join(' / ') ||
+      dto.paymentReference ||
+      null;
 
     // What is owed at the door, after any coupon the customer applied when booking — charging
     // the undiscounted figure would quietly ignore a discount they were promised.
@@ -1438,7 +1503,15 @@ export class PickupRequestsService {
       data: {
         paymentMethod,
         collectedAmount,
-        paymentReference: dto.paymentReference ?? null,
+        paymentSplits:
+          splits.length > 1
+            ? splits.map((p) => ({
+                method: p.method,
+                amount: round2(p.amount),
+                reference: p.reference?.trim() || null,
+              }))
+            : Prisma.DbNull,
+        paymentReference,
         paymentNotes: dto.paymentNotes ?? null,
         paymentCollectedAt: new Date(),
         // Set only on a part-payment: money WAS taken, so this is not paymentDeferredAt — the
@@ -1467,16 +1540,115 @@ export class PickupRequestsService {
         after: {
           paymentMethod,
           collectedAmount,
+          ...(splits.length > 1
+            ? {
+                splits: splits.map((p) => ({
+                  method: p.method,
+                  amount: p.amount,
+                })),
+              }
+            : {}),
         },
       },
     });
 
-    await this.notificationsService.enqueue(
-      pickupRequest.customerId,
-      'WHATSAPP',
-      NOTIFICATION_TEMPLATES.PAYMENT_COLLECTED,
-      { amount: String(collectedAmount) },
+    // The receipt PDF goes to the customer's WhatsApp now, at the door, not when the parcel is
+    // completed. A receipt that could not be issued (PDF or storage trouble) still leaves the
+    // customer a plain "payment received" message; staff can issue it later from the order.
+    const receiptSent = await this.receiptsService.issueForPickupAndSendQuietly(
+      id,
+      partnerId,
     );
+    if (!receiptSent) {
+      await this.notificationsService.enqueue(
+        pickupRequest.customerId,
+        'WHATSAPP',
+        NOTIFICATION_TEMPLATES.PAYMENT_COLLECTED,
+        { amount: String(collectedAmount) },
+      );
+    }
+
+    return this.findOne(id);
+  }
+
+  /**
+   * A discount the partner gives at the door, in rupees off, on top of any coupon. It needs an
+   * admin named as approving it and a reason: otherwise a partner could take the full price in
+   * cash, record a discount, and keep the difference. Amount 0 takes the discount back.
+   *
+   * Only between verification (when the price is final) and payment (after which it is too late
+   * to change what was charged).
+   */
+  async applyDoorDiscount(
+    id: string,
+    dto: DoorDiscountDto,
+    actorId: string,
+    asAdmin = false,
+  ): Promise<PickupRequestWithDetails> {
+    const pickupRequest = await this.findOneForPartner(id, actorId, asAdmin);
+    if (!pickupRequest.verifiedAt) {
+      throw new BadRequestException(
+        'Verify the parcel before giving a discount: the price is not final yet',
+      );
+    }
+    if (pickupRequest.paymentCollectedAt || pickupRequest.paymentDeferredAt) {
+      throw new BadRequestException(
+        'Payment has already been settled, so the price can no longer change',
+      );
+    }
+
+    const amount = round2(dto.amount);
+    const afterCoupon = this.payableFor({
+      ...pickupRequest,
+      doorDiscountAmount: 0,
+    });
+    if (amount >= afterCoupon) {
+      throw new BadRequestException(
+        `A discount must leave something to pay: at most ${round2(afterCoupon - 1)} here. ` +
+          'Use "Pay later" if the customer is not paying now.',
+      );
+    }
+
+    const approverId =
+      amount > 0
+        ? (await this.requireDueApprover(dto.approvedByAdminId)).id
+        : null;
+
+    await this.prisma.pickupRequest.update({
+      where: { id },
+      data:
+        amount > 0
+          ? {
+              doorDiscountAmount: amount,
+              doorDiscountReason: dto.reason?.trim() ?? null,
+              doorDiscountApprovedByAdminId: approverId,
+              doorDiscountAt: new Date(),
+            }
+          : {
+              doorDiscountAmount: null,
+              doorDiscountReason: null,
+              doorDiscountApprovedByAdminId: null,
+              doorDiscountAt: null,
+            },
+    });
+
+    await this.prisma.auditLog.create({
+      data: {
+        actorId,
+        action:
+          amount > 0
+            ? 'PICKUP_DOOR_DISCOUNT_GIVEN'
+            : 'PICKUP_DOOR_DISCOUNT_REMOVED',
+        entity: 'PickupRequest',
+        entityId: id,
+        before: { doorDiscountAmount: pickupRequest.doorDiscountAmount },
+        after: {
+          doorDiscountAmount: amount || null,
+          approvedByAdminId: approverId,
+          reason: dto.reason?.trim() ?? null,
+        },
+      },
+    });
 
     return this.findOne(id);
   }
@@ -1505,7 +1677,7 @@ export class PickupRequestsService {
     });
     if (!approver) {
       throw new BadRequestException(
-        'A due needs an active admin to approve it — pick one and try again',
+        'This needs an active admin to approve it — pick one and try again',
       );
     }
     return approver;
@@ -1639,7 +1811,12 @@ export class PickupRequestsService {
         // wait — the customer sees it in their portal, and marking it paid later clears it.
         data: {
           couponId: pickupRequest.couponId,
-          discountAmount: pickupRequest.discountAmount,
+          // The coupon and the door discount together: the invoice takes both off the total.
+          discountAmount:
+            round2(
+              (pickupRequest.discountAmount ?? 0) +
+                (pickupRequest.doorDiscountAmount ?? 0),
+            ) || null,
           ...(pickupRequest.paymentDeferredAt
             ? {
                 paymentStatus: 'PENDING' as const,
@@ -1722,7 +1899,15 @@ export class PickupRequestsService {
         }`,
       );
     }
-    await this.receiptsService.issueAndSendQuietly(order.id, partnerId);
+    // The receipt went out when the money was taken (collectPayment); it now belongs to the
+    // order too. A pickup paid before receipts were issued at the door gets one here instead.
+    const linked = await this.prisma.receipt.updateMany({
+      where: { pickupRequestId: id, orderId: null },
+      data: { orderId: order.id },
+    });
+    if (linked.count === 0) {
+      await this.receiptsService.issueAndSendQuietly(order.id, partnerId);
+    }
 
     // Enqueue after commit — BullMQ has no rollback semantics, matching PickupsService.
     // updateStatus's existing "write DB state, then enqueue" pattern.
@@ -1781,12 +1966,15 @@ export class PickupRequestsService {
   }
 
   /**
-   * The customer's Aadhaar card, photographed at the door. Stored on the customer, not the pickup,
-   * so their next pickup reuses it; uploading again replaces it (and deletes the old photo).
+   * Photos taken at the door (or attached by staff afterwards), compressed before they are
+   * stored. KYC photos are the customer's, so their next pickup shows them already on file;
+   * parcel photos belong to this pickup.
    */
-  async saveAadhaar(
+  async savePhotos(
     id: string,
-    file: Express.Multer.File,
+    kind: PickupPhotoKind,
+    files: Express.Multer.File[],
+    labels: string[] | undefined,
     actorId: string,
     asAdmin = false,
     backOffice = false,
@@ -1797,26 +1985,144 @@ export class PickupRequestsService {
       asAdmin,
       backOffice,
     );
-    const previousKey = pickupRequest.customer.aadhaarKey;
-    const key = `kyc/aadhaar/${pickupRequest.customerId}/${randomUUID()}.${IMAGE_EXTENSIONS[file.mimetype]}`;
-    await this.storage.put(key, file.buffer, file.mimetype);
+    const onFile =
+      kind === 'KYC'
+        ? pickupRequest.customer.photos.length
+        : pickupRequest.photos.filter((p) => p.kind === kind).length;
+    if (onFile + files.length > MAX_PHOTOS_PER_KIND) {
+      throw new BadRequestException(
+        `At most ${MAX_PHOTOS_PER_KIND} photos of each kind: remove some first`,
+      );
+    }
+
+    const fallback = { KYC: 'Document', PARCEL: 'Parcel', PAYMENT: 'Payment' }[
+      kind
+    ];
+    const given = (labels ?? []).map((l) => l.trim()).filter(Boolean);
+    const labelFor = (index: number) => {
+      // One label for several photos: "Box", "Box 2", "Box 3".
+      if (given.length <= 1) {
+        const base = given[0] ?? fallback;
+        return files.length > 1 && index > 0 ? `${base} ${index + 1}` : base;
+      }
+      return given[index] ?? `${fallback} ${index + 1}`;
+    };
+
+    const folder =
+      kind === 'KYC' ? `kyc/${pickupRequest.customerId}` : `pickups/${id}`;
+    const rows: Prisma.PickupPhotoCreateManyInput[] = [];
+    for (const [index, file] of files.entries()) {
+      const photo = await compressPhoto(file);
+      const key = `${folder}/${kind.toLowerCase()}-${randomUUID()}.${photo.extension}`;
+      await this.storage.put(key, photo.buffer, photo.mimetype);
+      rows.push({
+        kind,
+        customerId: pickupRequest.customerId,
+        pickupRequestId: id,
+        key,
+        label: labelFor(index),
+        sizeBytes: photo.buffer.length,
+        uploadedById: actorId,
+      });
+    }
+    await this.prisma.pickupPhoto.createMany({ data: rows });
+
+    if (kind === 'KYC') {
+      await this.prisma.auditLog.create({
+        data: {
+          actorId,
+          action: 'CUSTOMER_KYC_PHOTOS_ADDED',
+          entity: 'Customer',
+          entityId: pickupRequest.customerId,
+          // Which pickup they were taken on, never the document or its key. `source` separates a
+          // photo taken at the door from one an admin attached afterwards, which is exactly the
+          // question asked of a KYC record later.
+          after: {
+            pickupRequestId: id,
+            count: rows.length,
+            source: backOffice ? 'admin-back-office' : 'pickup',
+          },
+        },
+      });
+    }
+    return this.findOne(id);
+  }
+
+  /** Removes one photo: a blurred shot, or an old ID the customer has since replaced. */
+  async deletePhoto(
+    id: string,
+    photoId: string,
+    actorId: string,
+    asAdmin = false,
+    backOffice = false,
+  ): Promise<PickupRequestWithDetails> {
+    const pickupRequest = await this.resolveForUpload(
+      id,
+      actorId,
+      asAdmin,
+      backOffice,
+    );
+    const photo = await this.prisma.pickupPhoto.findUnique({
+      where: { id: photoId },
+    });
+    // A KYC photo is reachable from any of the customer's pickups; a parcel photo only from its own.
+    const belongs =
+      photo &&
+      (photo.kind === 'KYC'
+        ? photo.customerId === pickupRequest.customerId
+        : photo.pickupRequestId === id);
+    if (!photo || !belongs) {
+      throw new NotFoundException(`Photo ${photoId} not found`);
+    }
+    await this.prisma.pickupPhoto.delete({ where: { id: photoId } });
+    await this.storage.delete(photo.key);
+    if (photo.kind === 'KYC') {
+      await this.prisma.auditLog.create({
+        data: {
+          actorId,
+          action: 'CUSTOMER_KYC_PHOTO_REMOVED',
+          entity: 'Customer',
+          entityId: pickupRequest.customerId,
+          after: { pickupRequestId: id, label: photo.label },
+        },
+      });
+    }
+    return this.findOne(id);
+  }
+
+  /** Which identity document the customer showed, and its number. Kept for their next pickup. */
+  async setKycDocument(
+    id: string,
+    dto: KycDocumentDto,
+    actorId: string,
+    asAdmin = false,
+    backOffice = false,
+  ): Promise<PickupRequestWithDetails> {
+    const pickupRequest = await this.resolveForUpload(
+      id,
+      actorId,
+      asAdmin,
+      backOffice,
+    );
+    const problem = kycNumberProblem(dto.type, dto.number);
+    if (problem) throw new BadRequestException(problem);
     await this.prisma.customer.update({
       where: { id: pickupRequest.customerId },
-      data: { aadhaarKey: key, aadhaarUploadedAt: new Date() },
+      data: {
+        kycDocumentType: dto.type,
+        kycDocumentNumber: normalizeKycNumber(dto.number),
+      },
     });
-    if (previousKey) await this.storage.delete(previousKey);
     await this.prisma.auditLog.create({
       data: {
         actorId,
-        action: previousKey
-          ? 'CUSTOMER_AADHAAR_REPLACED'
-          : 'CUSTOMER_AADHAAR_ADDED',
+        action: 'CUSTOMER_KYC_DOCUMENT_SET',
         entity: 'Customer',
         entityId: pickupRequest.customerId,
-        // Which pickup it was taken on — never the document or its key. `source` separates a
-        // photo taken at the door from one an admin attached afterwards, which is exactly the
-        // question asked of a KYC record later.
+        // The type only: the number is personal data and the customer row already holds it.
+        before: { type: pickupRequest.customer.kycDocumentType },
         after: {
+          type: dto.type,
           pickupRequestId: id,
           source: backOffice ? 'admin-back-office' : 'pickup',
         },
@@ -1825,34 +2131,9 @@ export class PickupRequestsService {
     return this.findOne(id);
   }
 
-  async saveParcelPhoto(
-    id: string,
-    file: Express.Multer.File,
-    actorId: string,
-    asAdmin = false,
-    backOffice = false,
-  ): Promise<PickupRequestWithDetails> {
-    const pickupRequest = await this.resolveForUpload(
-      id,
-      actorId,
-      asAdmin,
-      backOffice,
-    );
-    const key = `pickups/${id}/parcel-${randomUUID()}.${IMAGE_EXTENSIONS[file.mimetype]}`;
-    await this.storage.put(key, file.buffer, file.mimetype);
-    await this.prisma.pickupRequest.update({
-      where: { id },
-      data: { parcelPhotoKey: key },
-    });
-    if (pickupRequest.parcelPhotoKey) {
-      await this.storage.delete(pickupRequest.parcelPhotoKey);
-    }
-    return this.findOne(id);
-  }
-
   /**
-   * Five-minute links to the photos. A partner gets them only on a pickup assigned to them (never
-   * on an open request they are just browsing); staff get them on any.
+   * Five-minute links to the photos. A partner gets them only on a pickup assigned to them;
+   * staff get them on any.
    */
   async documents(
     id: string,
@@ -1862,15 +2143,30 @@ export class PickupRequestsService {
     const pickupRequest = asAdmin
       ? await this.findOne(id)
       : await this.findOneForPartner(id, viewerId);
-    const sign = (key: string | null) =>
-      key && this.storage.isConfigured
+    const photos = await this.prisma.pickupPhoto.findMany({
+      where: {
+        OR: [
+          { kind: 'KYC', customerId: pickupRequest.customerId },
+          { kind: { in: ['PARCEL', 'PAYMENT'] }, pickupRequestId: id },
+        ],
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+    const sign = (key: string) =>
+      this.storage.isConfigured
         ? this.storage.presignGet(key, 300).catch(() => null)
         : Promise.resolve(null);
-    const [aadhaarUrl, parcelPhotoUrl] = await Promise.all([
-      sign(pickupRequest.customer.aadhaarKey),
-      sign(pickupRequest.parcelPhotoKey),
-    ]);
-    return { aadhaarUrl, parcelPhotoUrl };
+    return {
+      photos: await Promise.all(
+        photos.map(async (photo) => ({
+          id: photo.id,
+          kind: photo.kind,
+          label: photo.label,
+          createdAt: photo.createdAt.toISOString(),
+          url: await sign(photo.key),
+        })),
+      ),
+    };
   }
 
   /** One-shot position report from the partner app, shown to staff assigning a pickup by hand. */
@@ -1969,16 +2265,32 @@ export class PickupRequestsService {
           assignedPartnerId: partnerId,
           paymentCollectedAt: { gte: today, lt: tomorrow },
         },
-        select: { paymentMethod: true, collectedAmount: true },
+        select: {
+          paymentMethod: true,
+          collectedAmount: true,
+          paymentSplits: true,
+        },
       }),
     ]);
 
-    const cashCollectedToday = paymentsToday
-      .filter((p) => p.paymentMethod === 'CASH')
-      .reduce((sum, p) => sum + (p.collectedAmount ?? 0), 0);
-    const upiCollectedToday = paymentsToday
-      .filter((p) => p.paymentMethod === 'UPI')
-      .reduce((sum, p) => sum + (p.collectedAmount ?? 0), 0);
+    // A split payment counts each method's own share, not the whole amount under the largest.
+    const collectedBy = (method: PaymentMethodCode) =>
+      paymentsToday.reduce((sum, p) => {
+        const splits = p.paymentSplits as PaymentSplitDto[] | null;
+        if (splits?.length) {
+          return (
+            sum +
+            splits
+              .filter((split) => split.method === method)
+              .reduce((part, split) => part + split.amount, 0)
+          );
+        }
+        return p.paymentMethod === method
+          ? sum + (p.collectedAmount ?? 0)
+          : sum;
+      }, 0);
+    const cashCollectedToday = round2(collectedBy('CASH'));
+    const upiCollectedToday = round2(collectedBy('UPI'));
 
     return {
       todayPickups,

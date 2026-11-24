@@ -150,9 +150,18 @@ describe('Pickup Requests (e2e)', () => {
         phone: TEST_CUSTOMER_PHONE,
         consentSource: 'staff_entry',
         consentGivenAt: new Date(),
-        // Verification needs the customer's Aadhaar on file; the upload itself needs S3, which
-        // this suite does not have, so the key is seeded directly.
-        aadhaarKey: 'e2e/kyc/aadhaar.jpg',
+        // Verification needs the customer's ID on file; the photo upload itself needs S3, which
+        // this suite does not have, so the row is seeded directly.
+        kycDocumentType: 'AADHAAR',
+        kycDocumentNumber: '123412341234',
+        photos: {
+          create: {
+            kind: 'KYC',
+            key: 'e2e/kyc/aadhaar.jpg',
+            label: 'Front',
+            sizeBytes: 0,
+          },
+        },
       },
     });
     customerId = customer.id;
@@ -464,7 +473,17 @@ describe('Pickup Requests (e2e)', () => {
       // The parcel photo is an S3 upload in real use; seeded directly here, like the Aadhaar.
       await prisma.pickupRequest.update({
         where: { id: pickupRequest.id },
-        data: { parcelPhotoKey: 'e2e/parcel.jpg' },
+        data: {
+          photos: {
+            create: {
+              kind: 'PARCEL',
+              customerId: pickupRequest.customerId,
+              key: 'e2e/parcel.jpg',
+              label: 'Parcel',
+              sizeBytes: 0,
+            },
+          },
+        },
       });
 
       // Persist the verification — the server re-runs the pricing engine itself.
@@ -599,7 +618,17 @@ describe('Pickup Requests (e2e)', () => {
       .expect(200);
     await prisma.pickupRequest.update({
       where: { id: pickupRequest.id },
-      data: { parcelPhotoKey: 'e2e/parcel.jpg' },
+      data: {
+        photos: {
+          create: {
+            kind: 'PARCEL',
+            customerId: pickupRequest.customerId,
+            key: 'e2e/parcel.jpg',
+            label: 'Parcel',
+            sizeBytes: 0,
+          },
+        },
+      },
     });
 
     await request(app.getHttpServer())

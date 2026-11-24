@@ -173,7 +173,7 @@ export default function AdminPickupRequestDetailPage() {
           </>
         }
       >
-        <ParcelContentsCard pickup={pickup} onDocumentUploaded={load} />
+        <ParcelContentsCard pickup={pickup} onPickupChange={setPickup} />
 
         <Card>
           <CardHeader>
@@ -274,7 +274,13 @@ export default function AdminPickupRequestDetailPage() {
               <div>
                 <p className="text-muted-foreground">Method</p>
                 <p className="font-medium text-foreground">
-                  {pickup.paymentMethod ? PAYMENT_METHOD_LABEL[pickup.paymentMethod] : "—"}
+                  {pickup.paymentSplits?.length
+                    ? pickup.paymentSplits
+                        .map((p) => `${PAYMENT_METHOD_LABEL[p.method]} ${formatMoney(p.amount, pickup.currency)}`)
+                        .join(" + ")
+                    : pickup.paymentMethod
+                      ? PAYMENT_METHOD_LABEL[pickup.paymentMethod]
+                      : "—"}
                 </p>
               </div>
               <div>
@@ -285,6 +291,15 @@ export default function AdminPickupRequestDetailPage() {
                     : "—"}
                 </p>
               </div>
+              {pickup.doorDiscount && (
+                <div className="sm:col-span-2">
+                  <p className="text-muted-foreground">Discount at pickup</p>
+                  <p className="font-medium text-foreground">
+                    {formatMoney(pickup.doorDiscount.amount, pickup.currency)} off · approved by{" "}
+                    {pickup.doorDiscount.approvedByAdminName ?? "an admin"} · {pickup.doorDiscount.reason}
+                  </p>
+                </div>
+              )}
               {pickup.paymentReference && (
                 <div>
                   <p className="text-muted-foreground">Reference</p>

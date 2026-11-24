@@ -75,15 +75,21 @@ export function volumetricWeightKg(pkg: ParcelPackageDto): number {
   return (pkg.lengthCm * pkg.widthCm * pkg.heightCm) / VOLUMETRIC_DIVISOR;
 }
 
+/** One box's chargeable weight: the greater of what it weighs and what it measures. */
+export function boxChargeableWeightKg(pkg: ParcelPackageDto): number {
+  return Math.max(pkg.weightKg, volumetricWeightKg(pkg));
+}
+
 /**
  * What the shipment is priced on: each box charged at the greater of its actual and volumetric
- * weight, summed. Rounded UP to 2 decimals — never under-charge by a rounding hair, and the API
+ * weight, summed. A 25 kg box that measures 30 kg counts 30; a 30 kg box that measures 25 kg
+ * counts 30; the two together are charged 60 kg. Rounded UP to 2 decimals — never under-charge by a rounding hair, and the API
  * accepts at most 2 decimal places. Shared by the browser (to preview) and the server (to price),
  * so the two cannot disagree.
  */
 export function chargeableWeightKg(packages: ParcelPackageDto[]): number {
   const total = packages.reduce(
-    (sum, pkg) => sum + Math.max(pkg.weightKg, volumetricWeightKg(pkg)),
+    (sum, pkg) => sum + boxChargeableWeightKg(pkg),
     0,
   );
   // toFixed first strips float noise (0.1 + 0.2) that would otherwise ceil to an extra cent.

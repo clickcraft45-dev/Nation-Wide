@@ -2,6 +2,7 @@
 
 import { Plus, Trash2 } from "lucide-react";
 import {
+  boxChargeableWeightKg,
   chargeableWeightKg,
   volumetricWeightKg,
   VOLUMETRIC_DIVISOR,
@@ -63,18 +64,30 @@ export function validatePackages(forms: PackageForm[], requireDimensions: boolea
   return null;
 }
 
-/** Both chargeable and a breakdown for display; null while anything is unparseable. */
-function packagesSummary(forms: PackageForm[]) {
-  const payload = toPackagesPayload(forms);
-  if (payload.some((p) => !(p.weightKg > 0))) return null;
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/** One box's weights, or null while its weight is unparseable. */
+function boxSummary(form: PackageForm) {
+  const [pkg] = toPackagesPayload([form]);
+  if (!(pkg.weightKg > 0)) return null;
+  const volumetricKg = round2(volumetricWeightKg(pkg));
   return {
-    actualKg: payload.reduce((sum, p) => sum + p.weightKg, 0),
-    volumetricKg: payload.reduce((sum, p) => sum + volumetricWeightKg(p), 0),
-    chargeableKg: chargeableWeightKg(payload),
+    actualKg: pkg.weightKg,
+    volumetricKg,
+    chargeableKg: round2(boxChargeableWeightKg(pkg)),
+    byVolume: volumetricKg > pkg.weightKg,
   };
 }
 
-const round2 = (n: number) => Math.round(n * 100) / 100;
+/** The shipment's chargeable weight, each box's share of it; null while anything is unparseable. */
+function packagesSummary(forms: PackageForm[]) {
+  const boxes = forms.map(boxSummary);
+  if (boxes.some((b) => b === null)) return null;
+  return {
+    perBoxKg: boxes.map((b) => b!.chargeableKg),
+    chargeableKg: chargeableWeightKg(toPackagesPayload(forms)),
+  };
+}
 
 /**
  * The boxes in a shipment, with dimensions. One box is a normal order; several is a bulk order,
@@ -157,6 +170,7 @@ export function PackagesEditor({
               </div>
             ))}
           </div>
+          <BoxWeightLine form={box} />
         </div>
       ))}
 
@@ -171,14 +185,29 @@ export function PackagesEditor({
       {summary && (
         <div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
           <p>
-            Actual {round2(summary.actualKg)} kg · Volumetric {round2(summary.volumetricKg)} kg ·{" "}
             <span className="font-semibold text-foreground">Chargeable {summary.chargeableKg} kg</span>
+            {bulk && ` = ${summary.perBoxKg.join(" + ")} kg`}
           </p>
           <p className="mt-0.5">
-            Each box is charged at the higher of its actual weight and L × W × H ÷ {VOLUMETRIC_DIVISOR}.
+            Each box is charged at the higher of its actual weight and L × W × H ÷ {VOLUMETRIC_DIVISOR}
+            {bulk ? ", then the boxes are added." : "."}
           </p>
         </div>
       )}
     </div>
+  );
+}
+
+/** Under each box: what it weighs, what it measures, and which of the two it is charged at. */
+function BoxWeightLine({ form }: { form: PackageForm }) {
+  const box = boxSummary(form);
+  if (!box || box.volumetricKg === 0) return null;
+  return (
+    <p className="text-xs text-muted-foreground">
+      Actual {box.actualKg} kg · Volumetric {box.volumetricKg} kg ·{" "}
+      <span className="font-medium text-foreground">
+        charged {box.chargeableKg} kg ({box.byVolume ? "volumetric" : "actual"})
+      </span>
+    </p>
   );
 }

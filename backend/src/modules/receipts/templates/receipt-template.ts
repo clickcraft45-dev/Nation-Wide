@@ -2,6 +2,7 @@ import { createElement as h } from 'react';
 import type { Receipt } from '@prisma/client';
 import { brandAsset } from '../../rate-cards/brand-assets';
 import { dialablePhone } from '../../../common/utils/phone.util';
+import { ensureFontRegistered } from '../../invoices/templates/tax-invoice-template';
 
 // Plain React.createElement and a dynamic ESM import of @react-pdf/renderer at the service
 // layer — the same constraint tax-invoice-template.ts documents, followed here rather than
@@ -27,6 +28,25 @@ export interface ReceiptExtras {
   invoiceNumber: string | null;
   /** AWBs covered, when the payment was for shipments the customer knows by number. */
   trackingNumbers: string[];
+  /** What the payment was for when there is no invoice or AWB yet, e.g. "Pickup b5320696". */
+  reference?: string | null;
+}
+
+/** One method's share of a split payment, as stored on Receipt.paymentSplits. */
+export interface ReceiptSplit {
+  method: string;
+  amount: number;
+  reference?: string | null;
+}
+
+/**
+ * The receipt's pages: one per method when the payment was split (cash and UPI), so each can be
+ * filed with its own takings; otherwise the single page it always was.
+ */
+export function receiptParts(receipt: Receipt): ReceiptSplit[] {
+  const splits = receipt.paymentSplits as ReceiptSplit[] | null;
+  if (Array.isArray(splits) && splits.length > 1) return splits;
+  return [{ method: receipt.paymentMethod, amount: receipt.amount }];
 }
 
 const METHOD_LABELS: Record<string, string> = {
@@ -36,9 +56,10 @@ const METHOD_LABELS: Record<string, string> = {
   RAZORPAY: 'Online payment',
 };
 
+// en-IN grouping, as on the invoice: ₹2,400.00.
 function money(value: number, currency: string): string {
   const symbol = currency === 'INR' ? '₹' : `${currency} `;
-  return `${symbol}${value.toFixed(2)}`;
+  return `${symbol}${value.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function formatDate(date: Date): string {
@@ -138,8 +159,9 @@ export async function renderReceipt(
   logoBuffer: Buffer | undefined,
   branding: ReceiptBranding,
 ) {
-  const { Document, Page, Text, View, Image, StyleSheet } =
+  const { Document, Page, Text, View, Image, StyleSheet, Font } =
     await import('@react-pdf/renderer');
+  ensureFontRegistered(Font);
 
   const brand = branding.primaryColor?.trim() || '#0b0b0c';
   const displayName = branding.companyName?.trim() || receipt.supplierName;
@@ -153,7 +175,8 @@ export async function renderReceipt(
       paddingBottom: 46,
       fontSize: 9.5,
       color: '#18181b',
-      fontFamily: 'Helvetica',
+      // Noto Sans, as on the invoice: the PDF base fonts have no Rupee sign.
+      fontFamily: 'NotoSans',
     },
     topRule: { height: 3, backgroundColor: brand, marginBottom: 18 },
     masthead: {
@@ -176,12 +199,18 @@ export async function renderReceipt(
     logoFallback: {
       color: '#ffffff',
       fontSize: 15,
-      fontFamily: 'Helvetica-Bold',
+      fontFamily: 'NotoSans',
+      fontWeight: 'bold',
     },
-    companyName: { fontSize: 13, fontFamily: 'Helvetica-Bold' },
+    companyName: { fontSize: 13, fontFamily: 'NotoSans', fontWeight: 'bold' },
     tagline: { fontSize: 8, color: '#6b6b72', marginTop: 2 },
     website: { fontSize: 8, color: '#6b6b72' },
-    title: { fontSize: 17, fontFamily: 'Helvetica-Bold', textAlign: 'right' },
+    title: {
+      fontSize: 17,
+      fontFamily: 'NotoSans',
+      fontWeight: 'bold',
+      textAlign: 'right',
+    },
     titleNote: {
       fontSize: 8,
       color: '#6b6b72',
@@ -192,7 +221,7 @@ export async function renderReceipt(
     meta: { marginTop: 10, alignItems: 'flex-end' },
     metaRow: { flexDirection: 'row', marginBottom: 2 },
     label: { color: '#6b6b72', marginRight: 6 },
-    strong: { fontFamily: 'Helvetica-Bold' },
+    strong: { fontFamily: 'NotoSans', fontWeight: 'bold' },
 
     parties: {
       flexDirection: 'row',
@@ -218,7 +247,12 @@ export async function renderReceipt(
       padding: 16,
       marginBottom: 18,
     },
-    amount: { fontSize: 26, fontFamily: 'Helvetica-Bold', color: brand },
+    amount: {
+      fontSize: 26,
+      fontFamily: 'NotoSans',
+      fontWeight: 'bold',
+      color: brand,
+    },
     words: { fontSize: 9, color: '#3f3f46', marginTop: 6 },
 
     detailRow: {
@@ -239,7 +273,8 @@ export async function renderReceipt(
       paddingVertical: 5,
       paddingHorizontal: 12,
       fontSize: 12,
-      fontFamily: 'Helvetica-Bold',
+      fontFamily: 'NotoSans',
+      fontWeight: 'bold',
       letterSpacing: 1.5,
     },
 
@@ -268,10 +303,18 @@ export async function renderReceipt(
       h(Text, { key: 'v', style: s.detailValue }, value),
     ]);
 
-  return h(
-    Document,
-    { title: receipt.receiptNumber },
-    h(Page, { size: 'A4', style: s.page }, [
+  const parts = receiptParts(receipt);
+  const split = parts.length > 1;
+  const methodLabel = (method: string) => METHOD_LABELS[method] ?? method;
+  const splitSummary = parts
+    .map(
+      (part) =>
+        `${methodLabel(part.method)} ${money(part.amount, receipt.currency)}`,
+    )
+    .join(' + ');
+
+  const page = (part: ReceiptSplit, index: number) =>
+    h(Page, { key: `page-${index}`, size: 'A4', style: s.page }, [
       h(View, { key: 'rule', style: s.topRule }),
 
       h(View, { key: 'masthead', style: s.masthead }, [
@@ -339,21 +382,32 @@ export async function renderReceipt(
       ]),
 
       h(View, { key: 'amount', style: s.amountPanel }, [
-        h(Text, { key: 'h', style: s.h }, 'Amount received'),
+        h(
+          Text,
+          { key: 'h', style: s.h },
+          split
+            ? `Amount received by ${methodLabel(part.method)} (part ${index + 1} of ${parts.length})`
+            : 'Amount received',
+        ),
         h(
           Text,
           { key: 'a', style: s.amount },
-          money(receipt.amount, receipt.currency),
+          money(part.amount, receipt.currency),
         ),
-        h(Text, { key: 'w', style: s.words }, amountInWords(receipt.amount)),
+        h(Text, { key: 'w', style: s.words }, amountInWords(part.amount)),
       ]),
 
       h(View, { key: 'details' }, [
-        detail(
-          'Payment method',
-          METHOD_LABELS[receipt.paymentMethod] ?? receipt.paymentMethod,
-        ),
+        detail('Payment method', methodLabel(part.method)),
+        part.reference ? detail('Reference', part.reference) : null,
+        split
+          ? detail(
+              'Receipt total',
+              `${money(receipt.amount, receipt.currency)} (${splitSummary})`,
+            )
+          : null,
         detail('Received on', formatDate(receipt.receivedAt)),
+        extras.reference ? detail('For', extras.reference) : null,
         extras.invoiceNumber
           ? detail('Settles invoice', extras.invoiceNumber)
           : null,
@@ -385,7 +439,15 @@ export async function renderReceipt(
             .filter(Boolean)
             .join('  ·  '),
         ),
+        split
+          ? h(
+              Text,
+              { key: 'p' },
+              `Page ${index + 1} of ${parts.length} · Receipt ${receipt.receiptNumber}`,
+            )
+          : null,
       ]),
-    ]),
-  );
+    ]);
+
+  return h(Document, { title: receipt.receiptNumber }, parts.map(page));
 }

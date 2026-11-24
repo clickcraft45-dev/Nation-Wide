@@ -11,6 +11,7 @@ import type {
 import { apiClient, ApiError } from "@/lib/api-client";
 import { useToast } from "@/components/ui/toast";
 import { InvoiceReviewDialog } from "@/components/invoices/invoice-review-dialog";
+import { awbInvoiceNotice } from "@/components/invoices/awb-invoice-notice";
 import { Button } from "@/components/ui/button";
 import { ErrorState } from "@/components/ui/page-state";
 import { ShipmentLookupForm } from "@/features/admin/ShipmentLookupForm";
@@ -105,8 +106,9 @@ function AdminShipmentsPageInner() {
         { providerId, externalTrackingNumber },
       );
       setShipment(data);
-      showToast({ variant: "success", title: "Carrier tracking number mapped" });
-      setReviewFor(trackingNumber);
+      const notice = awbInvoiceNotice(externalTrackingNumber, data.invoiceDelivery);
+      showToast(notice.toast);
+      if (notice.openReview) setReviewFor(trackingNumber);
     } catch (e) {
       showToast({
         variant: "error",

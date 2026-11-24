@@ -9,6 +9,7 @@ import {
   IsString,
   IsUUID,
   Max,
+  MaxLength,
   MinLength,
   ValidateNested,
 } from 'class-validator';
@@ -67,4 +68,22 @@ export class AdminCreatePickupOrderDto {
 
   @IsUUID()
   partnerId!: string;
+
+  /**
+   * Where it is going, when staff already know. Saves the partner asking at the door; left out,
+   * they take it down there as before.
+   */
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(100)
+  destinationCountry?: string;
+
+  /**
+   * The carrier it goes by: one with a rate card for destinationCountry. The partner's price at
+   * the door is then worked out from this carrier's rates for the weight they measure.
+   */
+  @IsOptional()
+  @IsUUID()
+  rateProviderId?: string;
 }

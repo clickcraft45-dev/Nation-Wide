@@ -6,6 +6,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/types/jwt-payload.type';
 import { ShipmentsService } from '../shipments/shipments.service';
+import { InvoicesService } from '../invoices/invoices.service';
 import { toShipmentAdminDetailDto } from '../shipments/shipment-admin-detail.mapper';
 import { MapExternalTrackingNumberDto } from './dto/map-external-tracking-number.dto';
 import { OverrideTrackingStatusDto } from './dto/override-tracking-status.dto';
@@ -14,7 +15,11 @@ import { OverrideTrackingStatusDto } from './dto/override-tracking-status.dto';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('ADMIN')
 export class AdminShipmentsController {
-  constructor(private readonly shipmentsService: ShipmentsService) {}
+  constructor(
+    private readonly shipmentsService: ShipmentsService,
+    // Mapping an AWB sends the customer their GST invoice with it.
+    private readonly invoicesService: InvoicesService,
+  ) {}
 
   @Get(':internalTrackingNumber')
   async findOne(
@@ -38,7 +43,11 @@ export class AdminShipmentsController {
       dto.externalTrackingNumber,
       user.sub,
     );
-    return toShipmentAdminDetailDto(shipment);
+    const invoiceDelivery = await this.invoicesService.sendAfterAwbMapped(
+      internalTrackingNumber,
+      user.sub,
+    );
+    return { ...toShipmentAdminDetailDto(shipment), invoiceDelivery };
   }
 
   @Post(':internalTrackingNumber/override')

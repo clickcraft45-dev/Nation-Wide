@@ -11,6 +11,7 @@ import type { Invoice } from '@prisma/client';
 import { Prisma } from '@prisma/client';
 import {
   customInvoiceTotal,
+  type AwbInvoiceDeliveryDto,
   type ConsolidatedOrderCandidateDto,
   type CustomInvoiceLineDto,
 } from '@nationwide/shared-types';
@@ -783,7 +784,15 @@ export class InvoicesService {
         // worth, and the coupon comes off the payable total underneath. Capped at the total so
         // a coupon worth more than the shipment cannot produce a negative invoice.
         discountAmount: discount,
-        discountCode: order.coupon?.code ?? null,
+        // Says where the deduction came from: the customer's coupon, a discount the partner gave
+        // at pickup, or both (order.discountAmount is their sum).
+        discountCode:
+          [
+            order.coupon?.code,
+            order.pickupRequest?.doorDiscountAmount ? 'pickup discount' : null,
+          ]
+            .filter(Boolean)
+            .join(' + ') || null,
         totalAmount: round2(breakdown.totalAmount - discount),
         breakdownSource: breakdown.source,
         issuedByAdminId: actorId,
@@ -1115,6 +1124,41 @@ export class InvoicesService {
     }
     if (existing.status === 'CANCELLED') return existing;
     return this.redraw(existing);
+  }
+
+  /**
+   * The moment an AWB is mapped, the customer gets their GST invoice on WhatsApp with that AWB
+   * printed on it: issued now if the order is paid and has none, otherwise redrawn. Mapping a
+   * corrected AWB sends the corrected copy.
+   *
+   * Never throws: the AWB is already saved, and a missing GSTIN in Settings or a WhatsApp outage
+   * must not undo that. The result says what happened so staff can act on a failure.
+   */
+  async sendAfterAwbMapped(
+    internalTrackingNumber: string,
+    actorId: string,
+  ): Promise<AwbInvoiceDeliveryDto> {
+    try {
+      const invoice = await this.prepareForReview(
+        internalTrackingNumber,
+        actorId,
+      );
+      if (!invoice || invoice.status === 'CANCELLED') {
+        return { status: 'NOT_BILLABLE', invoiceNumber: null, reason: null };
+      }
+      const sent = await this.sendToWhatsApp(invoice.id);
+      return {
+        status: 'SENT',
+        invoiceNumber: sent.invoiceNumber,
+        reason: null,
+      };
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `AWB mapped on ${internalTrackingNumber} but the invoice was not sent: ${reason}`,
+      );
+      return { status: 'FAILED', invoiceNumber: null, reason };
+    }
   }
 
   /**

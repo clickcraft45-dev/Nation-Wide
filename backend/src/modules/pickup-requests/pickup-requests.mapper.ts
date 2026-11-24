@@ -1,9 +1,26 @@
 import type {
+  KycDocumentType,
   ParcelPackageDto,
+  PaymentSplitDto,
+  PickupPhotoDto,
   PickupRequestDto,
   ShipmentItemDto,
 } from '@nationwide/shared-types';
 import type { PickupRequestWithDetails } from './pickup-requests.service';
+
+function toPhotoDto(photo: {
+  id: string;
+  kind: PickupPhotoDto['kind'];
+  label: string;
+  createdAt: Date;
+}): PickupPhotoDto {
+  return {
+    id: photo.id,
+    kind: photo.kind,
+    label: photo.label,
+    createdAt: photo.createdAt.toISOString(),
+  };
+}
 
 export function toPickupRequestDto(
   pickupRequest: PickupRequestWithDetails,
@@ -23,12 +40,26 @@ export function toPickupRequestDto(
     currency: pickupRequest.currency,
     couponCode: pickupRequest.coupon?.code ?? null,
     discountAmount: pickupRequest.discountAmount,
+    doorDiscount: pickupRequest.doorDiscountAmount
+      ? {
+          amount: pickupRequest.doorDiscountAmount,
+          reason: pickupRequest.doorDiscountReason ?? '',
+          approvedByAdminName:
+            pickupRequest.doorDiscountApprovedBy?.name ??
+            pickupRequest.doorDiscountApprovedBy?.email ??
+            null,
+        }
+      : null,
     // Computed here so the customer app, the partner app and the door all quote one figure.
-    payableAmount: Math.max(
-      0,
-      (pickupRequest.verifiedPrice ?? pickupRequest.estimatedPrice) -
-        (pickupRequest.discountAmount ?? 0),
-    ),
+    payableAmount:
+      Math.round(
+        Math.max(
+          0,
+          (pickupRequest.verifiedPrice ?? pickupRequest.estimatedPrice) -
+            (pickupRequest.discountAmount ?? 0) -
+            (pickupRequest.doorDiscountAmount ?? 0),
+        ) * 100,
+      ) / 100,
 
     dropAtWarehouse: pickupRequest.dropAtWarehouse,
     pickupContactName: pickupRequest.pickupContactName,
@@ -72,9 +103,22 @@ export function toPickupRequestDto(
     verifiedPackages: pickupRequest.verifiedPackages as
       ParcelPackageDto[] | null,
     items: pickupRequest.quote.items as ShipmentItemDto[] | null,
-    // Presence only. The photos themselves go out solely as short-lived links, on request.
-    aadhaarOnFile: pickupRequest.customer.aadhaarKey !== null,
-    parcelPhotoOnFile: pickupRequest.parcelPhotoKey !== null,
+    kycDocument:
+      pickupRequest.customer.kycDocumentType &&
+      pickupRequest.customer.kycDocumentNumber
+        ? {
+            type: pickupRequest.customer.kycDocumentType as KycDocumentType,
+            number: pickupRequest.customer.kycDocumentNumber,
+          }
+        : null,
+    // Labels only. The photos themselves go out solely as short-lived links, on request.
+    kycPhotos: pickupRequest.customer.photos.map(toPhotoDto),
+    parcelPhotos: pickupRequest.photos
+      .filter((p) => p.kind === 'PARCEL')
+      .map(toPhotoDto),
+    paymentPhotos: pickupRequest.photos
+      .filter((p) => p.kind === 'PAYMENT')
+      .map(toPhotoDto),
 
     status: pickupRequest.status,
 
@@ -120,6 +164,7 @@ export function toPickupRequestDto(
     paymentDueApprovedByAdminName:
       pickupRequest.paymentDueApprovedBy?.name ?? null,
     paymentDueNote: pickupRequest.paymentDueNote,
+    paymentSplits: pickupRequest.paymentSplits as PaymentSplitDto[] | null,
 
     parcelPackedProperly: pickupRequest.parcelPackedProperly,
     weightVerifiedFlag: pickupRequest.weightVerifiedFlag,

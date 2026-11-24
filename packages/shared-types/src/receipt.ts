@@ -1,4 +1,5 @@
 import type { PaymentMethodCode } from "./order";
+import type { PaymentSplitDto } from "./pickup-request";
 
 /**
  * A payment receipt — the acknowledgement that money arrived.
@@ -27,7 +28,10 @@ export interface ReceiptDto {
   recipientName: string;
   currency: string;
   amount: number;
+  /** The method, or the largest part of a split payment. */
   paymentMethod: PaymentMethodCode;
+  /** Each method's share when the payment was split; the PDF gives each its own page. */
+  paymentSplits: PaymentSplitDto[] | null;
   receivedAt: string; // ISO 8601
 
   sentAt: string | null; // when the WhatsApp send was ACCEPTED, not when delivered

@@ -1,69 +1,40 @@
 "use client";
 
-import { useRef, useState } from "react";
 import Link from "next/link";
-import { Upload } from "lucide-react";
-import { chargeableWeightKg, type PickupDocumentsDto, type PickupRequestDto } from "@nationwide/shared-types";
-import { apiClient, errorMessage } from "@/lib/api-client";
+import {
+  boxChargeableWeightKg,
+  chargeableWeightKg,
+  volumetricWeightKg,
+  type PickupRequestDto,
+} from "@nationwide/shared-types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { useToast } from "@/components/ui/toast";
+import { PickupPhotos } from "@/components/shipment/photo-capture";
+import { KycDocumentFields } from "@/components/shipment/kyc-document-fields";
+
+const API = "/admin/pickup-requests";
+const round2 = (n: number) => Math.round(n * 100) / 100;
 
 /**
- * The boxes, declared contents and pickup photos — what staff need in front of them when booking
- * the shipment with DHL/FedEx/UPS/DPD. Shown on both the pickup request and the order it became.
+ * The boxes, declared contents, the shipper's ID and the pickup photos: what staff need in front
+ * of them when booking the shipment with DHL/FedEx/UPS/DPD. Shown on both the pickup request and
+ * the order it became.
+ *
+ * Staff can attach what a partner never captured. By the time an order exists the pickup is
+ * closed to its partner, which is exactly when the gap is noticed.
  */
 export function ParcelContentsCard({
   pickup,
   showPickupLink = false,
-  onDocumentUploaded,
+  onPickupChange,
 }: {
   pickup: PickupRequestDto;
   showPickupLink?: boolean;
-  /** Called after a document is attached, so the page can refetch and flip the chip. */
-  onDocumentUploaded?: () => void;
+  /** Called with the updated pickup after the ID or a photo changes. */
+  onPickupChange?: (updated: PickupRequestDto) => void;
 }) {
-  const { showToast } = useToast();
   const boxes = pickup.verifiedPackages ?? pickup.packages;
-  const aadhaarInput = useRef<HTMLInputElement>(null);
-  const parcelInput = useRef<HTMLInputElement>(null);
-  const [uploading, setUploading] = useState<"aadhaar" | "parcel-photo" | null>(null);
-
-  /**
-   * Attach a document a partner never captured. Staff can do this after the fact — by the time
-   * an order exists the pickup is closed to its partner, which is exactly when the gap is noticed.
-   */
-  async function upload(kind: "aadhaar" | "parcel-photo", file: File) {
-    setUploading(kind);
-    try {
-      const form = new FormData();
-      form.append("file", file);
-      await apiClient.postForm(`/admin/pickup-requests/${pickup.id}/${kind}`, form);
-      showToast({
-        variant: "success",
-        title: kind === "aadhaar" ? "Aadhaar attached" : "Parcel photo attached",
-      });
-      onDocumentUploaded?.();
-    } catch (err) {
-      showToast({ variant: "error", title: errorMessage(err, "That upload didn't go through.") });
-    } finally {
-      setUploading(null);
-    }
-  }
-
-  // Opened synchronously so the popup blocker treats it as the click; the link lives 5 minutes.
-  async function openDocument(kind: keyof PickupDocumentsDto) {
-    const tab = window.open("", "_blank");
-    try {
-      const docs = await apiClient.get<PickupDocumentsDto>(`/admin/pickup-requests/${pickup.id}/documents`);
-      const url = docs[kind];
-      if (tab && url) tab.location.href = url;
-      else tab?.close();
-    } catch {
-      tab?.close();
-      showToast({ variant: "error", title: "Couldn't open the photo." });
-    }
-  }
+  const changed = (updated: PickupRequestDto) => onPickupChange?.(updated);
 
   return (
     <Card>
@@ -78,13 +49,22 @@ export function ParcelContentsCard({
               {boxes.length > 1 ? `bulk, ${boxes.length} boxes` : "1 box"} · chargeable {chargeableWeightKg(boxes)} kg
             </p>
             <ul className="mt-1 space-y-0.5 font-medium text-foreground">
-              {boxes.map((b, i) => (
-                <li key={i}>
-                  {boxes.length > 1 ? `Box ${i + 1}: ` : ""}
-                  {b.weightKg} kg
-                  {b.lengthCm && b.widthCm && b.heightCm ? ` · ${b.lengthCm} × ${b.widthCm} × ${b.heightCm} cm` : ""}
-                </li>
-              ))}
+              {boxes.map((b, i) => {
+                const volumetric = round2(volumetricWeightKg(b));
+                return (
+                  <li key={i}>
+                    {boxes.length > 1 ? `Box ${i + 1}: ` : ""}
+                    {b.weightKg} kg
+                    {b.lengthCm && b.widthCm && b.heightCm ? ` · ${b.lengthCm} × ${b.widthCm} × ${b.heightCm} cm` : ""}
+                    {volumetric > 0 && (
+                      <span className="font-normal text-muted-foreground">
+                        {" "}
+                        · volumetric {volumetric} kg · charged {round2(boxChargeableWeightKg(b))} kg
+                      </span>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           </div>
         ) : (
@@ -121,73 +101,56 @@ export function ParcelContentsCard({
           )}
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          {/* One hidden input per document: a shared one would need its handler swapped on every
-              click, and a mis-timed swap files the photo under the wrong document. */}
-          <input
-            ref={aadhaarInput}
-            type="file"
-            accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              e.target.value = "";
-              if (file) void upload("aadhaar", file);
-            }}
+        <div className="space-y-2 border-t border-border pt-4">
+          <p className="text-muted-foreground">Shipper&apos;s ID document</p>
+          <KycDocumentFields
+            pickupId={pickup.id}
+            apiBase={API}
+            value={pickup.kycDocument}
+            onChange={changed}
+            compact
           />
-          <input
-            ref={parcelInput}
-            type="file"
-            accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              e.target.value = "";
-              if (file) void upload("parcel-photo", file);
-            }}
+        </div>
+
+        <div className="grid gap-3 lg:grid-cols-2">
+          <PickupPhotos
+            pickupId={pickup.id}
+            apiBase={API}
+            kind="KYC"
+            title="ID document photos"
+            photos={pickup.kycPhotos}
+            onChange={changed}
+            compact
           />
-
-          {pickup.aadhaarOnFile ? (
-            <Button variant="secondary" size="sm" onClick={() => openDocument("aadhaarUrl")}>
-              View Aadhaar
-            </Button>
-          ) : (
-            // A missing document used to be a dead, disabled button. It is the one place staff
-            // notice the gap, so it is also where they can close it.
-            <Button
-              variant="secondary"
-              size="sm"
-              isLoading={uploading === "aadhaar"}
-              onClick={() => aadhaarInput.current?.click()}
-            >
-              <Upload className="mr-1.5 h-3.5 w-3.5" aria-hidden />
-              Add Aadhaar
-            </Button>
-          )}
-
-          {pickup.parcelPhotoOnFile ? (
-            <Button variant="secondary" size="sm" onClick={() => openDocument("parcelPhotoUrl")}>
-              View parcel photo
-            </Button>
-          ) : (
-            <Button
-              variant="secondary"
-              size="sm"
-              isLoading={uploading === "parcel-photo"}
-              onClick={() => parcelInput.current?.click()}
-            >
-              <Upload className="mr-1.5 h-3.5 w-3.5" aria-hidden />
-              Add parcel photo
-            </Button>
-          )}
-          {showPickupLink && (
-            <Link href={`/admin/pickup-requests/${pickup.id}`}>
-              <Button variant="ghost" size="sm">
-                Pickup details
-              </Button>
-            </Link>
+          <PickupPhotos
+            pickupId={pickup.id}
+            apiBase={API}
+            kind="PARCEL"
+            title="Parcel photos"
+            photos={pickup.parcelPhotos}
+            onChange={changed}
+            compact
+          />
+          {pickup.paymentPhotos.length > 0 && (
+            <PickupPhotos
+              pickupId={pickup.id}
+              apiBase={API}
+              kind="PAYMENT"
+              title="Payment proof"
+              photos={pickup.paymentPhotos}
+              onChange={changed}
+              compact
+            />
           )}
         </div>
+
+        {showPickupLink && (
+          <Link href={`/admin/pickup-requests/${pickup.id}`}>
+            <Button variant="ghost" size="sm">
+              Pickup details
+            </Button>
+          </Link>
+        )}
       </CardContent>
     </Card>
   );

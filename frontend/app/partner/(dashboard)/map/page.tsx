@@ -7,12 +7,11 @@ import type { PickupRequestDto } from "@nationwide/shared-types";
 import { apiClient, errorMessage } from "@/lib/api-client";
 import { distanceKm } from "@/lib/google-maps";
 import { PickupsMap, type LatLng, type MapPoint } from "@/components/ui/pickups-map";
-import { PickupCard, isOpenRequest } from "@/components/partner/pickup-card";
+import { PickupCard } from "@/components/partner/pickup-card";
 import { EmptyState, ErrorState } from "@/components/ui/page-state";
 import { Skeleton } from "@/components/ui/skeleton";
 
 const ACTIVE = new Set(["PENDING_ASSIGNMENT", "ASSIGNED", "SCHEDULED", "OUT_FOR_PICKUP", "VERIFICATION_PENDING"]);
-const OPEN_COLOR = "#ea580c";
 const MINE_COLOR = "#16a34a";
 // ponytail: polling. New requests show up within this long; a WebSocket push is the upgrade if
 // partners need them instantly.
@@ -59,10 +58,10 @@ export default function PartnerMapPage() {
         id: p.id,
         lat: p.pickupLatitude!,
         lng: p.pickupLongitude!,
-        title: `${isOpenRequest(p) ? "New request" : "Your pickup"} · ${p.pickupContactName}`,
+        title: `Your pickup · ${p.pickupContactName}`,
         subtitle: [p.pickupAddressLine1, km != null ? `${km.toFixed(1)} km away` : null].filter(Boolean).join(" · "),
         href: `/partner/pickups/${p.id}`,
-        color: isOpenRequest(p) ? OPEN_COLOR : MINE_COLOR,
+        color: MINE_COLOR,
       })),
     [located],
   );
@@ -82,7 +81,6 @@ export default function PartnerMapPage() {
 
       <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
         <Legend color="#2563eb" label="You" />
-        <Legend color={OPEN_COLOR} label="New request" />
         <Legend color={MINE_COLOR} label="Your pickup" />
       </div>
 
@@ -92,7 +90,7 @@ export default function PartnerMapPage() {
         <EmptyState
           icon={<MapPinOff className="h-8 w-8" aria-hidden />}
           title="No pickups on the map"
-          description="New requests with a pinned location will appear here."
+          description="Pickups assigned to you with a pinned location will appear here."
         />
       )}
 
@@ -105,7 +103,7 @@ export default function PartnerMapPage() {
           {located.map(({ pickup, km }) => (
             <div key={pickup.id} className="space-y-1">
               {km != null && <p className="px-1 text-xs font-medium text-muted-foreground">{km.toFixed(1)} km away</p>}
-              <PickupCard pickup={pickup} onClaimFailed={load} />
+              <PickupCard pickup={pickup} />
             </div>
           ))}
         </div>
@@ -115,10 +113,6 @@ export default function PartnerMapPage() {
         <p className="text-xs text-muted-foreground">
           {unlocated} active pickup(s) have no map pin, so they can&apos;t show here. Find them
           under{" "}
-          <Link href="/partner/requests" className="font-medium text-primary hover:underline">
-            Requests
-          </Link>{" "}
-          or{" "}
           <Link href="/partner/pickups" className="font-medium text-primary hover:underline">
             Pickups
           </Link>

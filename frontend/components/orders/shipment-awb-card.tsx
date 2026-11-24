@@ -1,7 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import type { ShipmentSummaryDto, ShippingProviderDto } from "@nationwide/shared-types";
+import type {
+  ShipmentAdminDetailDto,
+  ShipmentSummaryDto,
+  ShippingProviderDto,
+} from "@nationwide/shared-types";
 import { apiClient, errorMessage } from "@/lib/api-client";
 import { cn } from "@/lib/utils/cn";
 import { AURORA_THEMES, AuroraCard, type AuroraTheme } from "@/components/ui/aurora-card";
@@ -11,6 +15,7 @@ import { NativeSelect } from "@/components/ui/select";
 import { TrackingStatusBadge } from "@/components/ui/status-badge";
 import { useToast } from "@/components/ui/toast";
 import { InvoiceReviewDialog } from "@/components/invoices/invoice-review-dialog";
+import { awbInvoiceNotice } from "@/components/invoices/awb-invoice-notice";
 
 /**
  * A shipment rendered as a payment card.
@@ -66,13 +71,14 @@ export function ShipmentAwbCard({
     setIsSaving(true);
     setError(null);
     try {
-      await apiClient.post(
+      const mapped = await apiClient.post<ShipmentAdminDetailDto>(
         `/admin/shipments/${shipment.internalTrackingNumber}/external-tracking-number`,
         { providerId, externalTrackingNumber: awb },
       );
-      showToast({ variant: "success", title: `AWB ${awb} mapped` });
+      const notice = awbInvoiceNotice(awb, mapped.invoiceDelivery);
+      showToast(notice.toast);
       onMapped();
-      setReviewing(true);
+      if (notice.openReview) setReviewing(true);
     } catch (err) {
       // The server rejects a duplicate AWB with a 409 naming the other shipment — that reason is
       // the whole value of the failure, so it is shown rather than a generic message.

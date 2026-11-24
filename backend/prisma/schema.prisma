@@ -179,29 +179,30 @@ enum PaymentMethod {
 // ---------------------------------------------------------------------------
 
 model Customer {
-  id                 String    @id @default(uuid())
+  id                 String   @id @default(uuid())
   name               String
-  phone              String    @unique // E.164 normalized
-  email              String?   @unique // required + unique only for self-registered (login-capable) customers
+  phone              String   @unique // E.164 normalized
+  email              String?  @unique // required + unique only for self-registered (login-capable) customers
   address            String?
   // Set only for GST-registered (B2B) customers. Null means unregistered/B2C, which changes the
   // place-of-supply rule and whether the recipient GSTIN line prints on the invoice.
   gstin              String?
-  passwordHash       String?   @map("password_hash") // null until the customer registers/sets a password
-  hashedRefreshToken String?   @map("hashed_refresh_token")
-  isActive           Boolean   @default(true) @map("is_active")
-  consentGivenAt     DateTime  @map("consent_given_at") // DPDP Act: when the customer consented to data collection
-  consentSource      String    @map("consent_source") // e.g. 'signup_form', 'staff_entry'
-  /// S3 key of the customer's Aadhaar card photo, taken by the pickup partner at the door (customs
-  /// asks for it on every export). Collected once and reused on later pickups unless replaced.
+  passwordHash       String?  @map("password_hash") // null until the customer registers/sets a password
+  hashedRefreshToken String?  @map("hashed_refresh_token")
+  isActive           Boolean  @default(true) @map("is_active")
+  consentGivenAt     DateTime @map("consent_given_at") // DPDP Act: when the customer consented to data collection
+  consentSource      String   @map("consent_source") // e.g. 'signup_form', 'staff_entry'
   /// A business account: they sign in and book from the B2B portal instead of the consumer
   /// screens, and staff can issue them a standing ordering link. Set by an admin invite only —
   /// never self-served.
-  isB2b              Boolean   @default(false) @map("is_b2b")
-  aadhaarKey         String?   @map("aadhaar_key")
-  aadhaarUploadedAt  DateTime? @map("aadhaar_uploaded_at")
-  createdAt          DateTime  @default(now()) @map("created_at")
-  updatedAt          DateTime  @updatedAt @map("updated_at")
+  isB2b              Boolean  @default(false) @map("is_b2b")
+  /// The shipper's identity document (customs asks for it on every export), taken down by the
+  /// pickup partner at the door and reused on later pickups. One of KYC_DOCUMENT_TYPES; its
+  /// photos are the customer's KYC rows in pickup_photos.
+  kycDocumentType    String?  @map("kyc_document_type")
+  kycDocumentNumber  String?  @map("kyc_document_number")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
 
   orders            Order[]
   quotes            Quote[]
@@ -213,6 +214,7 @@ model Customer {
   reviews           Review[]
   savedItems        SavedItem[]
   b2bLinks          B2bLink[]
+  photos            PickupPhoto[]
   onlinePayments    OnlinePayment[]
 
   @@map("customers")
@@ -272,9 +274,9 @@ model Order {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  customer        Customer       @relation(fields: [customerId], references: [id])
-  coupon          Coupon?        @relation(fields: [couponId], references: [id])
-  dueApprovedBy   AdminUser?     @relation("OrderDueApprovedBy", fields: [dueApprovedByAdminId], references: [id])
+  customer        Customer        @relation(fields: [customerId], references: [id])
+  coupon          Coupon?         @relation(fields: [couponId], references: [id])
+  dueApprovedBy   AdminUser?      @relation("OrderDueApprovedBy", fields: [dueApprovedByAdminId], references: [id])
   shipments       Shipment[] // 1:many — a single order can produce split shipments
   quote           Quote? // inverse of Quote.orderId, which owns the FK
   pickup          Pickup?
@@ -286,7 +288,7 @@ model Order {
   invoiceLine     InvoiceLine?
   receipts        Receipt[]
   onlinePayments  OnlinePayment[]
-  paymentMarkedBy AdminUser?     @relation("OrderPaymentMarkedBy", fields: [paymentMarkedByAdminId], references: [id])
+  paymentMarkedBy AdminUser?      @relation("OrderPaymentMarkedBy", fields: [paymentMarkedByAdminId], references: [id])
 
   @@index([customerId])
   // Every admin list (paginated or not) sorts by createdAt desc by default — without this,
@@ -547,8 +549,6 @@ model PickupRequest {
   verifiedPrice           Float?            @map("verified_price")
   /// The boxes as measured at the door; verifiedWeightKg is their chargeable weight.
   verifiedPackages        Json?             @map("verified_packages")
-  /// S3 key of the photo the partner took of the parcel at pickup.
-  parcelPhotoKey          String?           @map("parcel_photo_key")
   // The pricing engine computes the whole 7-step breakdown to arrive at verifiedPrice, and until
   // invoicing existed only the total was kept. A tax invoice has to state the taxable value and
   // the tax actually charged, and re-deriving those at invoice time would re-price against
@@ -571,6 +571,18 @@ model PickupRequest {
   paymentReference   String?        @map("payment_reference") // e.g. UPI transaction ref
   paymentNotes       String?        @map("payment_notes")
   paymentCollectedAt DateTime?      @map("payment_collected_at")
+  /// How the money was taken when more than one way was used (Rs 2,000 cash + Rs 400 UPI):
+  /// [{ method, amount, reference? }], summing to collectedAmount. Null for a single method,
+  /// which paymentMethod/collectedAmount already say. paymentMethod is then the largest part.
+  paymentSplits      Json?          @map("payment_splits")
+
+  /// A discount the partner gave at the door, on top of any coupon. Rupees off the price, never
+  /// more than what is left after the coupon, and only with an admin named as approving it: a
+  /// discount the partner could give alone is cash they could keep.
+  doorDiscountAmount            Float?    @map("door_discount_amount")
+  doorDiscountReason            String?   @map("door_discount_reason")
+  doorDiscountApprovedByAdminId String?   @map("door_discount_approved_by_admin_id")
+  doorDiscountAt                DateTime? @map("door_discount_at")
 
   /// "Take the payment later" — the parcel is accepted without money changing hands at the door.
   /// Set instead of paymentCollectedAt (never both), and only ever with an admin named against
@@ -601,17 +613,53 @@ model PickupRequest {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  quote                Quote      @relation(fields: [quoteId], references: [id])
-  customer             Customer   @relation(fields: [customerId], references: [id])
-  assignedPartner      AdminUser? @relation("PickupRequestAssignedPartner", fields: [assignedPartnerId], references: [id])
-  paymentDueApprovedBy AdminUser? @relation("PickupRequestDueApprovedBy", fields: [paymentDueApprovedByAdminId], references: [id])
-  order                Order?     @relation(fields: [orderId], references: [id])
-  coupon               Coupon?    @relation(fields: [couponId], references: [id])
+  quote                  Quote         @relation(fields: [quoteId], references: [id])
+  customer               Customer      @relation(fields: [customerId], references: [id])
+  assignedPartner        AdminUser?    @relation("PickupRequestAssignedPartner", fields: [assignedPartnerId], references: [id])
+  paymentDueApprovedBy   AdminUser?    @relation("PickupRequestDueApprovedBy", fields: [paymentDueApprovedByAdminId], references: [id])
+  doorDiscountApprovedBy AdminUser?    @relation("PickupRequestDoorDiscountApprovedBy", fields: [doorDiscountApprovedByAdminId], references: [id])
+  order                  Order?        @relation(fields: [orderId], references: [id])
+  coupon                 Coupon?       @relation(fields: [couponId], references: [id])
+  photos                 PickupPhoto[]
+  receipts               Receipt[]
 
   @@index([customerId])
   @@index([status])
   @@index([assignedPartnerId])
   @@map("pickup_requests")
+}
+
+enum PickupPhotoKind {
+  /// The shipper's identity document. Belongs to the customer: reused on their later pickups.
+  KYC
+  /// The packed parcel, as handed over. Belongs to the pickup it was taken on.
+  PARCEL
+  /// Proof of payment at the door, usually the customer's UPI success screen. Belongs to the pickup.
+  PAYMENT
+}
+
+/// A photo taken at pickup (or attached by staff afterwards), compressed before it is stored.
+/// Several per document and per parcel: the front and back of a card, each box, the labels.
+model PickupPhoto {
+  id              String          @id @default(uuid())
+  kind            PickupPhotoKind
+  customerId      String          @map("customer_id")
+  /// The pickup it was taken on. Null only for KYC photos carried over from before this table.
+  pickupRequestId String?         @map("pickup_request_id")
+  /// S3 key. Never sent to a browser; photos go out as short-lived presigned links only.
+  key             String
+  /// What the photo shows, e.g. "Front", "Back", "Box 2 label".
+  label           String
+  sizeBytes       Int             @map("size_bytes")
+  uploadedById    String?         @map("uploaded_by_id")
+  createdAt       DateTime        @default(now()) @map("created_at")
+
+  customer      Customer       @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  pickupRequest PickupRequest? @relation(fields: [pickupRequestId], references: [id], onDelete: SetNull)
+
+  @@index([customerId, kind])
+  @@index([pickupRequestId, kind])
+  @@map("pickup_photos")
 }
 
 // ---------------------------------------------------------------------------
@@ -976,6 +1024,7 @@ model AdminUser {
   createdCoupons             Coupon[]              @relation("CouponCreatedBy")
   approvedOrderDues          Order[]               @relation("OrderDueApprovedBy")
   approvedPickupDues         PickupRequest[]       @relation("PickupRequestDueApprovedBy")
+  approvedDoorDiscounts      PickupRequest[]       @relation("PickupRequestDoorDiscountApprovedBy")
 
   @@map("admin_users")
 }
@@ -1373,6 +1422,13 @@ model Receipt {
   amount        Float
   paymentMethod PaymentMethod @map("payment_method")
   receivedAt    DateTime      @map("received_at")
+  /// One line per method when the payment was split (cash and UPI); the PDF gives each its own
+  /// page. Null for a single method. paymentMethod is then the largest part.
+  paymentSplits Json?         @map("payment_splits")
+
+  /// The pickup the money was collected on. Set when a partner takes payment at the door, before
+  /// any order exists; orderId is filled in once the parcel is accepted.
+  pickupRequestId String? @map("pickup_request_id")
 
   /// Who recorded it — an admin marking payment, or the pickup partner who collected it. Both
   /// are AdminUser rows (a pickup partner is a privileged internal account).
@@ -1386,14 +1442,16 @@ model Receipt {
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
 
-  customer   Customer   @relation(fields: [customerId], references: [id])
-  order      Order?     @relation(fields: [orderId], references: [id])
-  invoice    Invoice?   @relation(fields: [invoiceId], references: [id])
-  recordedBy AdminUser? @relation("ReceiptRecordedBy", fields: [recordedByAdminId], references: [id])
+  customer      Customer       @relation(fields: [customerId], references: [id])
+  order         Order?         @relation(fields: [orderId], references: [id])
+  invoice       Invoice?       @relation(fields: [invoiceId], references: [id])
+  pickupRequest PickupRequest? @relation(fields: [pickupRequestId], references: [id])
+  recordedBy    AdminUser?     @relation("ReceiptRecordedBy", fields: [recordedByAdminId], references: [id])
 
   @@unique([financialYear, sequenceNumber])
   @@index([customerId, receivedAt])
   @@index([orderId])
+  @@index([pickupRequestId])
   @@map("receipts")
 }
 

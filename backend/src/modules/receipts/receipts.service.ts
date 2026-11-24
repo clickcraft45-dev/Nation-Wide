@@ -16,6 +16,7 @@ import { nextSequenceNumber } from '../shipments/sequence';
 import { formatInvoiceNumber, indianFinancialYear } from '../invoices/gst';
 import { ReceiptPdfService } from './receipt-pdf.service';
 import { dialablePhone } from '../../common/utils/phone.util';
+import type { ReceiptExtras, ReceiptSplit } from './templates/receipt-template';
 
 /**
  * Payment receipts — the acknowledgement that money arrived.
@@ -129,6 +130,107 @@ export class ReceiptsService {
   }
 
   /**
+   * The receipt for money a partner (or staff at the warehouse) took at pickup, issued the moment
+   * it is taken. No order exists yet; acceptParcel links this receipt to the order once it does.
+   * One receipt per pickup: a retry returns the one already issued.
+   *
+   * A split payment (cash and UPI) is one receipt, one number, for the total, with a page for
+   * each method.
+   */
+  async issueForPickupPayment(
+    pickupRequestId: string,
+    actorId: string,
+  ): Promise<{ receipt: Receipt; created: boolean }> {
+    const existing = await this.prisma.receipt.findFirst({
+      where: { pickupRequestId },
+    });
+    if (existing) return { receipt: existing, created: false };
+
+    const pickup = await this.prisma.pickupRequest.findUnique({
+      where: { id: pickupRequestId },
+      include: { customer: true },
+    });
+    if (!pickup) {
+      throw new NotFoundException(
+        `Pickup request ${pickupRequestId} not found`,
+      );
+    }
+    if (
+      !pickup.paymentCollectedAt ||
+      !pickup.paymentMethod ||
+      !pickup.collectedAmount
+    ) {
+      throw new BadRequestException(
+        'No payment has been collected on this pickup yet',
+      );
+    }
+
+    const settings = await this.companySettings.get();
+    const receipt = await this.create({
+      customerId: pickup.customerId,
+      orderId: pickup.orderId,
+      invoiceId: null,
+      pickupRequestId,
+      amount: pickup.collectedAmount,
+      paymentMethod: pickup.paymentMethod,
+      paymentSplits: pickup.paymentSplits as ReceiptSplit[] | null,
+      receivedAt: pickup.paymentCollectedAt,
+      recipientName: pickup.customer.name,
+      recipientPhone: dialablePhone(pickup.customer.phone) ?? '',
+      settings,
+      actorId,
+      extras: {
+        invoiceNumber: null,
+        trackingNumbers: [],
+        reference: `Pickup ${pickup.id.slice(0, 8)}`,
+      },
+    });
+
+    await this.prisma.auditLog.create({
+      data: {
+        actorId,
+        action: 'RECEIPT_ISSUED',
+        entity: 'Receipt',
+        entityId: receipt.id,
+        before: {},
+        after: {
+          receiptNumber: receipt.receiptNumber,
+          pickupRequestId,
+          amount: receipt.amount,
+        },
+      },
+    });
+
+    return { receipt, created: true };
+  }
+
+  /**
+   * Issue the door receipt and send it on WhatsApp, swallowing failure: the payment is already
+   * recorded and must not be undone by a PDF or a queue. False when no receipt reached the queue,
+   * so the caller can fall back to a plain text message.
+   */
+  async issueForPickupAndSendQuietly(
+    pickupRequestId: string,
+    actorId: string,
+  ): Promise<boolean> {
+    try {
+      const { receipt, created } = await this.issueForPickupPayment(
+        pickupRequestId,
+        actorId,
+      );
+      if (created || !receipt.sentAt) await this.sendToWhatsApp(receipt.id);
+      return true;
+    } catch (error) {
+      this.logger.warn(
+        `Pickup ${pickupRequestId} was paid but its receipt could not be issued: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      return false;
+    }
+  }
+
+  /**
    * Issues the receipt for a payment settling a consolidated invoice — many orders, one payment.
    * No orderId, because no single order owns it; the invoice it settles is the link.
    */
@@ -194,8 +296,10 @@ export class ReceiptsService {
     customerId: string;
     orderId: string | null;
     invoiceId: string | null;
+    pickupRequestId?: string | null;
     amount: number;
     paymentMethod: PaymentMethod;
+    paymentSplits?: ReceiptSplit[] | null;
     receivedAt: Date;
     recipientName: string;
     recipientPhone: string;
@@ -213,7 +317,7 @@ export class ReceiptsService {
       footerNotes?: string | null;
     };
     actorId: string;
-    extras: { invoiceNumber: string | null; trackingNumbers: string[] };
+    extras: ReceiptExtras;
   }): Promise<Receipt> {
     const { settings } = input;
     const financialYear = indianFinancialYear(input.receivedAt);
@@ -232,6 +336,7 @@ export class ReceiptsService {
         customerId: input.customerId,
         orderId: input.orderId,
         invoiceId: input.invoiceId,
+        pickupRequestId: input.pickupRequestId ?? null,
 
         // Falls back to the trading name and a placeholder address rather than refusing: unlike
         // an invoice, a receipt has no statutory minimum it can fail to meet.
@@ -245,6 +350,9 @@ export class ReceiptsService {
 
         amount: Math.round(input.amount * 100) / 100,
         paymentMethod: input.paymentMethod,
+        paymentSplits: input.paymentSplits?.length
+          ? (input.paymentSplits as unknown as Prisma.InputJsonValue)
+          : undefined,
         receivedAt: input.receivedAt,
         recordedByAdminId: input.actorId,
       },
@@ -259,7 +367,7 @@ export class ReceiptsService {
 
   private async renderAndStore(
     receipt: Receipt,
-    extras: { invoiceNumber: string | null; trackingNumbers: string[] },
+    extras: ReceiptExtras,
     branding: {
       companyName?: string | null;
       tagline?: string | null;
