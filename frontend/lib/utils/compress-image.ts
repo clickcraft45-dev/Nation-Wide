@@ -38,6 +38,10 @@ export async function compressImage(file: File): Promise<File> {
     const blob = await new Promise<Blob | null>((resolve) =>
       canvas.toBlob(resolve, "image/jpeg", JPEG_QUALITY),
     );
+    // Hand the pixel buffer back now rather than at the next GC: on a 2 GB phone it is the
+    // difference between the camera returning and Android killing the browser.
+    canvas.width = 0;
+    canvas.height = 0;
     if (!blob || blob.size >= file.size) return file;
     const name = file.name.replace(/\.[^.]+$/, "") || "photo";
     return new File([blob], `${name}.jpg`, { type: "image/jpeg", lastModified: file.lastModified });

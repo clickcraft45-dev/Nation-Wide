@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Check, Pencil, Plus, Trash2, X } from "lucide-react";
 import type { ItemCatalogEntryDto, SavedItemDto, ShipmentItemDto } from "@nationwide/shared-types";
 import { apiClient, errorMessage } from "@/lib/api-client";
@@ -46,7 +46,9 @@ const boxOf = (f: ItemForm) => Number(f.box) || 1;
 
 /** `boxCount` above 1 records each item's box; with one box there is nothing to say. */
 export function toItemsPayload(forms: ItemForm[], boxCount = 1): ShipmentItemDto[] {
-  return forms.map((f) => ({
+  // Box by box on the invoice, whatever order they were typed in (sort is stable).
+  const ordered = boxCount > 1 ? [...forms].sort((a, b) => boxOf(a) - boxOf(b)) : forms;
+  return ordered.map((f) => ({
     ...(f.category.trim() ? { category: f.category.trim() } : {}),
     description: f.description.trim(),
     quantity: Number(f.quantity),
@@ -56,19 +58,61 @@ export function toItemsPayload(forms: ItemForm[], boxCount = 1): ShipmentItemDto
   }));
 }
 
+/** "Box 2, item 3: " with several boxes, "Item 3: " with several items, "" for one. */
+function rowName(forms: ItemForm[], index: number, boxCount: number): string {
+  if (boxCount > 1) {
+    const box = boxOf(forms[index]);
+    const nth = forms.slice(0, index + 1).filter((f) => boxOf(f) === box).length;
+    return `Box ${box}, item ${nth}: `;
+  }
+  return forms.length > 1 ? `Item ${index + 1}: ` : "";
+}
+
+const itemKey = (f: ItemForm) => `${boxOf(f)}|${f.description.trim().toLowerCase().replace(/\s+/g, " ")}`;
+
+/**
+ * For each row, the index of an earlier row with the same item in the same box, or -1. Repeats
+ * are allowed (two sizes of "Saree" at different values), so this warns rather than blocks.
+ */
+export function duplicateOf(forms: ItemForm[]): number[] {
+  const first = new Map<string, number>();
+  return forms.map((f, i) => {
+    if (!f.description.trim()) return -1;
+    const key = itemKey(f);
+    const earlier = first.get(key);
+    if (earlier === undefined) {
+      first.set(key, i);
+      return -1;
+    }
+    return earlier;
+  });
+}
+
+/** The first thing wrong with the contents, and the field it is in, so the form can go to it. */
+export function itemProblem(
+  forms: ItemForm[],
+  boxCount = 1,
+): { index: number; field: keyof ItemForm; message: string } | null {
+  for (const [i, f] of forms.entries()) {
+    const at = (field: keyof ItemForm, message: string) => ({
+      index: i,
+      field,
+      message: rowName(forms, i, boxCount) + message,
+    });
+    // A box was removed after its items were assigned to it.
+    if (boxCount > 1 && boxOf(f) > boxCount) return at("box", `Box ${boxOf(f)} no longer exists, choose its box.`);
+    if (!f.description.trim()) return at("description", "describe what it is.");
+    if (!Number.isInteger(Number(f.quantity)) || Number(f.quantity) < 1) return at("quantity", "quantity must be a whole number.");
+    if (!(Number(f.unitValue) > 0)) return at("unitValue", "enter its value in ₹.");
+    if (f.hsCode.trim().length > 20) return at("hsCode", "HS code is too long.");
+  }
+  return null;
+}
+
 /** Mirrors ShipmentItemDto — contents are mandatory, so an empty list is an error too. */
 export function validateItems(forms: ItemForm[], boxCount = 1): string | null {
   if (forms.length === 0) return "Add at least one item.";
-  for (const [i, f] of forms.entries()) {
-    const row = forms.length > 1 ? `Item ${i + 1}: ` : "";
-    // A box was removed after its items were assigned to it.
-    if (boxCount > 1 && boxOf(f) > boxCount) return `${row}Box ${boxOf(f)} no longer exists, choose its box.`;
-    if (!f.description.trim()) return `${row}describe what it is.`;
-    if (!Number.isInteger(Number(f.quantity)) || Number(f.quantity) < 1) return `${row}quantity must be a whole number.`;
-    if (!(Number(f.unitValue) > 0)) return `${row}enter its value in ₹.`;
-    if (f.hsCode.trim().length > 20) return `${row}HS code is too long.`;
-  }
-  return null;
+  return itemProblem(forms, boxCount)?.message ?? null;
 }
 
 // Fetched once per page load and shared by every editor on it; it changes rarely.
@@ -188,17 +232,41 @@ export function ItemsEditor({
 
   const total = value.reduce((sum, r) => sum + (Number(r.quantity) || 0) * (Number(r.unitValue) || 0), 0);
 
-  return (
-    <div className="space-y-3">
-      <datalist id={listId}>
-        {suggestions.map((s) => (
-          <option key={s.key} value={s.name} />
-        ))}
-      </datalist>
+  const duplicates = duplicateOf(value);
+  // With an error showing, mark the one field it is about; a server error marks the item names.
+  const problem = error ? itemProblem(value, boxCount) : null;
+  const invalid = (i: number, key: keyof ItemForm) =>
+    problem ? problem.index === i && problem.field === key : Boolean(error) && key === "description";
+  // The row just added gets the cursor, so the partner can type straight into it.
+  const focusRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (focusRef.current === null) return;
+    document.getElementById(`item-${focusRef.current}-description`)?.focus();
+    focusRef.current = null;
+  });
 
-      {value.map((row, i) => (
-        <div key={i} className="grid grid-cols-6 items-end gap-2 rounded-lg border border-border p-3 sm:grid-cols-12">
-          {multiBox && (
+  function addRow(box: string) {
+    focusRef.current = value.length;
+    onChange([...value, { ...emptyItem, box }]);
+  }
+
+  // Folds a repeated row into the first one: its quantity is added there and the row goes.
+  function merge(into: number, from: number) {
+    const qty = (Number(value[into].quantity) || 0) + (Number(value[from].quantity) || 0);
+    onChange(
+      value
+        .map((row, i) => (i === into ? { ...row, quantity: String(qty || 1) } : row))
+        .filter((_, i) => i !== from),
+    );
+  }
+
+  function renderRow(row: ItemForm, i: number, showBox: boolean) {
+    const dup = duplicates[i];
+    const label = rowName(value, i, boxCount).replace(/: $/, "") || "item";
+    return (
+      <div key={i} className="space-y-2 rounded-lg border border-border p-3">
+        <div className="grid grid-cols-6 items-end gap-2 sm:grid-cols-12">
+          {showBox && (
             <div className="col-span-2 space-y-1 sm:col-span-2">
               <Label htmlFor={`item-${i}-box`}>Box</Label>
               <select
@@ -216,7 +284,7 @@ export function ItemsEditor({
               </select>
             </div>
           )}
-          <div className={multiBox ? "col-span-4 space-y-1 sm:col-span-4" : "col-span-6 space-y-1 sm:col-span-6"}>
+          <div className={showBox ? "col-span-4 space-y-1 sm:col-span-4" : "col-span-6 space-y-1 sm:col-span-6"}>
             <Label htmlFor={`item-${i}-description`}>Item</Label>
             <Input
               id={`item-${i}-description`}
@@ -225,7 +293,8 @@ export function ItemsEditor({
               autoComplete="off"
               value={row.description}
               onChange={(e) => setRow(i, "description", e.target.value)}
-              error={Boolean(error)}
+              error={invalid(i, "description")}
+              aria-describedby={dup >= 0 ? `item-${i}-dup` : undefined}
             />
             {row.category && <p className="truncate text-xs text-muted-foreground">{row.category}</p>}
           </div>
@@ -239,6 +308,7 @@ export function ItemsEditor({
               step="1"
               value={row.quantity}
               onChange={(e) => setRow(i, "quantity", e.target.value)}
+              error={invalid(i, "quantity")}
             />
           </div>
           <div className="col-span-2 space-y-1 sm:col-span-2">
@@ -251,43 +321,104 @@ export function ItemsEditor({
               step="0.01"
               value={row.unitValue}
               onChange={(e) => setRow(i, "unitValue", e.target.value)}
+              error={invalid(i, "unitValue")}
             />
           </div>
           <div className="col-span-2 flex items-end gap-1 sm:col-span-2">
-            <div className="flex-1 space-y-1">
+            <div className="min-w-0 flex-1 space-y-1">
               <Label htmlFor={`item-${i}-hs`}>HS code</Label>
               <Input
                 id={`item-${i}-hs`}
                 placeholder="opt."
                 value={row.hsCode}
                 onChange={(e) => setRow(i, "hsCode", e.target.value)}
+                error={invalid(i, "hsCode")}
               />
             </div>
             {value.length > 1 && (
               <button
                 type="button"
                 onClick={() => onChange(value.filter((_, j) => j !== i))}
-                aria-label={`Remove item ${i + 1}`}
-                className="mb-1.5 rounded p-1 text-muted-foreground hover:bg-muted hover:text-danger"
+                aria-label={`Remove ${label}`}
+                className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <Trash2 className="h-4 w-4" aria-hidden />
               </button>
             )}
           </div>
         </div>
-      ))}
+        {dup >= 0 && (
+          <div
+            id={`item-${i}-dup`}
+            role="status"
+            className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-warning-border bg-warning-bg px-3 py-2 text-sm text-warning"
+          >
+            <span>
+              {row.description.trim()} is already in {multiBox ? `Box ${boxOf(row)}` : "the list"}. Same item? Add it to
+              that quantity instead.
+            </span>
+            <Button type="button" variant="secondary" size="sm" onClick={() => merge(dup, i)}>
+              Combine
+            </Button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <datalist id={listId}>
+        {suggestions.map((s) => (
+          <option key={s.key} value={s.name} />
+        ))}
+      </datalist>
+
+      {multiBox ? (
+        <>
+          {Array.from({ length: boxCount }, (_, b) => b + 1).map((box) => {
+            const rows = value.map((row, i) => ({ row, i })).filter(({ row }) => boxOf(row) === box);
+            return (
+              <section key={box} aria-labelledby={`${listId}-box-${box}`} className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <h3 id={`${listId}-box-${box}`} className="text-sm font-semibold text-foreground">
+                    Box {box}
+                    <span className="ml-1.5 font-normal text-muted-foreground">
+                      {rows.length === 1 ? "1 item" : `${rows.length} items`}
+                    </span>
+                  </h3>
+                </div>
+                {rows.length === 0 && (
+                  <p className="rounded-lg border border-dashed border-border px-3 py-3 text-sm text-muted-foreground">
+                    Nothing in Box {box} yet.
+                  </p>
+                )}
+                {rows.map(({ row, i }) => renderRow(row, i, false))}
+                <Button type="button" variant="secondary" size="sm" onClick={() => addRow(String(box))}>
+                  <Plus className="h-4 w-4" aria-hidden /> Add item to Box {box}
+                </Button>
+              </section>
+            );
+          })}
+          {/* Rows left in a box that was since removed: they say which box to move to. */}
+          {value.some((row) => boxOf(row) > boxCount) && (
+            <section className="space-y-2">
+              <h3 className="text-sm font-semibold text-warning">Box removed: choose where these go</h3>
+              {value.map((row, i) => (boxOf(row) > boxCount ? renderRow(row, i, true) : null))}
+            </section>
+          )}
+        </>
+      ) : (
+        value.map((row, i) => renderRow(row, i, false))
+      )}
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            // A new row goes in the same box as the one above: items are usually listed box by box.
-            onClick={() => onChange([...value, { ...emptyItem, box: value[value.length - 1]?.box ?? "" }])}
-          >
-            <Plus className="h-4 w-4" aria-hidden /> Add item
-          </Button>
+          {!multiBox && (
+            <Button type="button" variant="secondary" size="sm" onClick={() => addRow("")}>
+              <Plus className="h-4 w-4" aria-hidden /> Add item
+            </Button>
+          )}
           {saved.length > 0 && (
             <div className="w-64 max-w-full">
               <NativeSelect

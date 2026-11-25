@@ -106,6 +106,10 @@ export function PickupCard({ pickup }: { pickup: PickupRequestDto }) {
   const router = useRouter();
   const weight = pickup.verifiedWeightKg ?? pickup.estimatedWeightKg;
   const amount = pickup.verifiedPrice ?? pickup.estimatedPrice;
+  // What the customer actually pays after the coupon and any door discount. Unpriced pickups
+  // (amount 0) have nothing to discount yet.
+  const payable = amount > 0 ? pickup.payableAmount : amount;
+  const saved = amount > 0 ? Math.max(0, amount - payable) : 0;
   const href = `/partner/pickups/${pickup.id}`;
   const pending = pendingStep(pickup);
   const calendarUrl = googleCalendarUrl(pickup);
@@ -203,10 +207,28 @@ export function PickupCard({ pickup }: { pickup: PickupRequestDto }) {
           <Scale className="h-4 w-4" aria-hidden />
           {shipmentLabel(pickup.shipmentType)} · {weight}kg
         </p>
-        <p className="text-lg font-semibold text-foreground">
-          {pickup.currency} {Math.round(amount).toLocaleString("en-IN")}
-        </p>
+        <div className="text-right">
+          {saved > 0 && (
+            <p className="text-xs text-muted-foreground line-through">
+              {pickup.currency} {Math.round(amount).toLocaleString("en-IN")}
+            </p>
+          )}
+          <p className="text-lg font-semibold text-foreground">
+            {pickup.currency} {Math.round(payable).toLocaleString("en-IN")}
+          </p>
+        </div>
       </div>
+      {saved > 0 && (
+        <p className="mt-1 text-right text-xs font-medium text-success">
+          {[
+            pickup.discountAmount ? `Coupon${pickup.couponCode ? ` ${pickup.couponCode}` : ""}` : null,
+            pickup.doorDiscount?.amount ? "door discount" : null,
+          ]
+            .filter(Boolean)
+            .join(" + ")}
+          : saved ₹{Math.round(saved).toLocaleString("en-IN")}
+        </p>
+      )}
     </div>
   );
 }

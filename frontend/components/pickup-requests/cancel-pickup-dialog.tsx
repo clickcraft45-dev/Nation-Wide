@@ -6,6 +6,7 @@ import { apiClient, errorMessage } from "@/lib/api-client";
 import { Dialog, DialogClose, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { FieldError, Label } from "@/components/ui/input";
+import { focusField } from "@/lib/utils/focus-first-invalid";
 
 /** Staff call a pickup off, with the reason the customer is sent. Before any money is taken. */
 export function CancelPickupDialog({
@@ -23,9 +24,15 @@ export function CancelPickupDialog({
   const [saving, setSaving] = useState(false);
   const reasonId = useId();
   const canSave = reason.trim().length >= 3;
+  const [tried, setTried] = useState(false);
 
   async function save() {
-    if (!canSave) return;
+    if (!canSave) {
+      setTried(true);
+      setError("Give a reason (at least 3 characters).");
+      focusField(reasonId);
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -49,6 +56,7 @@ export function CancelPickupDialog({
         if (next) {
           setReason("");
           setError(null);
+          setTried(false);
         }
         setOpen(next);
       }}
@@ -57,6 +65,7 @@ export function CancelPickupDialog({
         onClick={() => {
           setReason("");
           setError(null);
+          setTried(false);
           setOpen(true);
         }}
       >
@@ -87,8 +96,9 @@ export function CancelPickupDialog({
                 maxLength={300}
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
-                placeholder="For example: customer called to cancel, duplicate booking"
-                className="block w-full resize-none rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                aria-invalid={tried && !canSave}
+                placeholder="For example: customer called to cancel, duplicate booking…"
+                className="block w-full resize-none rounded-xl border border-border bg-background px-3 py-2 text-base text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring aria-invalid:border-danger sm:text-sm"
               />
             </div>
             {error && <FieldError>{error}</FieldError>}
@@ -98,7 +108,7 @@ export function CancelPickupDialog({
                   Keep pickup
                 </Button>
               </DialogClose>
-              <Button type="submit" variant="danger" size="sm" isLoading={saving} disabled={!canSave}>
+              <Button type="submit" variant="danger" size="sm" isLoading={saving}>
                 Cancel pickup
               </Button>
             </div>

@@ -49,19 +49,29 @@ export function toPackagesPayload(forms: PackageForm[]): ParcelPackageDto[] {
 const positive = (v: string) => v.trim() !== "" && Number(v) > 0;
 
 /** Mirrors ParcelPackageDto: weight always; dimensions all-or-nothing, and required unless a document. */
-export function validatePackages(forms: PackageForm[], requireDimensions: boolean): string | null {
+/** The first thing wrong with the boxes, and the field it is in, so the form can go to it. */
+export function packageProblem(
+  forms: PackageForm[],
+  requireDimensions: boolean,
+): { index: number; field: keyof PackageForm; message: string } | null {
+  const dimKeys = ["lengthCm", "widthCm", "heightCm"] as const;
   for (const [i, f] of forms.entries()) {
     const box = forms.length > 1 ? `Box ${i + 1}: ` : "";
-    if (!positive(f.weightKg)) return `${box}enter a weight greater than 0.`;
-    if (Number(f.weightKg) > 1000) return `${box}weight can't exceed 1000 kg.`;
-    const dims = [f.lengthCm, f.widthCm, f.heightCm];
-    const given = dims.filter((d) => d.trim() !== "");
-    if ((requireDimensions || given.length > 0) && !dims.every(positive)) {
-      return `${box}enter length, width and height in cm.`;
+    const at = (field: keyof PackageForm, message: string) => ({ index: i, field, message: box + message });
+    if (!positive(f.weightKg)) return at("weightKg", "enter a weight greater than 0.");
+    if (Number(f.weightKg) > 1000) return at("weightKg", "weight can't exceed 1000 kg.");
+    const given = dimKeys.filter((k) => f[k].trim() !== "");
+    if ((requireDimensions || given.length > 0) && !dimKeys.every((k) => positive(f[k]))) {
+      return at(dimKeys.find((k) => !positive(f[k]))!, "enter length, width and height in cm.");
     }
-    if (dims.some((d) => Number(d) > 500)) return `${box}a side can't exceed 500 cm.`;
+    const tooLong = dimKeys.find((k) => Number(f[k]) > 500);
+    if (tooLong) return at(tooLong, "a side can't exceed 500 cm.");
   }
   return null;
+}
+
+export function validatePackages(forms: PackageForm[], requireDimensions: boolean): string | null {
+  return packageProblem(forms, requireDimensions)?.message ?? null;
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -109,6 +119,10 @@ export function PackagesEditor({
 }) {
   const bulk = value.length > 1;
   const summary = packagesSummary(value);
+  // With an error showing, mark the one field it is about; a server error marks them all.
+  const problem = error ? packageProblem(value, requireDimensions) : null;
+  const invalid = (i: number, key: keyof PackageForm) =>
+    problem ? problem.index === i && problem.field === key : Boolean(error);
 
   function setBox(index: number, key: keyof PackageForm, v: string) {
     onChange(value.map((box, i) => (i === index ? { ...box, [key]: v } : box)));
@@ -165,7 +179,7 @@ export function PackagesEditor({
                   step={step}
                   value={box[key]}
                   onChange={(e) => setBox(i, key, e.target.value)}
-                  error={Boolean(error)}
+                  error={invalid(i, key)}
                 />
               </div>
             ))}

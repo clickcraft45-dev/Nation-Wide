@@ -16,7 +16,7 @@ import { apiClient, ApiError, errorMessage } from "@/lib/api-client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input, Label, FieldError } from "@/components/ui/input";
-import { focusFirstInvalid } from "@/lib/utils/focus-first-invalid";
+import { focusField, focusFirstInvalid } from "@/lib/utils/focus-first-invalid";
 import { ErrorState } from "@/components/ui/page-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PickupRequestStatusBadge } from "@/components/ui/status-badge";
@@ -25,6 +25,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Stepper } from "@/components/ui/stepper";
 import { useDebouncedValue } from "@/lib/utils/use-debounced-value";
 import { cn } from "@/lib/utils/cn";
+import { clearDraft, readDraft, writeDraft } from "@/lib/drafts";
 import { NativeSelect } from "@/components/ui/select";
 import { searchCountries } from "@/lib/country-search";
 import {
@@ -85,6 +86,23 @@ function shipmentLabel(type: string): string {
 
 type Step = "arrived" | "verify" | "complete";
 
+/** The verification form as kept on the phone between reloads. */
+interface VerificationDraft {
+  boxes: PackageForm[];
+  items: ItemForm[];
+  verifiedShipmentType: ShipmentTypeCode;
+  verificationNotes: string;
+  manualPrice: string;
+  recipient: RecipientForm;
+  destinationCountry: string;
+  parcelPhysicallyChecked: boolean;
+  editing: boolean;
+}
+
+/** Still at the door: the form can change. Closed pickups keep no draft. */
+const draftable = (p: PickupRequestDto) =>
+  p.arrivedAt !== null && !p.orderId && !["COMPLETED", "REJECTED", "CANCELLED"].includes(p.status);
+
 const STEP_ORDER: Step[] = ["arrived", "verify", "complete"];
 const STEPPER_STEPS = [{ label: "Arrived" }, { label: "Payment" }, { label: "Complete" }];
 
@@ -99,6 +117,7 @@ const STEPPER_STEPS = [{ label: "Arrived" }, { label: "Payment" }, { label: "Com
 export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "admin" }) {
   const api = mode === "admin" ? "/admin/pickup-requests" : "/partner/pickup-requests";
   const backHref = mode === "admin" ? "/admin/warehouse-dropoffs" : "/partner/pickups";
+  const draftKey = `pickup-verify:${mode}:${id}`;
   const router = useRouter();
   const { showToast } = useToast();
 
@@ -125,6 +144,11 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
   // taken; verifying again re-prices the parcel.
   const [editingVerification, setEditingVerification] = useState(false);
   const [verifyError, setVerifyError] = useState<string | null>(null);
+  // Set by a "Confirm verification" that failed: the box and item fields then show what is wrong,
+  // live, so the mark goes as soon as it is fixed.
+  const [verifyTried, setVerifyTried] = useState(false);
+  // The same for "Collect payment".
+  const [payTried, setPayTried] = useState(false);
   const requireDimensions = verifiedShipmentType !== "DOCUMENT";
   const packagesProblem = validatePackages(boxes, requireDimensions);
   const chargeableKg = packagesProblem ? 0 : chargeableWeightKg(toPackagesPayload(boxes));
@@ -206,12 +230,49 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
         setBoxes(packagesFrom(res.verifiedPackages ?? res.packages, res.verifiedWeightKg ?? res.estimatedWeightKg));
         setItems(itemsFrom(res.items));
         setVerifiedShipmentType(res.verifiedShipmentType ?? res.shipmentType);
+        // What the partner had typed before the phone dropped the page (Android kills the browser
+        // for memory while the camera is open) wins over the server's copy, while it still applies.
+        const draft = readDraft<VerificationDraft>(draftKey);
+        if (draft && draftable(res) && (!res.verifiedAt || draft.editing)) {
+          setBoxes(draft.boxes);
+          setItems(draft.items);
+          setVerifiedShipmentType(draft.verifiedShipmentType);
+          setVerificationNotes(draft.verificationNotes);
+          setManualPrice(draft.manualPrice);
+          setRecipient(draft.recipient);
+          setDestinationCountry(draft.destinationCountry);
+          setParcelPhysicallyChecked(draft.parcelPhysicallyChecked);
+          if (res.verifiedAt) setEditingVerification(true);
+        } else if (draft) {
+          clearDraft(draftKey);
+        }
       })
       .catch((err) => {
         setError(errorMessage(err, "Couldn't load this pickup."));
       })
       .finally(() => setIsLoading(false));
   }
+
+  // The verification form is saved on the phone as it is typed, so a reload (low memory, a dropped
+  // tab) never loses twenty typed items. Cleared once the server has them.
+  const draftActive =
+    pickup !== null && draftable(pickup) && (!pickup.verifiedAt || editingVerification);
+  const draftJson = JSON.stringify({
+    boxes,
+    items,
+    verifiedShipmentType,
+    verificationNotes,
+    manualPrice,
+    recipient,
+    destinationCountry,
+    parcelPhysicallyChecked,
+    editing: editingVerification,
+  } satisfies VerificationDraft);
+  useEffect(() => {
+    if (!draftActive) return;
+    const timer = setTimeout(() => writeDraft(draftKey, JSON.parse(draftJson) as VerificationDraft), 300);
+    return () => clearTimeout(timer);
+  }, [draftActive, draftJson, draftKey]);
 
   useEffect(() => {
     // One-shot lookup keyed off the route param, not a subscription.
@@ -304,24 +365,27 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
   }
 
   async function handleVerify() {
+    setVerifyTried(true);
     if (needsCountry && !destinationCountry) {
       setVerifyError("Choose the destination country.");
-      document.getElementById("destination-country")?.focus();
+      focusField("destination-country");
       return;
     }
     if (packagesProblem) {
       setVerifyError(packagesProblem);
+      focusFirstInvalid();
       return;
     }
     const itemsProblem = validateItems(items, boxes.length);
     if (itemsProblem) {
       setVerifyError(itemsProblem);
+      focusFirstInvalid();
       return;
     }
     const price = Number(manualPrice);
     if (needsManualPrice && (!price || price <= 0)) {
       setVerifyError("Enter the price you agreed with the customer.");
-      document.getElementById("manual-price")?.focus();
+      focusField("manual-price");
       return;
     }
     const recipientProblems = validateRecipient(recipient);
@@ -349,6 +413,8 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
         },
       );
       setPickup(updated);
+      clearDraft(draftKey);
+      setVerifyTried(false);
       setEditingVerification(false);
       showToast({
         variant: "success",
@@ -366,18 +432,24 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
     }
   }
 
+  const partialOk =
+    pickup !== null && Number(partialAmount) > 0 && Number(partialAmount) < pickup.payableAmount;
+
   async function handleCollectPayment() {
     if (!pickup?.verifiedPrice) return;
-    if (needsApprover && !dueApprovedByAdminId) {
-      showToast({ variant: "error", title: "Pick the admin who approved this due." });
-      return;
-    }
+    setPayTried(true);
     const partPaid = Number(partialAmount);
-    if (isPartial && (!(partPaid > 0) || partPaid >= pickup.payableAmount)) {
+    if (isPartial && !partialOk) {
       showToast({
         variant: "error",
         title: `Enter an amount between 1 and ${pickup.payableAmount - 1}.`,
       });
+      focusField("partial-amount");
+      return;
+    }
+    if (needsApprover && !dueApprovedByAdminId) {
+      showToast({ variant: "error", title: "Pick the admin who approved this due." });
+      focusField("due-approver");
       return;
     }
     const takenNow = isPartial ? partPaid : pickup.payableAmount;
@@ -504,7 +576,7 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
   const showPaymentForm = step === "verify" && !!pickup.verifiedAt && !editingVerification;
 
   return (
-    <div className="space-y-5 pb-6">
+    <div className="space-y-5 pb-6" data-draft="managed">
       <button
         onClick={() => router.push(backHref)}
         className="inline-flex items-center gap-1.5 text-sm text-muted-foreground"
@@ -721,7 +793,11 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
                   <p className="text-foreground">
                     Changing the parcel details. Confirm again to re-price{pickup.doorDiscount ? "; the discount will need approving again" : ""}.
                   </p>
-                  <Button type="button" variant="ghost" size="lg" onClick={() => setEditingVerification(false)}>
+                  <Button type="button" variant="ghost" size="lg" onClick={() => {
+                      clearDraft(draftKey);
+                      setEditingVerification(false);
+                      load();
+                    }}>
                     Cancel
                   </Button>
                 </div>
@@ -764,6 +840,7 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
                         onChange={setBoxes}
                         requireDimensions={requireDimensions}
                         idPrefix="verified-box"
+                        error={verifyTried ? packagesProblem : null}
                       />
                     </div>
                   </div>
@@ -891,7 +968,12 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
                       Check against what is actually in the box. Carriers declare these to customs.
                     </p>
                   </div>
-                  <ItemsEditor value={items} onChange={setItems} boxCount={boxes.length} />
+                  <ItemsEditor
+                    value={items}
+                    onChange={setItems}
+                    boxCount={boxes.length}
+                    error={verifyTried ? validateItems(items, boxes.length) : null}
+                  />
                 </CardContent>
               </Card>
 
@@ -1083,6 +1165,7 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
                         max={pickup.payableAmount - 1}
                         value={partialAmount}
                         onChange={(e) => setPartialAmount(e.target.value)}
+                        error={payTried && !partialOk}
                         className="h-12 text-lg font-semibold"
                         placeholder="0.00"
                       />
@@ -1106,7 +1189,8 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
                           id="due-approver"
                           value={dueApprovedByAdminId}
                           onChange={(e) => setDueApprovedByAdminId(e.target.value)}
-                          className="h-11 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          aria-invalid={payTried && !dueApprovedByAdminId}
+                          className="h-11 w-full rounded-lg border border-border aria-invalid:border-danger bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                         >
                           <option value="">Select the admin who approved…</option>
                           {dueApprovers.map((admin) => (

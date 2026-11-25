@@ -10,6 +10,7 @@ import { PincodeInput } from "@/components/ui/pincode-input";
 import { AddressAutocomplete } from "@/components/ui/address-autocomplete";
 import { MapPinField } from "@/components/ui/map-pin-picker";
 import { googleMapsEnabled, type PickedAddress } from "@/lib/google-maps";
+import { focusField } from "@/lib/utils/focus-first-invalid";
 
 interface Form {
   line1: string;
@@ -61,6 +62,7 @@ export function EditAddressDialog({
   function start() {
     setForm(fromPickup(pickup));
     setError(null);
+    setTried(false);
     setOpen(true);
   }
 
@@ -79,11 +81,20 @@ export function EditAddressDialog({
     }));
   }
 
-  const ready = Boolean(form.line1.trim() && form.city.trim() && form.state.trim() && form.postalCode.trim());
+  // Required, in the order the form shows them.
+  const missing = (["line1", "pin", "city", "state"] as const).filter(
+    (k) => !(k === "pin" ? form.postalCode : form[k]).trim(),
+  );
+  const ready = missing.length === 0;
+  const [tried, setTried] = useState(false);
+  const bad = (k: (typeof missing)[number]) => tried && missing.includes(k);
 
   async function save() {
     if (!ready) {
+      setTried(true);
       setError("Fill in the street, city, state and PIN code.");
+      const first = missing[0];
+      focusField(first === "line1" ? (maps ? "edit-address-search" : "edit-address-line1") : `edit-address-${first}`);
       return;
     }
     setSaving(true);
@@ -149,7 +160,12 @@ export function EditAddressDialog({
             {!maps && (
               <div className="space-y-1.5">
                 <Label htmlFor="edit-address-line1">Address line 1</Label>
-                <Input id="edit-address-line1" value={form.line1} onChange={(e) => set("line1", e.target.value)} />
+                <Input
+                  id="edit-address-line1"
+                  value={form.line1}
+                  onChange={(e) => set("line1", e.target.value)}
+                  error={bad("line1")}
+                />
               </div>
             )}
 
@@ -165,6 +181,7 @@ export function EditAddressDialog({
                   id="edit-address-pin"
                   value={form.postalCode}
                   onChange={(v) => set("postalCode", v)}
+                  error={bad("pin")}
                   onResolved={(place) =>
                     setForm((f) => ({ ...f, city: f.city || place.district || place.city, state: place.state || f.state }))
                   }
@@ -172,11 +189,11 @@ export function EditAddressDialog({
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="edit-address-city">City</Label>
-                <Input id="edit-address-city" value={form.city} onChange={(e) => set("city", e.target.value)} />
+                <Input id="edit-address-city" value={form.city} onChange={(e) => set("city", e.target.value)} error={bad("city")} />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="edit-address-state">State</Label>
-                <Input id="edit-address-state" value={form.state} onChange={(e) => set("state", e.target.value)} />
+                <Input id="edit-address-state" value={form.state} onChange={(e) => set("state", e.target.value)} error={bad("state")} />
               </div>
             </div>
 

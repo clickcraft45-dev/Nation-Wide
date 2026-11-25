@@ -142,7 +142,6 @@ export default function PickupRequestPage() {
 
   useEffect(() => {
     let cancelled = false;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsLoading(true);
     Promise.all([
       apiClient.get<QuoteDto[]>("/quotes/me"),

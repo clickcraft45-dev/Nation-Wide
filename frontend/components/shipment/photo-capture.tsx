@@ -108,7 +108,9 @@ export function PickupPhotos({
     setError(null);
     try {
       setBusy(picked.length > 1 ? `Preparing ${picked.length} photos…` : "Preparing photo…");
-      const files = await Promise.all(picked.map(compressImage));
+      // One at a time: decoding several 12 MP photos at once is what runs a cheap phone out of memory.
+      const files: File[] = [];
+      for (const file of picked) files.push(await compressImage(file));
       if (files.some((f) => f.size > MAX_UPLOAD_BYTES)) {
         setError("That photo is too large to send. Retake it at a lower resolution.");
         return;

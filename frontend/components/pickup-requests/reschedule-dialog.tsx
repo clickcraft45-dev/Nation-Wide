@@ -13,6 +13,7 @@ import { Dialog, DialogClose, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { DateField } from "@/components/ui/date-field";
 import { FieldError, Label } from "@/components/ui/input";
+import { focusField } from "@/lib/utils/focus-first-invalid";
 import { cn } from "@/lib/utils/cn";
 
 export const PICKUP_SLOT_LABELS: Record<PickupTimeSlot, string> = {
@@ -48,6 +49,7 @@ export function RescheduleDialog({
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [tried, setTried] = useState(false);
   const reasonId = useId();
   const dateId = useId();
 
@@ -56,14 +58,34 @@ export function RescheduleDialog({
     setSlot("");
     setReason("");
     setError(null);
+    setTried(false);
   }
 
   const slotOpen = (s: PickupTimeSlot) => !date || date > today || isPickupSlotOpen(s, date);
   const unchanged = date === pickup.pickupDate && slot === pickup.pickupTimeSlot;
   const canSave = Boolean(date && slot && slotOpen(slot) && reason.trim().length >= MIN_REASON && !unchanged);
 
+  const reasonShort = reason.trim().length < MIN_REASON;
+
   async function save() {
-    if (!canSave) return;
+    // The button stays tappable: a tap on an incomplete form says what is missing and goes there.
+    if (!canSave) {
+      setTried(true);
+      if (!date) {
+        setError("Pick the new day.");
+        focusField(dateId);
+      } else if (!slot || !slotOpen(slot)) {
+        setError("Pick a time slot.");
+        focusField(`${dateId}-slots`);
+      } else if (unchanged) {
+        setError("That is the time it already has. Pick a different day or slot.");
+        focusField(`${dateId}-slots`);
+      } else {
+        setError(`Give a reason (at least ${MIN_REASON} characters).`);
+        focusField(reasonId);
+      }
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -131,7 +153,7 @@ export function RescheduleDialog({
 
             <fieldset className="space-y-1.5">
               <legend className="text-sm font-medium text-foreground">New time slot</legend>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <div id={`${dateId}-slots`} tabIndex={-1} className="grid grid-cols-1 gap-2 rounded-xl outline-none sm:grid-cols-3">
                 {PICKUP_TIME_SLOTS.map((s) => {
                   const available = slotOpen(s);
                   const selected = slot === s;
@@ -167,8 +189,9 @@ export function RescheduleDialog({
                 maxLength={300}
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
-                placeholder="For example: vehicle breakdown, customer asked for the evening"
-                className="block w-full resize-none rounded-xl border border-border bg-background px-3 py-2 text-base text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:text-sm"
+                aria-invalid={tried && reasonShort}
+                placeholder="For example: vehicle breakdown, customer asked for the evening…"
+                className="block w-full resize-none rounded-xl border border-border bg-background px-3 py-2 text-base text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring aria-invalid:border-danger sm:text-sm"
               />
             </div>
 
@@ -181,7 +204,7 @@ export function RescheduleDialog({
                   Keep current time
                 </Button>
               </DialogClose>
-              <Button type="submit" size="sm" isLoading={saving} disabled={!canSave}>
+              <Button type="submit" size="sm" isLoading={saving}>
                 Move pickup
               </Button>
             </div>
