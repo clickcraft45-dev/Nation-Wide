@@ -46,6 +46,20 @@ export class UpdateCompanySettingsDto {
   @Matches(/^[0-9]{6}$/, { message: 'sacCode must be six digits' })
   sacCode?: string;
 
+  // A UPI ID (VPA) is handle@bank. Checked in shape: a typo here sends every UPI payment taken
+  // at a door to an address that does not exist, or worse, to one that does.
+  @IsOptional()
+  @IsString()
+  @Matches(/^[a-zA-Z0-9][a-zA-Z0-9._-]{1,255}@[a-zA-Z][a-zA-Z0-9.-]{1,63}$/, {
+    message: 'upiId must be a UPI ID such as name@bank',
+  })
+  upiId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  upiPayeeName?: string;
+
   @IsOptional()
   @IsString()
   @MinLength(1)

@@ -1,7 +1,9 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { NotFoundException } from '@nestjs/common';
 import type {
+  FuelAutoApplyResultDto,
   FuelSurchargeCheckDto,
+  FuelSurchargeRefreshDto,
   FuelSurchargeUpdateDto,
 } from '@nationwide/shared-types';
 import { PrismaService } from '../../database/prisma.service';
@@ -15,17 +17,32 @@ import {
 // number that moves every Monday is a table nobody reads.
 const HISTORY_KEPT = 5;
 const FETCH_TIMEOUT_MS = 12_000;
+// The daily check applies a published figure on its own only when it moves less than this from
+// what is configured. DHL's weekly change is a point or two; a bigger jump means the page changed
+// shape or a row was misread, and a person should look before every quote moves.
+const MAX_AUTO_CHANGE_POINTS = 10;
+// Opening Fuel & PSS refreshes from the carrier's page; admins reopening it within this window are
+// served the page already read rather than hitting DHL again.
+const PAGE_CACHE_MS = 10 * 60_000;
+
+type PageRead = { html: string; error: null } | { html: null; error: string };
 
 /**
  * Keeping the fuel surcharge in step with what the carriers publish.
  *
- * Reading a page NEVER changes a price. The fetched figure is shown next to the configured one and
- * an admin applies it — fuel feeds every quote this app produces, and a scraper that writes
- * straight into pricing would reprice the whole book the first time a page changed shape.
+ * For carriers whose page the server can read (DHL), autoApply() applies the current week's
+ * figure: each morning (FuelSurchargeScheduler) and whenever an admin opens Fuel & PSS (refresh()).
+ * It applies only a plausible weekly move (MAX_AUTO_CHANGE_POINTS); anything bigger is held for an
+ * admin, because fuel feeds every quote and a misread page must not reprice the whole book.
+ * FedEx and UPS refuse the server, so their figures are only ever applied by an admin.
  */
 @Injectable()
 export class FuelSurchargeService {
   private readonly logger = new Logger(FuelSurchargeService.name);
+  private readonly pageCache = new Map<
+    string,
+    { at: number; read: Promise<PageRead> }
+  >();
 
   constructor(private readonly prisma: PrismaService) {}
 
@@ -96,7 +113,8 @@ export class FuelSurchargeService {
   async apply(
     rateProviderId: string,
     percent: number,
-    actorId: string,
+    /** Null when the daily check applies it: nobody signed in. */
+    actorId: string | null,
     source: 'CARRIER_SITE' | 'MANUAL',
     label?: string,
   ): Promise<FuelSurchargeUpdateDto[]> {
@@ -127,19 +145,115 @@ export class FuelSurchargeService {
         appliedByAdminId: actorId,
       },
     });
-    await this.prisma.auditLog.create({
-      data: {
-        actorId,
-        action: 'FUEL_SURCHARGE_UPDATED',
-        entity: 'RateProvider',
-        entityId: rateProviderId,
-        before: { fuelChargePercent: previous },
-        after: { fuelChargePercent: percent, source, label: label ?? null },
-      },
-    });
+    // The audit log needs a person; an automatic change is recorded by the history row above
+    // (appliedBy empty), which the Fuel & PSS screen shows as "applied automatically".
+    if (actorId) {
+      await this.prisma.auditLog.create({
+        data: {
+          actorId,
+          action: 'FUEL_SURCHARGE_UPDATED',
+          entity: 'RateProvider',
+          entityId: rateProviderId,
+          before: { fuelChargePercent: previous },
+          after: { fuelChargePercent: percent, source, label: label ?? null },
+        },
+      });
+    }
 
     await this.prune(rateProviderId);
     return this.history(rateProviderId);
+  }
+
+  /**
+   * Opening Fuel & PSS: apply what the readable carrier pages say now, then report where every
+   * carrier stands. The admin who opened it is recorded against any change.
+   */
+  async refresh(actorId: string): Promise<FuelSurchargeRefreshDto> {
+    const results = await this.autoApply(new Date(), actorId);
+    return { results, rows: await this.check() };
+  }
+
+  /**
+   * Reads every carrier page the server can read and applies this week's figure where it differs.
+   * Run each morning by FuelSurchargeScheduler (actorId null) and on opening Fuel & PSS; safe to
+   * run again (an unchanged figure is skipped).
+   */
+  async autoApply(
+    now: Date = new Date(),
+    actorId: string | null = null,
+  ): Promise<FuelAutoApplyResultDto[]> {
+    const providers = await this.prisma.rateProvider.findMany({
+      where: { isActive: true },
+      orderBy: { name: 'asc' },
+    });
+    const results: FuelAutoApplyResultDto[] = [];
+
+    for (const provider of providers) {
+      const source = FUEL_SURCHARGE_SOURCES.find(
+        (s) => s.providerCode === provider.code && s.automatic,
+      );
+      if (!source) continue;
+      // DHL and DHL Express read the same page; the page cache fetches it once.
+      const fetched = await this.fetchDhl(source.url, now);
+      const parsed = fetched.parsed;
+      const current = provider.fuelChargePercent;
+
+      if (!parsed) {
+        results.push({
+          code: provider.code,
+          outcome: 'FAILED',
+          percent: null,
+          previousPercent: null,
+          label: null,
+          detail: fetched.error ?? 'Nothing could be read from the page.',
+        });
+      } else if (parsed.percent === current) {
+        results.push({
+          code: provider.code,
+          outcome: 'UNCHANGED',
+          percent: current,
+          previousPercent: null,
+          label: parsed.label,
+          detail: `${parsed.label} is ${parsed.percent}%, as configured.`,
+        });
+      } else if (
+        current > 0 &&
+        Math.abs(parsed.percent - current) > MAX_AUTO_CHANGE_POINTS
+      ) {
+        results.push({
+          code: provider.code,
+          outcome: 'HELD',
+          percent: parsed.percent,
+          previousPercent: current,
+          label: parsed.label,
+          detail: `${parsed.label} reads ${parsed.percent}% against ${current}% configured: too large a move to apply unseen. Check it on Fuel & PSS.`,
+        });
+      } else {
+        await this.apply(
+          provider.id,
+          parsed.percent,
+          actorId,
+          'CARRIER_SITE',
+          parsed.label,
+        );
+        results.push({
+          code: provider.code,
+          outcome: 'APPLIED',
+          percent: parsed.percent,
+          previousPercent: current,
+          label: parsed.label,
+          detail: `${current}% → ${parsed.percent}% (${parsed.label}).`,
+        });
+      }
+    }
+
+    for (const r of results) {
+      const line = `Fuel surcharge ${r.code}: ${r.outcome}. ${r.detail}`;
+      if (r.outcome === 'HELD' || r.outcome === 'FAILED')
+        this.logger.warn(line);
+      else this.logger.log(line);
+    }
+    return results;
   }
 
   /** The last five changes, newest first. */
@@ -177,7 +291,32 @@ export class FuelSurchargeService {
     });
   }
 
-  private async fetchDhl(url: string) {
+  private async fetchDhl(url: string, now: Date = new Date()) {
+    const page = await this.readPage(url);
+    if (page.html === null) return { parsed: null, error: page.error };
+    const parsed = parseDhlFuelSurcharge(page.html, now);
+    return {
+      parsed,
+      error: parsed
+        ? null
+        : 'The page loaded but no surcharge could be read from it — it has probably changed shape. Enter the percentage by hand.',
+    };
+  }
+
+  // One read per page per PAGE_CACHE_MS, shared by everyone asking in that window. A failed read
+  // is not kept, so the next open tries the carrier again.
+  private readPage(url: string): Promise<PageRead> {
+    const cached = this.pageCache.get(url);
+    if (cached && Date.now() - cached.at < PAGE_CACHE_MS) return cached.read;
+    const read = this.download(url);
+    this.pageCache.set(url, { at: Date.now(), read });
+    void read.then((r) => {
+      if (r.html === null) this.pageCache.delete(url);
+    });
+    return read;
+  }
+
+  private async download(url: string): Promise<PageRead> {
     try {
       const response = await fetch(url, {
         // Carrier sites answer a bare fetch with a challenge page; a browser UA is the difference
@@ -190,15 +329,9 @@ export class FuelSurchargeService {
         signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       });
       if (!response.ok) {
-        return { parsed: null, error: `The page answered ${response.status}.` };
+        return { html: null, error: `The page answered ${response.status}.` };
       }
-      const parsed = parseDhlFuelSurcharge(await response.text());
-      return {
-        parsed,
-        error: parsed
-          ? null
-          : 'The page loaded but no surcharge could be read from it — it has probably changed shape. Enter the percentage by hand.',
-      };
+      return { html: await response.text(), error: null };
     } catch (error) {
       // A carrier being unreachable is ordinary; it must not take the screen down with it.
       this.logger.warn(
@@ -207,7 +340,7 @@ export class FuelSurchargeService {
         }`,
       );
       return {
-        parsed: null,
+        html: null,
         error: 'Could not reach the carrier site just now.',
       };
     }

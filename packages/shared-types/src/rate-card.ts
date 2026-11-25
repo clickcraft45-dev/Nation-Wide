@@ -27,6 +27,9 @@ export interface CompanySettingsDto {
   stateName: string | null;
   stateCode: string | null; // GST state code, e.g. "36" for Telangana
   sacCode: string | null; // service accounting code, e.g. "996812" for courier
+  // Where customers pay by UPI: the QR on the partner's phone and at the counter is drawn from these.
+  upiId: string | null; // e.g. "name@bank"
+  upiPayeeName: string | null;
   // What a customer pays for cancelling before an AWB is mapped, and the warehouse the per-km
   // part is measured from. Read off the active template at cancellation time.
   cancellationBaseFee: number;
@@ -49,6 +52,8 @@ export interface UpdateCompanySettingsDto {
   stateName?: string;
   stateCode?: string;
   sacCode?: string;
+  upiId?: string;
+  upiPayeeName?: string;
   companyName?: string;
   tagline?: string;
   primaryColor?: string;

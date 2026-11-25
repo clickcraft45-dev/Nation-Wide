@@ -7,6 +7,7 @@ import { ToastProvider } from "@/components/ui/toast";
 import { LiquidGlassFilter } from "@/components/ui/liquid-glass-button";
 import { InstallPrompt } from "@/components/pwa/install-prompt";
 import { FormFocus } from "@/components/ui/form-focus";
+import { FormDraftKeeper } from "@/components/ui/form-draft-keeper";
 import { SITE_URL } from "@/lib/constants/site";
 import { JsonLd } from "@/components/seo/json-ld";
 import {
@@ -131,6 +132,8 @@ export default function RootLayout({
         <InstallPrompt />
         {/* After any submit, moves to the first field that failed validation. */}
         <FormFocus />
+        {/* Keeps what was typed into any form through a refresh, until it is submitted. */}
+        <FormDraftKeeper />
       </body>
     </html>
   );

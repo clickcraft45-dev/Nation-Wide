@@ -74,8 +74,8 @@ export default function CustomerDashboardPage() {
         <p className="mt-0.5 text-sm text-white/80">Enter your Order ID / Tracking ID</p>
         <div className="on-dark mt-3">
           <TrackingSearchForm
-            onSubmit={(trackingNumber) =>
-              router.push(`/tracking?tracking=${encodeURIComponent(trackingNumber)}`)
+            onSubmit={(trackingNumbers) =>
+              router.push(`/tracking?tracking=${encodeURIComponent(trackingNumbers.join(","))}`)
             }
             submitButtonClassName="bg-white text-primary hover:bg-white/90"
           />

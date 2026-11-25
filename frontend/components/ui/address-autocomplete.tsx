@@ -2,7 +2,9 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { MapPin } from "lucide-react";
+import type { PlaceAddressDto, PlaceSuggestionDto } from "@nationwide/shared-types";
 import { Input, type InputProps } from "@/components/ui/input";
+import { apiClient } from "@/lib/api-client";
 import { cn } from "@/lib/utils/cn";
 import {
   mapsServiceAvailable,
@@ -15,7 +17,26 @@ import {
 interface Suggestion {
   id: string;
   text: string;
-  prediction: google.maps.places.PlacePrediction;
+  /** Second line under the place name, when the source splits it. */
+  secondary?: string;
+  /** From Google in the browser: fetch the details through the JS API. */
+  prediction?: google.maps.places.PlacePrediction;
+  /** From the backend: either the address itself (OpenStreetMap) or a Google id to look up. */
+  server?: PlaceSuggestionDto;
+}
+
+/** Suggestions from the backend, used when the browser key cannot call Places. */
+async function serverSuggestions(input: string, regionKey: string): Promise<Suggestion[]> {
+  const params = new URLSearchParams({ q: input });
+  // The backend biases to one region; several codes means "worldwide" for it.
+  if (regionKey && !regionKey.includes(",")) params.set("region", regionKey);
+  const list = await apiClient.get<PlaceSuggestionDto[]>(`/places/suggest?${params.toString()}`);
+  return list.map((s) => ({
+    id: s.id,
+    text: s.secondary ? `${s.primary}, ${s.secondary}` : s.primary,
+    secondary: s.secondary,
+    server: s,
+  }));
 }
 
 interface AddressAutocompleteProps extends Omit<InputProps, "onChange" | "value" | "onSelect"> {
@@ -66,33 +87,43 @@ export function AddressAutocomplete({
   const regionKey = regionCodes?.join(",") ?? "";
 
   useEffect(() => {
-    if (!typedRef.current || !mapsServiceAvailable("places") || value.trim().length < 3) return;
+    if (!typedRef.current || value.trim().length < 3) return;
     let cancelled = false;
     const timer = setTimeout(async () => {
-      try {
-        await loadGoogleMaps();
-        const { AutocompleteSessionToken, AutocompleteSuggestion } = (await google.maps.importLibrary(
-          "places",
-        )) as google.maps.PlacesLibrary;
-        sessionRef.current ??= new AutocompleteSessionToken();
-        const { suggestions: raw } = await AutocompleteSuggestion.fetchAutocompleteSuggestions({
-          input: value,
-          sessionToken: sessionRef.current,
-          ...(regionKey ? { includedRegionCodes: regionKey.split(",") } : {}),
-        });
-        if (cancelled) return;
-        const next = raw.flatMap((s) =>
-          s.placePrediction
-            ? [{ id: s.placePrediction.placeId, text: s.placePrediction.text.toString(), prediction: s.placePrediction }]
-            : [],
-        );
-        setSuggestions(next);
-        setActive(-1);
-        setOpen(next.length > 0);
-      } catch (error) {
-        noteMapsFailure("places", error);
-        if (!cancelled) setOpen(false);
+      let next: Suggestion[] | null = null;
+      if (mapsServiceAvailable("places")) {
+        try {
+          await loadGoogleMaps();
+          const { AutocompleteSessionToken, AutocompleteSuggestion } = (await google.maps.importLibrary(
+            "places",
+          )) as google.maps.PlacesLibrary;
+          sessionRef.current ??= new AutocompleteSessionToken();
+          const { suggestions: raw } = await AutocompleteSuggestion.fetchAutocompleteSuggestions({
+            input: value,
+            sessionToken: sessionRef.current,
+            ...(regionKey ? { includedRegionCodes: regionKey.split(",") } : {}),
+          });
+          next = raw.flatMap((s) =>
+            s.placePrediction
+              ? [{ id: s.placePrediction.placeId, text: s.placePrediction.text.toString(), prediction: s.placePrediction }]
+              : [],
+          );
+        } catch (error) {
+          // Refused key, Places not enabled or the script blocked: the backend answers instead.
+          noteMapsFailure("places", error);
+        }
       }
+      if (!next || next.length === 0) {
+        try {
+          next = await serverSuggestions(value, regionKey);
+        } catch {
+          next = [];
+        }
+      }
+      if (cancelled) return;
+      setSuggestions(next);
+      setActive(-1);
+      setOpen(next.length > 0);
     }, 250);
     return () => {
       cancelled = true;
@@ -104,6 +135,14 @@ export function AddressAutocomplete({
     setOpen(false);
     typedRef.current = false;
     try {
+      if (suggestion.server) {
+        const address =
+          suggestion.server.address ??
+          (await apiClient.get<PlaceAddressDto>(`/places/${encodeURIComponent(suggestion.server.id)}`));
+        onSelect(address);
+        return;
+      }
+      if (!suggestion.prediction) throw new Error("No place to look up");
       const place = suggestion.prediction.toPlace();
       await place.fetchFields({ fields: ["addressComponents", "location", "formattedAddress"] });
       // The details call closes the session; the next search starts a fresh one.
@@ -122,8 +161,8 @@ export function AddressAutocomplete({
         longitude: place.location?.lng() ?? null,
       });
     } catch (error) {
-      noteMapsFailure("places", error);
-      // The details lookup failed — keep at least the address text they chose.
+      if (suggestion.prediction) noteMapsFailure("places", error);
+      // The details lookup failed: keep at least the address text they chose.
       onChange(suggestion.text);
     }
   }
@@ -190,12 +229,23 @@ export function AddressAutocomplete({
               )}
             >
               <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-              <span>{suggestion.text}</span>
+              {suggestion.server ? (
+                <span className="min-w-0">
+                  <span className="block font-medium">{suggestion.server.primary}</span>
+                  {suggestion.secondary && (
+                    <span className="block text-xs text-muted-foreground">{suggestion.secondary}</span>
+                  )}
+                </span>
+              ) : (
+                <span>{suggestion.text}</span>
+              )}
             </li>
           ))}
-          {/* Google's terms require attribution on suggestions shown without a Google map. */}
+          {/* Google's terms and the OpenStreetMap licence both require attribution on the list. */}
           <li role="presentation" className="px-3 py-1.5 text-right text-[10px] text-muted-foreground">
-            Powered by Google
+            {suggestions.some((s) => s.server?.source === "osm")
+              ? "Search by OpenStreetMap contributors"
+              : "Powered by Google"}
           </li>
         </ul>
       )}

@@ -6,6 +6,7 @@ import { ArrowLeft, CalendarPlus, Check, MapPinned, Phone } from "lucide-react";
 import {
   chargeableWeightKg,
   type CountryDto,
+  type PaymentUpiDto,
   type PickupRequestDto,
   type RecalculatePreviewDto,
   type PaymentMethodCode,
@@ -142,6 +143,8 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
   const [dueApprovedByAdminId, setDueApprovedByAdminId] = useState("");
   const [dueNote, setDueNote] = useState("");
   const [dueApprovers, setDueApprovers] = useState<{ id: string; name: string }[]>([]);
+  // The UPI account the payment QR is drawn from; undefined until asked for, null while loading.
+  const [paymentUpi, setPaymentUpi] = useState<PaymentUpiDto | null | undefined>(undefined);
 
   // Acceptance checklist state.
   const [parcelPackedProperly, setParcelPackedProperly] = useState(false);
@@ -223,6 +226,17 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
       .then(setDueApprovers)
       .catch(() => setDueApprovers([]));
   }, [pickup?.verifiedAt, dueApprovers.length, api]);
+
+  // Asked for with the approvers, once the parcel is verified and payment is next.
+  useEffect(() => {
+    if (!pickup?.verifiedAt || paymentUpi !== undefined) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPaymentUpi(null);
+    apiClient
+      .get<PaymentUpiDto>(`${api}/payment-upi`)
+      .then(setPaymentUpi)
+      .catch(() => setPaymentUpi({ upiId: null, payeeName: null }));
+  }, [pickup?.verifiedAt, paymentUpi, api]);
 
   // Auto-recalculate whenever the weight settles (debounced) — the partner never has to
   // remember to tap a "Recalculate" button. Server-side is still the source of truth; this
@@ -1050,6 +1064,8 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
                       onChoice={setMethodChoice}
                       form={splitForm}
                       onForm={setSplitForm}
+                      upi={paymentUpi}
+                      upiNote={`NationWide pickup ${pickup.id.slice(0, 8)}`}
                     />
                   )}
 

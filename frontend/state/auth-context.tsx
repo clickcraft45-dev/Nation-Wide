@@ -12,6 +12,7 @@ import type { AuthUserDto, LoginResponseDto } from "@nationwide/shared-types";
 import { ApiError, apiClient, setAccessToken, setUnauthorizedHandler } from "@/lib/api-client";
 import { decodeAccessToken } from "@/lib/auth/jwt";
 import { readSessionHint, writeSessionHint } from "@/lib/auth/session-hint";
+import { clearAllDrafts } from "@/lib/drafts";
 
 interface RegisterInput {
   name: string;
@@ -106,6 +107,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setAccessToken(null);
       setUser(null);
       writeSessionHint(false);
+      // Half-typed forms belong to this person: the next one to sign in here must not see them.
+      clearAllDrafts();
     }
   }, []);
 

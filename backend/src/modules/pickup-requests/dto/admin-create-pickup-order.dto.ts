@@ -2,6 +2,7 @@ import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
+  IsBoolean,
   IsDefined,
   IsNumber,
   IsOptional,
@@ -11,6 +12,7 @@ import {
   Max,
   MaxLength,
   MinLength,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 import { B2bPickupDto, OrderShipmentDto } from './b2b-create-orders.dto';
@@ -50,10 +52,20 @@ export class AdminCreatePickupOrderDto {
   @MinLength(1)
   submissionKey!: string;
 
+  /**
+   * True when the customer brings the parcel to the warehouse: no pickup address, no partner.
+   * Staff receive, weigh and price it at the counter (Warehouse Drop-offs).
+   */
+  @IsOptional()
+  @IsBoolean()
+  dropAtWarehouse?: boolean;
+
+  /** Where and when to collect. Required unless dropAtWarehouse. */
+  @ValidateIf((o: AdminCreatePickupOrderDto) => !o.dropAtWarehouse)
   @IsDefined()
   @ValidateNested()
   @Type(() => B2bPickupDto)
-  pickup!: B2bPickupDto;
+  pickup?: B2bPickupDto;
 
   /**
    * Optional. Left out (the usual case), staff only dispatch: the partner takes the destination,
@@ -66,8 +78,10 @@ export class AdminCreatePickupOrderDto {
   @Type(() => AdminOrderDto)
   orders?: AdminOrderDto[];
 
+  /** Who collects it. Required unless dropAtWarehouse: a drop-off never goes to a partner. */
+  @ValidateIf((o: AdminCreatePickupOrderDto) => !o.dropAtWarehouse)
   @IsUUID()
-  partnerId!: string;
+  partnerId?: string;
 
   /**
    * Where it is going, when staff already know. Saves the partner asking at the door; left out,

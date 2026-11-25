@@ -1165,6 +1165,12 @@ model CompanySettings {
   // "other delivery services", and which one applies is the business's call, not this code's.
   sacCode   String? @map("sac_code")
 
+  // Where customers pay by UPI. The partner app and the warehouse counter draw a QR from these
+  // with the amount filled in, so the customer only scans and confirms. Admin edits them on the
+  // Payments page.
+  upiId        String? @map("upi_id")
+  upiPayeeName String? @map("upi_payee_name")
+
   // What a customer is charged for cancelling before an AWB is mapped, and the warehouse the
   // per-km part is measured from. Editable by admins under Pricing -> Rate management.
   cancellationBaseFee  Float  @default(500) @map("cancellation_base_fee")
@@ -1711,11 +1717,12 @@ model FuelSurchargeUpdate {
   /// What the source called it, e.g. "CW 40".
   label           String?
 
-  appliedByAdminId String   @map("applied_by_admin_id")
+  /// Null when the daily check applied it from the carrier's page, with nobody signed in.
+  appliedByAdminId String?  @map("applied_by_admin_id")
   createdAt        DateTime @default(now()) @map("created_at")
 
   rateProvider RateProvider @relation(fields: [rateProviderId], references: [id], onDelete: Cascade)
-  appliedBy    AdminUser    @relation("FuelSurchargeAppliedBy", fields: [appliedByAdminId], references: [id])
+  appliedBy    AdminUser?   @relation("FuelSurchargeAppliedBy", fields: [appliedByAdminId], references: [id])
 
   @@index([rateProviderId, createdAt])
   @@map("fuel_surcharge_updates")

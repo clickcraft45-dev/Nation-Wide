@@ -1,6 +1,19 @@
-import { Controller, Get, Param, Header } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Header,
+  HttpCode,
+  NotFoundException,
+  Param,
+  Post,
+} from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
-import type { TrackingResultDto } from '@nationwide/shared-types';
+import type {
+  TrackingBatchItemDto,
+  TrackingResultDto,
+} from '@nationwide/shared-types';
+import { TrackBatchDto } from './dto/track-batch.dto';
 import { TrackingService } from './tracking.service';
 import { publicTracking } from './public-view';
 
@@ -16,6 +29,13 @@ import { publicTracking } from './public-view';
 // a second, which no human reaches and which still leaves walking the NW-{YY}-{sequence} range
 // a slow, obvious crawl rather than a scriptable dump.
 const TRACKING_THROTTLE = { default: { limit: 60, ttl: 60_000 } };
+
+// A batch is up to 30 lookups in one request, so far fewer requests a minute: 6 batches is 180
+// numbers, enough for a business re-checking its whole despatch list, while walking the
+// sequential range stays a slow crawl.
+const BATCH_THROTTLE = { default: { limit: 6, ttl: 60_000 } };
+/** Lookups run this many at a time: each may call a carrier's API, which must not see a burst. */
+const BATCH_CONCURRENCY = 5;
 
 @Controller('tracking')
 export class TrackingController {
@@ -34,5 +54,46 @@ export class TrackingController {
     return publicTracking(
       await this.trackingService.getStatus(internalTrackingNumber),
     );
+  }
+
+  /**
+   * Several shipments in one go, one answer per number in the order asked. A number that is
+   * not found, or whose carrier is down, gets its own error and never fails the others.
+   */
+  @Throttle(BATCH_THROTTLE)
+  @Post('batch')
+  @HttpCode(200)
+  async getMany(@Body() body: TrackBatchDto): Promise<TrackingBatchItemDto[]> {
+    const references = [
+      ...new Set(body.numbers.map((n) => n.trim()).filter(Boolean)),
+    ];
+    const answers = new Array<TrackingBatchItemDto>(references.length);
+    let next = 0;
+    const worker = async () => {
+      while (next < references.length) {
+        const i = next++;
+        const reference = references[i];
+        try {
+          const result = publicTracking(
+            await this.trackingService.getStatus(reference),
+          );
+          answers[i] = { reference, result, error: null };
+        } catch (error) {
+          answers[i] = {
+            reference,
+            result: null,
+            error:
+              error instanceof NotFoundException ? 'NOT_FOUND' : 'UNAVAILABLE',
+          };
+        }
+      }
+    };
+    await Promise.all(
+      Array.from(
+        { length: Math.min(BATCH_CONCURRENCY, references.length) },
+        worker,
+      ),
+    );
+    return answers;
   }
 }

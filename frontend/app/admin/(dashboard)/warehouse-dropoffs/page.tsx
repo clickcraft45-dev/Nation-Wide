@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Warehouse } from "lucide-react";
+import Link from "next/link";
+import { Plus, Warehouse } from "lucide-react";
 import type { PickupRequestDto } from "@nationwide/shared-types";
 import { apiClient, errorMessage } from "@/lib/api-client";
 import { formatDateTime } from "@/lib/utils/format-date-time";
@@ -11,6 +12,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/page-state";
 import { PickupRequestStatusBadge } from "@/components/ui/status-badge";
+import { buttonVariants } from "@/components/ui/button";
 
 const CLOSED = new Set(["COMPLETED", "REJECTED", "CANCELLED"]);
 
@@ -65,12 +67,18 @@ export default function WarehouseDropoffsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold text-foreground">Warehouse Drop-offs</h1>
-        <p className="text-sm text-muted-foreground">
-          Parcels customers bring to the warehouse. Receive, weigh, take payment and complete them here
-          {!isLoading && waiting > 0 ? `: ${waiting} waiting.` : "."}
-        </p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-xl font-semibold text-foreground">Warehouse Drop-offs</h1>
+          <p className="text-sm text-muted-foreground">
+            Parcels customers bring to the warehouse. Receive, weigh, take payment and complete them here
+            {!isLoading && waiting > 0 ? `: ${waiting} waiting.` : "."}
+          </p>
+        </div>
+        {/* A walk-in or a phone call: book it with the country and carrier, weigh it at the counter. */}
+        <Link href="/admin/orders/new?mode=dropoff" className={buttonVariants({ className: "shrink-0" })}>
+          <Plus className="h-4 w-4" aria-hidden /> New drop-off
+        </Link>
       </div>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -114,11 +122,16 @@ export default function WarehouseDropoffsPage() {
                   <p className="text-xs">{p.pickupContactPhone}</p>
                 </TableCell>
                 <TableCell className="whitespace-nowrap text-muted-foreground">
-                  {p.shipmentType.charAt(0) + p.shipmentType.slice(1).toLowerCase()} · {p.estimatedWeightKg}kg →{" "}
-                  {p.destCountry}
+                  {p.shipmentType.charAt(0) + p.shipmentType.slice(1).toLowerCase()}
+                  {p.estimatedWeightKg > 0 ? ` · ${p.estimatedWeightKg}kg` : ""} → {p.destCountry || "country at counter"}
+                  {p.rateProviderName && <p className="text-xs">{p.rateProviderName}</p>}
                 </TableCell>
                 <TableCell className="whitespace-nowrap">
-                  {p.currency} {p.estimatedPrice.toLocaleString("en-IN")}
+                  {p.verifiedPrice != null
+                    ? `${p.currency} ${p.verifiedPrice.toLocaleString("en-IN")}`
+                    : p.estimatedPrice > 0
+                    ? `${p.currency} ${p.estimatedPrice.toLocaleString("en-IN")}`
+                    : <span className="text-muted-foreground">Priced at counter</span>}
                 </TableCell>
                 <TableCell>
                   <PickupRequestStatusBadge status={p.status} />

@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, Crosshair, DoorOpen, Layers, MapPin, Move } from "lucide-react";
-import type { PickupSpotDto, PickupSpotsDto } from "@nationwide/shared-types";
+import type { PickupSpotDto, PickupSpotsDto, PlaceAddressDto, PlaceSuggestionDto } from "@nationwide/shared-types";
+import { apiClient } from "@/lib/api-client";
 import {
   distanceKm,
   googleMapsEnabled,
@@ -175,27 +176,47 @@ export function MapPinField({
   }
 
   /**
-   * Move the map to whatever was typed. Needs only Geocoding, so Enter works even where the
-   * suggestion dropdown (Places API) never appears.
+   * Move the map to whatever was typed: the browser Geocoder first, then the backend's place
+   * search, so Enter works even when the browser key is refused.
    */
   async function searchFor(text: string) {
     const query = text.trim();
-    const geocoder = geocoderRef.current;
-    if (!query || !geocoder) return;
+    if (!query) return;
     setSearchError(null);
+    const geocoder = geocoderRef.current;
+    if (geocoder) {
+      try {
+        const { results } = await geocoder.geocode({ address: query, componentRestrictions: { country: "in" } });
+        const best = results[0];
+        if (best) {
+          const location = best.geometry.location;
+          const parsed = parseAddressComponents(
+            best.address_components.map((c) => ({ long: c.long_name, short: c.short_name, types: c.types })),
+            best.formatted_address,
+          );
+          onChange({ ...parsed, latitude: location.lat(), longitude: location.lng() });
+          return;
+        }
+      } catch {
+        // Geocoding refused or down: the backend's place search below answers instead.
+      }
+    }
     try {
-      const { results } = await geocoder.geocode({ address: query, componentRestrictions: { country: "in" } });
-      const best = results[0];
-      if (!best) {
+      const list = await apiClient.get<PlaceSuggestionDto[]>(
+        `/places/suggest?${new URLSearchParams({ q: query, region: "in" }).toString()}`,
+      );
+      const first = list[0];
+      if (!first) {
         setSearchError("No place found for that search. Try a nearby landmark.");
         return;
       }
-      const location = best.geometry.location;
-      const parsed = parseAddressComponents(
-        best.address_components.map((c) => ({ long: c.long_name, short: c.short_name, types: c.types })),
-        best.formatted_address,
-      );
-      onChange({ ...parsed, latitude: location.lat(), longitude: location.lng() });
+      const address =
+        first.address ?? (await apiClient.get<PlaceAddressDto>(`/places/${encodeURIComponent(first.id)}`));
+      if (address.latitude == null || address.longitude == null) {
+        setSearchError("No place found for that search. Try a nearby landmark.");
+        return;
+      }
+      onChange(address);
     } catch {
       setSearchError("Couldn't search just now. Adjust the pin by hand instead.");
     }

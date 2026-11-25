@@ -36,3 +36,30 @@ export interface PostalLookupDto {
   places: PostalPlaceDto[];
   elsewhere: PostalPlaceDto[];
 }
+
+/** An address resolved to a point: what a picked place search suggestion fills in. */
+export interface PlaceAddressDto {
+  addressLine1: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  /** ISO 3166-1 alpha-2, lowercase: "in". */
+  countryCode: string;
+  formatted: string;
+  latitude: number | null;
+  longitude: number | null;
+}
+
+/**
+ * One place search suggestion from GET /places/suggest. Google suggestions carry only an id
+ * (their address comes from GET /places/:id when picked); OpenStreetMap ones carry the address.
+ */
+export interface PlaceSuggestionDto {
+  id: string;
+  /** The place's name or first line. */
+  primary: string;
+  /** The rest: locality, city, state. */
+  secondary: string;
+  source: "google" | "osm";
+  address: PlaceAddressDto | null;
+}

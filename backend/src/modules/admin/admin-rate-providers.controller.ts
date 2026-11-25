@@ -21,6 +21,7 @@ import {
 } from 'class-validator';
 import type {
   FuelSurchargeCheckDto,
+  FuelSurchargeRefreshDto,
   FuelSurchargeUpdateDto,
   CountryDetailDto,
   ProviderCountryDto,
@@ -78,6 +79,18 @@ export class AdminRateProvidersController {
   @Get('fuel-surcharges')
   fuelSurcharges(): Promise<FuelSurchargeCheckDto[]> {
     return this.fuelSurcharge.check();
+  }
+
+  /**
+   * Opening Fuel & PSS: reads the carrier pages the server can read (DHL), applies this week's
+   * figure where it changed (recorded against this admin), and returns what changed with the
+   * rows. A POST because it can change a price; a large jump is held, not applied.
+   */
+  @Post('fuel-surcharges/refresh')
+  refreshFuelSurcharges(
+    @CurrentUser() user: JwtPayload,
+  ): Promise<FuelSurchargeRefreshDto> {
+    return this.fuelSurcharge.refresh(user.sub);
   }
 
   @Post(':id/fuel-surcharge')

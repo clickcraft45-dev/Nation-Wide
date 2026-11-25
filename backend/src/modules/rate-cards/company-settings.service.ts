@@ -107,6 +107,8 @@ export class CompanySettingsService {
         stateName: source.stateName,
         stateCode: source.stateCode,
         sacCode: source.sacCode,
+        upiId: source.upiId,
+        upiPayeeName: source.upiPayeeName,
         name: name.trim(),
         isActive: false,
         updatedByAdminId: actorId,

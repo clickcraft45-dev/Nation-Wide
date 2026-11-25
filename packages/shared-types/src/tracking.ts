@@ -54,3 +54,34 @@ export interface TrackingResultDto {
   lastUpdated: string | null; // ISO 8601
   events: TrackingEventDto[];
 }
+
+/** How many shipments one tracking search may ask about at once. */
+export const MAX_TRACKING_BATCH = 30;
+
+/** One number's answer in POST /tracking/batch: its result, or why there is none. */
+export interface TrackingBatchItemDto {
+  /** The number as it was asked for. */
+  reference: string;
+  result: TrackingResultDto | null;
+  /** NOT_FOUND: no shipment has this number. UNAVAILABLE: the lookup failed; try again later. */
+  error: "NOT_FOUND" | "UNAVAILABLE" | null;
+}
+
+/**
+ * The tracking numbers in what someone typed or pasted: one per line, though commas, semicolons
+ * and spaces separate them too (a column copied from a spreadsheet, a list in an email).
+ * Duplicates are dropped, case-insensitively, keeping the first spelling and the order given.
+ */
+export function parseTrackingNumbers(text: string): string[] {
+  const seen = new Set<string>();
+  const numbers: string[] = [];
+  for (const raw of text.split(/[\s,;]+/)) {
+    const value = raw.trim().replace(/^["'#]+|["'.]+$/g, "");
+    if (!value) continue;
+    const key = value.toUpperCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    numbers.push(value);
+  }
+  return numbers;
+}

@@ -19,6 +19,7 @@ import {
   type PaymentSplitDto,
   type PickupPhotoKind,
   type B2bRequestSummaryDto,
+  type PaymentUpiDto,
   type PickupDocumentsDto,
   type PickupRequestStatusCode,
   type PriceChangeDto,
@@ -525,6 +526,21 @@ export class PickupRequestsService {
   }
 
   /**
+   * The UPI ID customers pay into, from the active company settings: the partner's phone and the
+   * warehouse counter draw the QR from it with the amount filled in.
+   */
+  async paymentUpi(): Promise<PaymentUpiDto> {
+    const settings = await this.prisma.companySettings.findFirst({
+      where: { isActive: true },
+      select: { upiId: true, upiPayeeName: true, companyName: true },
+    });
+    return {
+      upiId: settings?.upiId ?? null,
+      payeeName: settings?.upiPayeeName || settings?.companyName || null,
+    };
+  }
+
+  /**
    * The admins a partner may name as having approved a "pay later" at the door.
    *
    * Names and ids only. A partner rings an admin from the doorstep and has to record who said
@@ -817,27 +833,69 @@ export class PickupRequestsService {
     dto: AdminCreatePickupOrderDto,
     actorId: string,
   ): Promise<B2bOrderResultDto[]> {
-    const partner = await this.prisma.adminUser.findUnique({
-      where: { id: dto.partnerId },
-    });
-    if (!partner || partner.role !== 'PICKUP_PARTNER' || !partner.isActive) {
-      throw new NotFoundException(`Pickup partner ${dto.partnerId} not found`);
-    }
     const customer = await this.prisma.customer.findUnique({
       where: { id: dto.customerId },
-      select: { id: true },
+      select: { id: true, name: true, phone: true },
     });
     if (!customer) {
       throw new NotFoundException(`Customer ${dto.customerId} not found`);
     }
 
+    // The customer brings it in: no partner, no address, weighed and priced at the counter.
+    if (dto.dropAtWarehouse) {
+      if (dto.orders?.length) {
+        throw new BadRequestException(
+          'A warehouse drop-off is weighed at the counter: leave out the parcel details',
+        );
+      }
+      return [
+        await this.dispatchForAdmin(dto, actorId, {
+          dropAtWarehouse: true,
+          pickupContactName: customer.name,
+          pickupContactPhone: customer.phone,
+        }),
+      ];
+    }
+
+    // The DTO requires both unless dropAtWarehouse; narrowed here for the compiler.
+    const partnerId = dto.partnerId;
+    const pickup = dto.pickup;
+    if (!partnerId || !pickup) {
+      throw new BadRequestException('Choose the pickup address and partner');
+    }
+    const partner = await this.prisma.adminUser.findUnique({
+      where: { id: partnerId },
+    });
+    if (!partner || partner.role !== 'PICKUP_PARTNER' || !partner.isActive) {
+      throw new NotFoundException(`Pickup partner ${partnerId} not found`);
+    }
+
     if (!dto.orders?.length) {
-      return [await this.dispatchForAdmin(dto, actorId)];
+      // A pasted short link carries no coordinates until expanded.
+      let { pickupLatitude, pickupLongitude } = pickup;
+      if (pickupLatitude == null && pickup.pickupMapsUrl) {
+        const resolved = await resolveMapsUrl(pickup.pickupMapsUrl);
+        pickupLatitude = resolved?.latitude;
+        pickupLongitude = resolved?.longitude;
+      }
+      return [
+        await this.dispatchForAdmin(
+          dto,
+          actorId,
+          {
+            ...pickup,
+            dropAtWarehouse: false,
+            pickupLatitude,
+            pickupLongitude,
+          },
+          partnerId,
+        ),
+      ];
     }
     return this.createBatchForCustomer(
       dto.customerId,
-      { ...dto, orders: dto.orders },
-      { partnerId: dto.partnerId, actorId },
+      { ...dto, pickup, orders: dto.orders },
+      { partnerId, actorId },
     );
   }
 
@@ -876,14 +934,16 @@ export class PickupRequestsService {
   }
 
   /**
-   * Staff send a partner to collect, with nothing known yet but who and where. The partner takes
-   * the destination, recipient, boxes and contents at the door and names the price there (the
-   * pickup carries no carrier and no estimate, which is what the partner app reads as "price it
-   * at the door").
+   * Staff book a parcel with nothing known yet but who and where it is going. Either a partner
+   * collects it (partnerId) or the customer brings it to the warehouse (logistics.dropAtWarehouse)
+   * and staff work it at the counter. Whoever weighs it takes the recipient, boxes and contents;
+   * with a carrier chosen the price follows from its rate card, without one they name it.
    */
   private async dispatchForAdmin(
     dto: AdminCreatePickupOrderDto,
     actorId: string,
+    logistics: PickupLogistics,
+    partnerId?: string,
   ): Promise<B2bOrderResultDto> {
     // A retried submit returns the pickup it already made.
     const existingQuote = await this.prisma.quote.findFirst({
@@ -920,18 +980,6 @@ export class PickupRequestsService {
 
     let pickupRequest = existing;
     if (!pickupRequest) {
-      let { pickupLatitude, pickupLongitude } = dto.pickup;
-      if (pickupLatitude == null && dto.pickup.pickupMapsUrl) {
-        const resolved = await resolveMapsUrl(dto.pickup.pickupMapsUrl);
-        pickupLatitude = resolved?.latitude;
-        pickupLongitude = resolved?.longitude;
-      }
-      const logistics: PickupLogistics = {
-        ...dto.pickup,
-        dropAtWarehouse: false,
-        pickupLatitude,
-        pickupLongitude,
-      };
       pickupRequest = await this.prisma.$transaction(async (tx) => {
         const quote = await tx.quote.create({
           data: {
@@ -960,9 +1008,14 @@ export class PickupRequestsService {
             estimatedPrice: 0,
             currency: 'INR',
             ...pickupLogisticsData(logistics),
-            assignedPartnerId: dto.partnerId,
-            assignedAt: new Date(),
-            status: 'ASSIGNED',
+            // A drop-off stays PENDING_ASSIGNMENT like a customer's own: nobody is sent out.
+            ...(partnerId
+              ? {
+                  assignedPartnerId: partnerId,
+                  assignedAt: new Date(),
+                  status: 'ASSIGNED' as const,
+                }
+              : {}),
           },
           ...withDetails,
         });
@@ -970,12 +1023,14 @@ export class PickupRequestsService {
       await this.prisma.auditLog.create({
         data: {
           actorId,
-          action: 'PICKUP_REQUEST_DISPATCHED',
+          action: partnerId
+            ? 'PICKUP_REQUEST_DISPATCHED'
+            : 'WAREHOUSE_DROPOFF_BOOKED',
           entity: 'PickupRequest',
           entityId: pickupRequest.id,
           before: {},
           after: {
-            partnerId: dto.partnerId,
+            partnerId: partnerId ?? null,
             customerId: dto.customerId,
             destinationCountry: destinationCountry || null,
             rateProviderId: carrier?.id ?? null,
@@ -988,7 +1043,7 @@ export class PickupRequestsService {
         NOTIFICATION_TEMPLATES.PICKUP_REQUEST_RECEIVED,
         { termsUrl: `${publicFrontendUrl(this.config)}/terms` },
       );
-      await this.announceAssignment(pickupRequest, dto.partnerId);
+      if (partnerId) await this.announceAssignment(pickupRequest, partnerId);
     }
 
     return {

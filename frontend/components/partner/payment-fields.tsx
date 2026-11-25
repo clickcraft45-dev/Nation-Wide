@@ -2,12 +2,13 @@
 
 import { useState } from "react";
 import { BadgePercent, X } from "lucide-react";
-import type { PaymentSplitDto, PickupRequestDto } from "@nationwide/shared-types";
+import type { PaymentSplitDto, PaymentUpiDto, PickupRequestDto } from "@nationwide/shared-types";
 import { apiClient, errorMessage } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
 import { Input, Label, FieldError } from "@/components/ui/input";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { cn } from "@/lib/utils/cn";
+import { UpiQr } from "@/components/payments/upi-qr";
 
 export function formatInr(amount: number): string {
   return `₹${amount.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
@@ -247,6 +248,9 @@ export function splitProblem(choice: MethodChoice, total: number, form: SplitFor
 /**
  * Cash, UPI, or some of each. With "Cash + UPI" the partner types one amount and the other is
  * filled with what is left, so the two always add up unless they change both.
+ *
+ * For any UPI part, the customer is shown a QR for exactly that amount (upi: the account admin set
+ * on the Payments page); null while it loads, and a note when admin has not set one.
  */
 export function PaymentMethodFields({
   idPrefix,
@@ -255,6 +259,8 @@ export function PaymentMethodFields({
   onChoice,
   form,
   onForm,
+  upi,
+  upiNote,
 }: {
   idPrefix: string;
   total: number;
@@ -262,8 +268,12 @@ export function PaymentMethodFields({
   onChoice: (choice: MethodChoice) => void;
   form: SplitForm;
   onForm: (form: SplitForm) => void;
+  upi?: PaymentUpiDto | null;
+  /** Shown in both bank statements, to match the payment to this pickup. */
+  upiNote?: string;
 }) {
   const problem = total > 0 ? splitProblem(choice, total, form) : null;
+  const upiAmount = choice === "UPI" ? total : choice === "SPLIT" ? round2(Number(form.upi) || 0) : 0;
 
   function setAmount(key: "cash" | "upi", value: string) {
     const typed = Number(value);
@@ -339,6 +349,25 @@ export function PaymentMethodFields({
               <>Type one amount; the other fills in. Total {formatInr(total)}.</>
             )}
           </p>
+        </div>
+      )}
+
+      {choice !== "CASH" && upi !== undefined && (
+        <div className="space-y-1.5">
+          {upi === null ? null : upi.upiId ? (
+            upiAmount > 0 && upiAmount <= total ? (
+              <>
+                <p className="text-sm font-medium text-foreground">Customer scans to pay</p>
+                <UpiQr upiId={upi.upiId} payeeName={upi.payeeName} amount={upiAmount} note={upiNote} />
+              </>
+            ) : (
+              <p className="text-xs text-muted-foreground">Enter the UPI amount to show the payment QR.</p>
+            )
+          ) : (
+            <p className="rounded-lg border border-warning-border bg-warning-bg p-3 text-sm text-warning">
+              No UPI ID is set up yet, so there is no QR to show. An admin adds it under Payments.
+            </p>
+          )}
         </div>
       )}
 

@@ -68,7 +68,8 @@ export default function FuelAndPssPage() {
         automatically to every quote for that provider.
       </p>
 
-      <FuelSurchargePanel />
+      {/* Refreshes from the carrier sites on open; reloads the cards below when a figure changed. */}
+      <FuelSurchargePanel onChanged={load} />
 
       {isLoading && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">

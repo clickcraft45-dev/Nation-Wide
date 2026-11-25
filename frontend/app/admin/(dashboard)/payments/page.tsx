@@ -22,6 +22,7 @@ import { PaymentStatusBadge } from "@/components/ui/status-badge";
 import { MarkPaidDialog, type MarkPaidDetails } from "@/components/payments/mark-paid-dialog";
 import { RefundDialog } from "@/components/payments/refund-dialog";
 import { OnlinePaymentsReview } from "@/components/payments/online-payments-review";
+import { UpiSettingsCard } from "@/components/payments/upi-settings-card";
 
 // The four states a payment can be in, as one row of choices rather than a dropdown: there are
 // only ever these five options, and the count of each is what an admin is scanning for.
@@ -118,6 +119,8 @@ export default function AdminPaymentsPage() {
           you to confirm against the bank. Everything else is marked received manually.
         </p>
       </div>
+
+      <UpiSettingsCard />
 
       <OnlinePaymentsReview onChanged={load} />
 

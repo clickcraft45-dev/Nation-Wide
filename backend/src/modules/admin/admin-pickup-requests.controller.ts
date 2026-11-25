@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 import type {
   B2bOrderResultDto,
+  PaymentUpiDto,
   PickupDocumentsDto,
   PickupRequestDto,
   PickupSpotsDto,
@@ -81,6 +82,12 @@ export class AdminPickupRequestsController {
   @Get('due-approvers')
   listDueApprovers(): Promise<{ id: string; name: string }[]> {
     return this.pickupRequestsService.listDueApprovers();
+  }
+
+  // Ahead of :id. The UPI QR shown at the warehouse counter is drawn from this.
+  @Get('payment-upi')
+  paymentUpi(): Promise<PaymentUpiDto> {
+    return this.pickupRequestsService.paymentUpi();
   }
 
   @Get()

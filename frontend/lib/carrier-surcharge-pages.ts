@@ -5,7 +5,8 @@
  */
 const SURCHARGE_PAGES: Record<string, { fuel: string; pss: string }> = {
   DHL: {
-    fuel: "https://www.dhl.com/in-en/home/important-information/2026/express-fuel-surcharge-updates.html",
+    // The page the backend reads each morning (fuel-surcharge-sources.ts).
+    fuel: "https://www.dhl.de/en/geschaeftskunden/express/alles-rund-um-dhl-express/leistungen-services/zuschlaege/treibstoffzuschlag-air.html",
     pss: "https://www.dhl.com/us-en/home/express/products-and-solutions/products-and-services-overview/surcharges/demand-surcharge.html",
   },
   UPS: {

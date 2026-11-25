@@ -32,6 +32,8 @@ export function toCompanySettingsDto(
     stateName: settings.stateName,
     stateCode: settings.stateCode,
     sacCode: settings.sacCode,
+    upiId: settings.upiId,
+    upiPayeeName: settings.upiPayeeName,
     cancellationBaseFee: settings.cancellationBaseFee,
     cancellationPerKmFee: settings.cancellationPerKmFee,
     warehouseLatitude: settings.warehouseLatitude,

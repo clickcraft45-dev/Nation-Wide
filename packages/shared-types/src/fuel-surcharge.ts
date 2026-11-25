@@ -34,3 +34,26 @@ export interface ApplyFuelSurchargeDto {
   label?: string;
   source: "CARRIER_SITE" | "MANUAL";
 }
+
+/** What a refresh did for one carrier the server can read (DHL, DHL Express). */
+export interface FuelAutoApplyResultDto {
+  code: string;
+  /**
+   * APPLIED: the published figure differed and is now charged. UNCHANGED: already matches.
+   * HELD: too large a move to apply unseen, an admin decides. FAILED: the page could not be read.
+   */
+  outcome: "APPLIED" | "UNCHANGED" | "HELD" | "FAILED";
+  /** The figure now charged (APPLIED, UNCHANGED) or the one read and held (HELD). */
+  percent: number | null;
+  /** The figure before an APPLIED change. */
+  previousPercent: number | null;
+  /** What the carrier called it, e.g. "CW 48". */
+  label: string | null;
+  detail: string;
+}
+
+/** Opening Fuel & PSS: what was refreshed from the carrier pages, then where every carrier stands. */
+export interface FuelSurchargeRefreshDto {
+  results: FuelAutoApplyResultDto[];
+  rows: FuelSurchargeCheckDto[];
+}

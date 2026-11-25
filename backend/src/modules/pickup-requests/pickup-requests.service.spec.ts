@@ -528,6 +528,68 @@ describe('PickupRequestsService', () => {
       ).rejects.toThrow(/does not ship to United States/);
       expect(quoteCreate).not.toHaveBeenCalled();
     });
+
+    describe('as a warehouse drop-off', () => {
+      const dropOffDto = {
+        customerId: 'customer-1',
+        submissionKey: 'key-3',
+        dropAtWarehouse: true,
+        destinationCountry: 'United States',
+        rateProviderId: 'provider-dhl',
+      };
+
+      beforeEach(() => {
+        prisma.customer.findUnique.mockResolvedValue({
+          id: 'customer-1',
+          name: 'Ravi Kumar',
+          phone: '+919876543210',
+        });
+      });
+
+      it('books it with the carrier, no address and no partner', async () => {
+        await service.createForAdmin(dropOffDto, 'admin-1');
+
+        const data = prisma.pickupRequest.create.mock.calls[0][0].data;
+        expect(data).toMatchObject({
+          dropAtWarehouse: true,
+          rateProviderId: 'provider-dhl',
+          rateProviderName: 'DHL Express',
+          pickupContactName: 'Ravi Kumar',
+          pickupContactPhone: '+919876543210',
+          pickupAddressLine1: '',
+          pickupDate: null,
+        });
+        expect(data.assignedPartnerId).toBeUndefined();
+        expect(data.status).toBeUndefined();
+        expect(prisma.adminUser.findUnique).not.toHaveBeenCalled();
+        expect(prisma.auditLog.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({
+              action: 'WAREHOUSE_DROPOFF_BOOKED',
+            }),
+          }),
+        );
+      });
+
+      it('refuses parcel details, which are taken at the counter', async () => {
+        await expect(
+          service.createForAdmin(
+            { ...dropOffDto, orders: [{}] } as never,
+            'admin-1',
+          ),
+        ).rejects.toThrow(/weighed at the counter/);
+        expect(quoteCreate).not.toHaveBeenCalled();
+      });
+
+      it('still refuses a carrier that does not ship there', async () => {
+        await expect(
+          service.createForAdmin(
+            { ...dropOffDto, rateProviderId: 'provider-ups' },
+            'admin-1',
+          ),
+        ).rejects.toThrow(/does not ship to United States/);
+      });
+    });
   });
 
   describe('createForAdmin', () => {
@@ -1111,6 +1173,35 @@ describe('PickupRequestsService', () => {
         'WHATSAPP',
         'pickup_verification_complete',
         { verifiedPrice: '970' },
+      );
+    });
+
+    // Staff booked only the country and carrier: no weight, no estimate. The price is the carrier's
+    // rate for what was weighed, not 0 and not a figure the partner types.
+    it('prices a staff-booked pickup from its carrier for the weight taken at the door', async () => {
+      prisma.pickupRequest.findUnique.mockResolvedValue({
+        ...basePickupRequest,
+        estimatedWeightKg: 0,
+        estimatedPrice: 0,
+      });
+
+      await service.verify(
+        'pr-1',
+        {
+          packages: [{ weightKg: 6 }],
+          items: [{ description: 'Books', quantity: 1, unitValue: 300 }],
+          verifiedShipmentType: 'PACKAGE',
+        } as never,
+        'partner-1',
+      );
+
+      expect(pricingEngineService.computeQuotesForRequest).toHaveBeenCalledWith(
+        expect.objectContaining({ weightKg: 6, shipmentType: 'PACKAGE' }),
+      );
+      expect(prisma.pickupRequest.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ verifiedPrice: 970 }),
+        }),
       );
     });
 

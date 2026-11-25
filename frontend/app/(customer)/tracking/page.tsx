@@ -3,11 +3,12 @@
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { History, MapPin, X } from "lucide-react";
-import type { OrderDto, TrackingResultDto } from "@nationwide/shared-types";
-import { apiClient, ApiError } from "@/lib/api-client";
+import { parseTrackingNumbers, type OrderDto } from "@nationwide/shared-types";
+import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/state/auth-context";
 import { TrackingSearchForm } from "@/features/tracking/TrackingSearchForm";
-import { TrackingTimeline } from "@/features/tracking/TrackingTimeline";
+import { TrackingResults } from "@/features/tracking/TrackingResults";
+import { useTrackingLookup } from "@/features/tracking/use-tracking-lookup";
 import { ErrorState } from "@/components/ui/page-state";
 import { TrackingStatusBadge } from "@/components/ui/status-badge";
 import {
@@ -21,9 +22,6 @@ function CustomerTrackingPageInner() {
   const initialTracking = searchParams.get("tracking") ?? undefined;
   const { user } = useAuth();
 
-  const [result, setResult] = useState<TrackingResultDto | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
   // Starts empty and is filled after mount: localStorage does not exist during the server render,
   // so seeding it in useState would render one thing on the server and another on the client.
   const [history, setHistory] = useState<string[]>([]);
@@ -46,48 +44,31 @@ function CustomerTrackingPageInner() {
       .catch(() => setActiveOrders([]));
   }, [user]);
 
-  async function handleSearch(trackingNumber: string) {
-    setIsLoading(true);
-    setError(null);
-    setResult(null);
-    try {
-      const data = await apiClient.get<TrackingResultDto>(
-        `/tracking/${encodeURIComponent(trackingNumber)}`,
-      );
-      setResult(data);
-      // Only numbers that actually resolved are remembered — a history full of the visitor's
-      // typos is worse than no history.
-      setHistory(rememberTrackingNumber(data.internalTrackingNumber));
-    } catch (e) {
-      setError(
-        e instanceof ApiError && e.status === 404
-          ? "We couldn't find that tracking number."
-          : "Temporarily unable to fetch live status. Please try again shortly.",
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  }
+  // Only numbers that actually resolved are remembered — a history full of the visitor's typos
+  // is worse than no history.
+  const { state, search } = useTrackingLookup({
+    onFound: (result) => setHistory(rememberTrackingNumber(result.internalTrackingNumber)),
+  });
+  const handleSearch = (trackingNumber: string) => void search([trackingNumber]);
 
   useEffect(() => {
     // Auto-loading from a deep-linked ?tracking= param on mount is a one-shot lookup, not a
     // subscription to external state — there's nothing to synchronize against afterward.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (initialTracking) void handleSearch(initialTracking);
-  }, [initialTracking]);
+    if (initialTracking) void search(parseTrackingNumbers(initialTracking));
+  }, [initialTracking, search]);
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-xl font-semibold text-foreground">Track a shipment</h1>
         <p className="text-sm text-muted-foreground">
-          Enter your NationWide tracking number to see its current status.
+          Enter a NationWide tracking number to see its current status, or up to 30, one per line.
         </p>
       </div>
 
       <TrackingSearchForm
-        onSubmit={handleSearch}
-        isLoading={isLoading}
+        onSubmit={(numbers) => void search(numbers)}
+        isLoading={state.status === "loading"}
         initialValue={initialTracking}
       />
 
@@ -100,7 +81,7 @@ function CustomerTrackingPageInner() {
               <button
                 key={order.id}
                 type="button"
-                onClick={() => shipment && void handleSearch(shipment.internalTrackingNumber)}
+                onClick={() => shipment && handleSearch(shipment.internalTrackingNumber)}
                 disabled={!shipment}
                 className="glass glass-interactive flex w-full max-w-xl items-center justify-between rounded-2xl p-3 text-left active:bg-muted/60 disabled:opacity-60"
               >
@@ -145,8 +126,13 @@ function CustomerTrackingPageInner() {
         </div>
       )}
 
-      {error && <ErrorState message={error} />}
-      {result && <TrackingTimeline result={result} />}
+      {state.status === "loading" && state.count > 1 && (
+        <p className="text-sm text-muted-foreground" role="status">
+          Tracking {state.count} shipments…
+        </p>
+      )}
+      {state.status === "error" && <ErrorState message={state.message} />}
+      {state.status === "done" && <TrackingResults items={state.items} />}
     </div>
   );
 }

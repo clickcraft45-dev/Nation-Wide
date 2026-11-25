@@ -7,9 +7,8 @@ import type {
   CustomerDto,
   InvoiceDto,
   PickupRequestStatusCode,
-  TrackingResultDto,
 } from "@nationwide/shared-types";
-import { apiClient, ApiError, errorMessage } from "@/lib/api-client";
+import { errorMessage } from "@/lib/api-client";
 import type { B2bClient } from "@/lib/b2b-client";
 import { downloadBlob } from "@/lib/utils/download-blob";
 import {
@@ -29,7 +28,8 @@ import { PICKUP_REQUEST_STATUS_VARIANT, TrackingStatusBadge } from "@/components
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils/cn";
 import { TrackingSearchForm } from "@/features/tracking/TrackingSearchForm";
-import { TrackingTimeline } from "@/features/tracking/TrackingTimeline";
+import { TrackingResults } from "@/features/tracking/TrackingResults";
+import { useTrackingLookup } from "@/features/tracking/use-tracking-lookup";
 import { OrderDetailsDialog } from "@/components/b2b/order-details";
 
 /**
@@ -385,9 +385,6 @@ export function TrackingPanel({
   orders: B2bRequestSummaryDto[];
   initialTracking?: string;
 }) {
-  const [result, setResult] = useState<TrackingResultDto | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
   // Filled after mount: localStorage does not exist during the server render.
   const [recent, setRecent] = useState<string[]>([]);
 
@@ -398,38 +395,23 @@ export function TrackingPanel({
     setRecent(readTrackingHistory());
   }, []);
 
-  async function search(trackingNumber: string) {
-    setIsLoading(true);
-    setError(null);
-    setResult(null);
-    try {
-      const data = await apiClient.get<TrackingResultDto>(
-        `/tracking/${encodeURIComponent(trackingNumber)}`,
-      );
-      setResult(data);
-      setRecent(rememberTrackingNumber(data.internalTrackingNumber));
-    } catch (e) {
-      setError(
-        e instanceof ApiError && e.status === 404
-          ? "We couldn't find that tracking number."
-          : "Temporarily unable to fetch live status. Please try again shortly.",
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  }
+  const lookup = useTrackingLookup({
+    onFound: (result) => setRecent(rememberTrackingNumber(result.internalTrackingNumber)),
+  });
+  const { state, search: lookupSearch } = lookup;
+  const isLoading = state.status === "loading";
+  const search = (trackingNumber: string) => lookup.search([trackingNumber]);
 
   useEffect(() => {
     // A one-shot lookup when the portal arrives here from an order, not a subscription.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (initialTracking) void search(initialTracking);
-  }, [initialTracking]);
+    if (initialTracking) void lookupSearch([initialTracking]);
+  }, [initialTracking, lookupSearch]);
 
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,380px)_minmax(0,1fr)] lg:items-start">
       <div className="lg:col-span-2 lg:max-w-2xl">
         <TrackingSearchForm
-          onSubmit={search}
+          onSubmit={(numbers) => void lookup.search(numbers)}
           isLoading={isLoading}
           initialValue={initialTracking}
         />
@@ -494,13 +476,13 @@ export function TrackingPanel({
 
       <div className="min-w-0">
         {isLoading && <Skeleton className="h-72 w-full rounded-2xl" />}
-        {error && <ErrorState message={error} />}
-        {result && <TrackingTimeline result={result} />}
-        {!isLoading && !error && !result && (
+        {state.status === "error" && <ErrorState message={state.message} />}
+        {state.status === "done" && <TrackingResults items={state.items} />}
+        {state.status === "idle" && (
           <EmptyState
             icon={<MapPin className="h-6 w-6" aria-hidden />}
             title="Track a shipment"
-            description="Enter a tracking number, or pick one of your shipments in transit."
+            description="Enter a tracking number (or up to 30, one per line), or pick one of your shipments in transit."
           />
         )}
       </div>

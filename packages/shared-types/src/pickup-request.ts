@@ -179,6 +179,12 @@ export interface PickupRecipientDto {
   postalCode: string;
 }
 
+/** Where a customer pays by UPI at the door or the counter. Null fields: not set up by admin yet. */
+export interface PaymentUpiDto {
+  upiId: string | null;
+  payeeName: string | null;
+}
+
 export interface PickupRequestDto {
   id: string;
   quoteId: string;

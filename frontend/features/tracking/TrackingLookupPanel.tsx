@@ -4,12 +4,16 @@ import { useEffect, useRef } from "react";
 import confetti from "canvas-confetti";
 import { useTrackingLookup } from "./use-tracking-lookup";
 import { TrackingSearchForm } from "./TrackingSearchForm";
-import { TrackingTimeline } from "./TrackingTimeline";
+import { TrackingResults } from "./TrackingResults";
+import { parseTrackingNumbers } from "@nationwide/shared-types";
 import { ErrorState } from "@/components/ui/page-state";
 import { cn } from "@/lib/utils/cn";
 
 interface TrackingLookupPanelProps {
-  /** Pre-fills the input and fires the lookup once on mount — used by /track/[trackingId]. */
+  /**
+   * Pre-fills the input and fires the lookup once on mount — used by /track/[trackingId]. Several
+   * numbers may be given, comma-separated (/track/NW-26-001,NW-26-002).
+   */
   initialTrackingId?: string;
   className?: string;
   submitButtonClassName?: string;
@@ -30,8 +34,11 @@ export function TrackingLookupPanel({
   // A delivered parcel is the one genuinely good outcome of this form — mark it. Keyed on the
   // tracking number so re-renders don't re-fire, and skipped entirely under reduced motion.
   useEffect(() => {
-    if (state.status !== "success" || state.result.currentStatus !== "DELIVERED") return;
-    const id = state.result.internalTrackingNumber;
+    // Only for a single parcel: a list with one delivered line is not a moment to celebrate.
+    if (state.status !== "done" || state.items.length !== 1) return;
+    const result = state.items[0].result;
+    if (result?.currentStatus !== "DELIVERED") return;
+    const id = result.internalTrackingNumber;
     if (celebrated.current === id) return;
     celebrated.current = id;
     if (window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches) return;
@@ -49,7 +56,7 @@ export function TrackingLookupPanel({
   useEffect(() => {
     if (initialTrackingId && !hasAutoSearched.current) {
       hasAutoSearched.current = true;
-      void search(initialTrackingId);
+      void search(parseTrackingNumbers(initialTrackingId));
     }
   }, [initialTrackingId, search]);
 
@@ -57,7 +64,7 @@ export function TrackingLookupPanel({
     <div className={cn("space-y-3", className)}>
       <TrackingSearchForm
         onSubmit={search}
-        onClear={() => (state.status === "not-found" || state.status === "error") && reset()}
+        onClear={reset}
         isLoading={state.status === "loading"}
         initialValue={initialTrackingId}
         submitButtonClassName={submitButtonClassName}
@@ -65,14 +72,11 @@ export function TrackingLookupPanel({
 
       {state.status === "loading" && (
         <p className="text-sm text-muted-foreground" role="status">
-          Tracking shipment…
+          {state.count > 1 ? `Tracking ${state.count} shipments…` : "Tracking shipment…"}
         </p>
       )}
-      {state.status === "not-found" && (
-        <ErrorState message="We couldn't find a shipment with that tracking ID." />
-      )}
       {state.status === "error" && <ErrorState message={state.message} />}
-      {state.status === "success" && <TrackingTimeline result={state.result} />}
+      {state.status === "done" && <TrackingResults items={state.items} />}
     </div>
   );
 }

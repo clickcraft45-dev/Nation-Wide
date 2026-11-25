@@ -11,6 +11,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import type {
+  PaymentUpiDto,
   PickupDocumentsDto,
   PickupPartnerDashboardSummaryDto,
   PickupRequestDto,
@@ -55,6 +56,12 @@ export class PartnerPickupRequestsController {
   @Get('due-approvers')
   listDueApprovers(): Promise<{ id: string; name: string }[]> {
     return this.pickupRequestsService.listDueApprovers();
+  }
+
+  // Ahead of :id. The UPI ID the payment QR is drawn from.
+  @Get('payment-upi')
+  paymentUpi(): Promise<PaymentUpiDto> {
+    return this.pickupRequestsService.paymentUpi();
   }
 
   @Get()

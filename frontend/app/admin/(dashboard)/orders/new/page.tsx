@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { ArrowLeft, CheckCircle2, Clock, Link2, UserRound } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { ArrowLeft, CheckCircle2, Clock, Link2, Truck, UserRound, Warehouse } from "lucide-react";
 import type {
   AddressBookDto,
   B2bOrderResultDto,
@@ -30,6 +30,7 @@ import { MapPinField } from "@/components/ui/map-pin-picker";
 import { PartnerPicker } from "@/components/shipment/partner-picker";
 import { searchCountries } from "@/lib/country-search";
 import { cn } from "@/lib/utils/cn";
+import { useFormDraft } from "@/lib/drafts";
 
 const TIME_SLOTS: { value: PickupTimeSlot; label: string }[] = [
   { value: "09:00-12:00", label: "9:00 AM - 12:00 PM" },
@@ -41,6 +42,9 @@ const TIME_SLOTS: { value: PickupTimeSlot; label: string }[] = [
 const MAPS_LINK = /^https:\/\/(maps\.app\.goo\.gl|goo\.gl|(www\.)?google\.[a-z.]+|maps\.google\.com)\/\S+/i;
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
+
+/** How the parcel reaches us: a partner collects it, or the customer brings it to the warehouse. */
+type Handover = "pickup" | "dropoff";
 
 interface PickupForm {
   contactName: string;
@@ -78,10 +82,19 @@ const emptyPickup: PickupForm = {
  * Their last pickup address, past recipients and the goods last sent to each are filled in and can
  * be overwritten; whatever is booked becomes next time's default. Each order is still created when
  * the partner completes the pickup, exactly as for a customer's own booking.
+ *
+ * Or a warehouse drop-off: no address, no partner. Staff weigh it at the counter (Warehouse
+ * Drop-offs) and the price follows from the chosen carrier's rates, as it would at a door.
  */
 export default function AdminNewOrderPage() {
   const router = useRouter();
   const { showToast } = useToast();
+  // Warehouse Drop-offs links here with ?mode=dropoff.
+  const searchParams = useSearchParams();
+  const [handover, setHandover] = useState<Handover>(() =>
+    searchParams.get("mode") === "dropoff" ? "dropoff" : "pickup",
+  );
+  const isDropOff = handover === "dropoff";
 
   // --- Customer ---
   const [tab, setTab] = useState<"existing" | "new">("existing");
@@ -113,7 +126,67 @@ export default function AdminNewOrderPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submissionKey] = useState(() => crypto.randomUUID());
+  const [submissionKey, setSubmissionKey] = useState(() => crypto.randomUUID());
+
+  // The whole booking survives a refresh: the picked customer, the pickup, the destination and
+  // the partner. Cleared once it is booked, and by "Book another".
+  const draft = useFormDraft(
+    "admin-new-order",
+    {
+      handover,
+      tab,
+      customer,
+      newCustomer,
+      pickup,
+      pickupLocation,
+      partnerId,
+      destinationCountry,
+      rateProviderId,
+      destination,
+      submissionKey,
+    },
+    (saved) => {
+      // "New drop-off" from Warehouse Drop-offs wins over a pickup left half-booked.
+      if (saved.handover && searchParams.get("mode") !== "dropoff") setHandover(saved.handover);
+      setTab(saved.tab);
+      setCustomer(saved.customer);
+      setNewCustomer(saved.newCustomer);
+      // A pickup date already in the past is not a date the form accepts any more.
+      setPickup({ ...emptyPickup, ...saved.pickup, date: saved.pickup.date < todayIso() ? todayIso() : saved.pickup.date });
+      setPickupLocation(saved.pickupLocation);
+      setPartnerId(saved.partnerId);
+      setDestinationCountry(saved.destinationCountry);
+      setRateProviderId(saved.rateProviderId);
+      setDestination(saved.destination);
+      setSubmissionKey(saved.submissionKey);
+    },
+    { enabled: results === null },
+  );
+
+  /** Back to an empty booking, ready for the next customer. */
+  function startOver() {
+    draft.clear();
+    setResults(null);
+    setCustomer(null);
+    setTab("existing");
+    setSearch("");
+    setNewCustomer({ name: "", phone: "", email: "" });
+    setNewCustomerError(null);
+    setPickup({ ...emptyPickup, date: todayIso() });
+    setPickupLocation(null);
+    setIsResolvingLink(false);
+    setLinkNote(null);
+    setPartnerId(null);
+    setDestinationCountry("");
+    setCarriers(null);
+    setCarriersFailed(false);
+    setRateProviderId("");
+    setDestination({ postalCode: "", city: "", state: "" });
+    setErrors({});
+    setSubmitError(null);
+    setSubmissionKey(crypto.randomUUID());
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
 
   useEffect(() => {
     apiClient
@@ -270,6 +343,26 @@ export default function AdminNewOrderPage() {
 
   function validate(): boolean {
     const next: Record<string, string> = {};
+    if (!isDropOff) validatePickup(next);
+    if (!destinationCountry) next.destinationCountry = "Choose the destination country.";
+    else if (carriers && carriers.length > 0 && !rateProviderId) {
+      next.carrier = `Choose the carrier for ${destinationCountry}.`;
+    }
+
+    setErrors(next);
+    const ok = Object.keys(next).length === 0;
+    if (!ok) {
+      requestAnimationFrame(() => {
+        const first = document.querySelector<HTMLElement>('[aria-invalid="true"]');
+        first?.scrollIntoView({ behavior: "smooth", block: "center" });
+        first?.focus({ preventScroll: true });
+      });
+    }
+    return ok;
+  }
+
+  // Where, when and who collects: none of it applies to a parcel the customer brings in.
+  function validatePickup(next: Record<string, string>) {
     const required: [keyof PickupForm, string][] = [
       ["contactName", "Enter the pickup contact's name."],
       ["contactPhone", "Enter the pickup contact's phone."],
@@ -286,33 +379,39 @@ export default function AdminNewOrderPage() {
     if (pickup.mapsUrl.trim() && !/^https:\/\//.test(pickup.mapsUrl.trim())) {
       next.mapsUrl = "Paste the full https:// Google Maps link.";
     }
-    if (!destinationCountry) next.destinationCountry = "Choose the destination country.";
-    else if (carriers && carriers.length > 0 && !rateProviderId) {
-      next.carrier = `Choose the carrier for ${destinationCountry}.`;
-    }
     if (!partnerId) next.partner = "Choose who collects this pickup.";
-
-    setErrors(next);
-    const ok = Object.keys(next).length === 0;
-    if (!ok) {
-      requestAnimationFrame(() => {
-        const first = document.querySelector<HTMLElement>('[aria-invalid="true"]');
-        first?.scrollIntoView({ behavior: "smooth", block: "center" });
-        first?.focus({ preventScroll: true });
-      });
-    }
-    return ok;
   }
 
   async function handleSubmit(e: React.SubmitEvent) {
     e.preventDefault();
-    if (!customer || !validate() || !partnerId) return;
+    if (!customer || !validate() || (!isDropOff && !partnerId)) return;
     setSubmitError(null);
     setIsSubmitting(true);
+    const where = isDropOff
+      ? { dropAtWarehouse: true }
+      : {
+          partnerId,
+          pickup: {
+            pickupContactName: pickup.contactName.trim(),
+            pickupContactPhone: pickup.contactPhone.trim(),
+            pickupAddressLine1: pickup.addressLine1.trim(),
+            pickupAddressLine2: pickup.addressLine2.trim() || undefined,
+            pickupCity: pickup.city.trim(),
+            pickupState: pickup.state.trim(),
+            pickupPostalCode: pickup.postalCode.trim(),
+            ...(pickupLocation
+              ? { pickupLatitude: pickupLocation.lat, pickupLongitude: pickupLocation.lng }
+              : {}),
+            pickupMapsUrl: pickup.mapsUrl.trim() || undefined,
+            pickupDate: pickup.date,
+            pickupTimeSlot: pickup.timeSlot,
+            pickupInstructions: pickup.instructions.trim() || undefined,
+          },
+        };
     const body = {
       customerId: customer.id,
       submissionKey,
-      partnerId,
+      ...where,
       destinationCountry,
       rateProviderId: rateProviderId || undefined,
       ...(destination.postalCode.trim()
@@ -322,24 +421,8 @@ export default function AdminNewOrderPage() {
             destinationState: destination.state || undefined,
           }
         : {}),
-      pickup: {
-        pickupContactName: pickup.contactName.trim(),
-        pickupContactPhone: pickup.contactPhone.trim(),
-        pickupAddressLine1: pickup.addressLine1.trim(),
-        pickupAddressLine2: pickup.addressLine2.trim() || undefined,
-        pickupCity: pickup.city.trim(),
-        pickupState: pickup.state.trim(),
-        pickupPostalCode: pickup.postalCode.trim(),
-        ...(pickupLocation
-          ? { pickupLatitude: pickupLocation.lat, pickupLongitude: pickupLocation.lng }
-          : {}),
-        pickupMapsUrl: pickup.mapsUrl.trim() || undefined,
-        pickupDate: pickup.date,
-        pickupTimeSlot: pickup.timeSlot,
-        pickupInstructions: pickup.instructions.trim() || undefined,
-      },
-      // No orders: the partner takes the recipient, boxes and contents at the door, and the price
-      // follows from the carrier's rates for what they weigh.
+      // No orders: whoever weighs it (partner at the door, staff at the counter) takes the
+      // recipient, boxes and contents, and the price follows from the carrier's rates.
     };
     try {
       const created = await apiClient.post<B2bOrderResultDto[]>(
@@ -347,11 +430,20 @@ export default function AdminNewOrderPage() {
         body,
       );
       setResults(created);
-      showToast({
-        variant: "success",
-        title: "Pickup booked and assigned",
-        description: "The partner takes the parcel and recipient details at the door.",
-      });
+      draft.clear();
+      showToast(
+        isDropOff
+          ? {
+              variant: "success",
+              title: "Warehouse drop-off booked",
+              description: "Weigh it at the counter when the customer brings it in.",
+            }
+          : {
+              variant: "success",
+              title: "Pickup booked and assigned",
+              description: "The partner takes the parcel and recipient details at the door.",
+            },
+      );
     } catch (err) {
       setSubmitError(errorMessage(err, "Couldn't book this order. Please try again."));
     } finally {
@@ -374,7 +466,7 @@ export default function AdminNewOrderPage() {
   );
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6 pb-10">
+    <div className="mx-auto max-w-4xl space-y-6 pb-10" data-draft="managed">
       <Link
         href="/admin/orders"
         className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
@@ -384,7 +476,7 @@ export default function AdminNewOrderPage() {
       <div>
         <h1 className="text-xl font-semibold text-foreground">New Order</h1>
         <p className="text-sm text-muted-foreground">
-          Book a pickup for a customer and assign it to a pickup partner.
+          Book a pickup for a partner to collect, or a drop-off the customer brings to the warehouse.
         </p>
       </div>
 
@@ -499,7 +591,11 @@ export default function AdminNewOrderPage() {
                       : `Pickup for ${customer.name}`}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {r.status === "BOOKED" && r.price === null
+                    {isDropOff && r.status === "BOOKED"
+                      ? r.carrier
+                        ? `${r.carrier}: waiting at the warehouse. The price follows from what you weigh at the counter.`
+                        : "Waiting at the warehouse. Take the parcel details and agree the price at the counter."
+                      : r.status === "BOOKED" && r.price === null
                       ? r.carrier
                         ? `${r.carrier}: assigned to the partner. The price follows from what they weigh at the door.`
                         : "Assigned to the partner. They take the parcel details and agree the price at the door."
@@ -512,7 +608,7 @@ export default function AdminNewOrderPage() {
                 </div>
                 {r.pickupRequestId && (
                   <Link
-                    href={`/admin/pickup-requests/${r.pickupRequestId}`}
+                    href={`/admin/${isDropOff ? "warehouse-dropoffs" : "pickup-requests"}/${r.pickupRequestId}`}
                     className="shrink-0 text-xs font-medium text-primary hover:underline"
                   >
                     Open
@@ -521,14 +617,13 @@ export default function AdminNewOrderPage() {
               </div>
             ))}
             <div className="flex gap-2">
-              <Button type="button" onClick={() => router.push("/admin/pickup-requests")}>
-                Go to pickup requests
-              </Button>
               <Button
                 type="button"
-                variant="secondary"
-                onClick={() => router.refresh()}
+                onClick={() => router.push(isDropOff ? "/admin/warehouse-dropoffs" : "/admin/pickup-requests")}
               >
+                {isDropOff ? "Go to warehouse drop-offs" : "Go to pickup requests"}
+              </Button>
+              <Button type="button" variant="secondary" onClick={startOver}>
                 Book another
               </Button>
             </div>
@@ -550,6 +645,45 @@ export default function AdminNewOrderPage() {
             </Button>
           </div>
 
+          <div className="space-y-1.5">
+            <p id="handover-label" className="text-sm font-medium text-foreground">
+              How the parcel reaches us
+            </p>
+            <div role="radiogroup" aria-labelledby="handover-label" className="grid gap-2 sm:grid-cols-2">
+              {(
+                [
+                  { value: "pickup", label: "Pickup from an address", hint: "A partner collects it", Icon: Truck },
+                  { value: "dropoff", label: "Warehouse drop-off", hint: "The customer brings it in", Icon: Warehouse },
+                ] as const
+              ).map(({ value, label, hint, Icon }) => (
+                <button
+                  key={value}
+                  type="button"
+                  role="radio"
+                  aria-checked={handover === value}
+                  onClick={() => {
+                    setHandover(value);
+                    setErrors({});
+                  }}
+                  className={cn(
+                    "flex min-h-14 items-center gap-3 rounded-lg border px-4 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.99]",
+                    handover === value ? "border-primary bg-primary/10" : "border-border hover:bg-muted",
+                  )}
+                >
+                  <Icon
+                    className={cn("h-4 w-4 shrink-0", handover === value ? "text-primary" : "text-muted-foreground")}
+                    aria-hidden
+                  />
+                  <span>
+                    <span className="block text-sm font-medium text-foreground">{label}</span>
+                    <span className="block text-xs text-muted-foreground">{hint}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {!isDropOff && (
           <Card>
             <CardHeader>
               <CardTitle>Pickup from</CardTitle>
@@ -659,6 +793,7 @@ export default function AdminNewOrderPage() {
               {field("instructions", "Instructions for the partner (optional)")}
             </CardContent>
           </Card>
+          )}
 
           <Card>
             <CardHeader>
@@ -683,7 +818,7 @@ export default function AdminNewOrderPage() {
                   }}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Fills in the country below. The partner takes the full address at the door.
+                  Fills in the country below. The full address is taken {isDropOff ? "at the counter" : "at the door"}.
                 </p>
               </div>
               <div className="space-y-1.5">
@@ -718,7 +853,8 @@ export default function AdminNewOrderPage() {
                     <p className="text-sm text-muted-foreground">Loading carriers…</p>
                   ) : carriers.length === 0 ? (
                     <p className="text-sm text-warning">
-                      No carrier has a rate card for {destinationCountry}. The partner agrees the price at the door.
+                      No carrier has a rate card for {destinationCountry}. The price is agreed{" "}
+                      {isDropOff ? "at the counter" : "at the door"}.
                     </p>
                   ) : (
                     <div role="radiogroup" aria-labelledby="carrier-label" className="flex flex-wrap gap-2">
@@ -743,14 +879,15 @@ export default function AdminNewOrderPage() {
                   )}
                   {errors.carrier && <FieldError>{errors.carrier}</FieldError>}
                   <p className="text-xs text-muted-foreground">
-                    Only carriers that ship to this country are listed. The partner weighs the parcel at the door
-                    and the price comes from this carrier&apos;s rates.
+                    Only carriers that ship to this country are listed. The parcel is weighed{" "}
+                    {isDropOff ? "at the counter" : "at the door"} and the price comes from this carrier&apos;s rates.
                   </p>
                 </div>
               )}
             </CardContent>
           </Card>
 
+          {!isDropOff && (
           <Card>
             <CardHeader>
               <CardTitle>Assign pickup partner</CardTitle>
@@ -765,10 +902,11 @@ export default function AdminNewOrderPage() {
               {errors.partner && <FieldError>{errors.partner}</FieldError>}
             </CardContent>
           </Card>
+          )}
 
           {submitError && <FieldError>{submitError}</FieldError>}
           <Button type="submit" size="lg" className="w-full" isLoading={isSubmitting}>
-            Book pickup &amp; assign partner
+            {isDropOff ? "Book warehouse drop-off" : <>Book pickup &amp; assign partner</>}
           </Button>
         </form>
       )}

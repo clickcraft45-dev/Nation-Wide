@@ -6,6 +6,7 @@
 |---|---|---|---|
 | `DATABASE_URL` | Yes | — | PostgreSQL connection string, e.g. `postgresql://nationwide:pass@localhost:5432/nationwide?schema=public`. In production this is the Postgres installed on the EC2 host — `host.docker.internal` from inside the backend container, `localhost` when run natively. Port 5432 must never be internet-reachable. Never commit a real value |
 | `REDIS_URL` | Yes | — | Redis connection string, used for both caching and the BullMQ notifications queue |
+| `FUEL_SURCHARGE_AUTO_APPLY` | No | `true` | `false` stops the 06:30 IST daily check that applies DHL's published weekly fuel surcharge (DHL and DHL Express). Also off when `NODE_ENV=test`. FedEx and UPS are always applied by an admin |
 | `JWT_ACCESS_SECRET` | Yes | — | Signs short-lived access tokens. Must be a real, unguessable secret in any non-dev environment |
 | `JWT_REFRESH_SECRET` | Yes | — | Signs refresh tokens (httpOnly cookie). Must differ from `JWT_ACCESS_SECRET` |
 | `JWT_ACCESS_EXPIRES_IN` | Yes | `15m` | Any `ms`-parseable duration string |
