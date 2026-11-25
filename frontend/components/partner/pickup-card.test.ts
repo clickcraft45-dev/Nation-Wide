@@ -13,8 +13,14 @@ function pickup(over: Partial<PickupRequestDto>): PickupRequestDto {
 }
 
 describe("pendingStep", () => {
-  it("is null before the partner arrives", () => {
-    expect(pendingStep(pickup({ arrivedAt: null, status: "ASSIGNED" }))).toBeNull();
+  it("is null before the partner arrives on an accepted pickup", () => {
+    expect(pendingStep(pickup({ arrivedAt: null, status: "SCHEDULED" }))).toBeNull();
+  });
+
+  it("asks the partner to accept a new assignment", () => {
+    expect(pendingStep(pickup({ arrivedAt: null, status: "ASSIGNED", dropAtWarehouse: false }))).toBe(
+      "Accept or reschedule",
+    );
   });
 
   it("names the step left when the partner walked away mid-flow", () => {

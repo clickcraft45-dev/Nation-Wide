@@ -16,6 +16,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { PickupPartnersService } from './pickup-partners.service';
+import { PushService } from '../push/push.service';
 import { toPickupPartnerDto } from './pickup-partners.mapper';
 import { CreatePickupPartnerDto } from './dto/create-pickup-partner.dto';
 import { UpdatePickupPartnerDto } from './dto/update-pickup-partner.dto';
@@ -24,7 +25,25 @@ import { UpdatePickupPartnerDto } from './dto/update-pickup-partner.dto';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('ADMIN')
 export class PickupPartnersController {
-  constructor(private readonly pickupPartnersService: PickupPartnersService) {}
+  constructor(
+    private readonly pickupPartnersService: PickupPartnersService,
+    private readonly pushService: PushService,
+  ) {}
+
+  // The admin pickup map's "Ask for location": a push that opens the partner app's map, which
+  // reports where the phone is the moment it opens. A phone with the app closed and no push
+  // permission cannot be reached, and the map keeps showing the last place it reported from.
+  @Post(':id/request-location')
+  @HttpCode(204)
+  async requestLocation(@Param('id') id: string): Promise<void> {
+    const partner = await this.pickupPartnersService.findOne(id);
+    await this.pushService.sendToAdminUser(partner.id, {
+      title: 'Office asked for your location',
+      body: 'Open the app so the office can see where you are.',
+      url: '/partner/map',
+      tag: 'location-request',
+    });
+  }
 
   @Get()
   async findAll(): Promise<PickupPartnerDto[]> {

@@ -106,6 +106,12 @@ const BODIES: Record<string, BodyBuilder> = {
   [NOTIFICATION_TEMPLATES.PICKUP_REJECTED]: (v) =>
     `We were unable to accept your parcel at pickup. Reason: ${or(v.reason, 'the parcel did not meet our acceptance checks')}. Please reply to this message and our team will help you resolve this and arrange a new pickup.`,
 
+  [NOTIFICATION_TEMPLATES.PICKUP_RESCHEDULED]: (v) =>
+    `Your NationWide Logistics pickup has been moved to ${or(v.pickupDate, 'a new date')}, between ${or(v.pickupTimeSlot, 'the new time slot')}. Reason: ${or(v.reason, 'a scheduling change')}. Please keep your parcel packed and ready. Reply to this message if the new time does not suit you.`,
+
+  [NOTIFICATION_TEMPLATES.PICKUP_CANCELLED]: (v) =>
+    `Your NationWide Logistics pickup request has been cancelled. Reason: ${or(v.reason, 'cancelled by our team')}. No payment was taken. Reply to this message if you would like to book a new pickup.`,
+
   // The longest body here, and deliberately so: it is the only one carrying three variables, and
   // Meta rejected the first, terser draft for having "too many variables for its length".
   [NOTIFICATION_TEMPLATES.INVOICE_READY]: (v) =>

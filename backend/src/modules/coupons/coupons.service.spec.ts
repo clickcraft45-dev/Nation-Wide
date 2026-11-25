@@ -16,7 +16,11 @@ describe('CouponsService', () => {
     coupon: {
       findUnique: jest.Mock;
       updateMany: jest.Mock;
+      update: jest.Mock;
+      delete: jest.Mock;
     };
+    pickupRequest: { count: jest.Mock };
+    order: { count: jest.Mock };
   };
   let service: CouponsService;
 
@@ -25,7 +29,11 @@ describe('CouponsService', () => {
       coupon: {
         findUnique: jest.fn().mockResolvedValue(baseCoupon),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        update: jest.fn().mockResolvedValue(baseCoupon),
+        delete: jest.fn().mockResolvedValue(baseCoupon),
       },
+      pickupRequest: { count: jest.fn().mockResolvedValue(0) },
+      order: { count: jest.fn().mockResolvedValue(0) },
     };
     service = new CouponsService(prisma as never);
   });
@@ -89,7 +97,12 @@ describe('CouponsService', () => {
     await service.redeem('SAVE500');
 
     expect(prisma.coupon.updateMany).toHaveBeenCalledWith({
-      where: { id: 'coupon-1', isActive: true, timesUsed: { lt: 3 } },
+      where: {
+        id: 'coupon-1',
+        isActive: true,
+        deletedAt: null,
+        timesUsed: { lt: 3 },
+      },
       data: { timesUsed: { increment: 1 } },
     });
   });
@@ -106,5 +119,51 @@ describe('CouponsService', () => {
     await expect(service.redeem('SAVE500')).rejects.toThrow(
       BadRequestException,
     );
+  });
+
+  it('refuses a deleted code as if it never existed', async () => {
+    prisma.coupon.findUnique.mockResolvedValue({
+      ...baseCoupon,
+      deletedAt: new Date(),
+    });
+
+    await expect(service.validate('SAVE500')).rejects.toThrow(
+      NotFoundException,
+    );
+  });
+
+  it('deletes a code nobody used outright', async () => {
+    await expect(service.remove('coupon-1')).resolves.toEqual({
+      hidden: false,
+    });
+    expect(prisma.coupon.delete).toHaveBeenCalledWith({
+      where: { id: 'coupon-1' },
+    });
+  });
+
+  it('hides a used code instead, so the bookings it discounted keep it', async () => {
+    prisma.pickupRequest.count.mockResolvedValue(2);
+
+    await expect(service.remove('coupon-1')).resolves.toEqual({
+      hidden: true,
+    });
+    expect(prisma.coupon.delete).not.toHaveBeenCalled();
+    expect(prisma.coupon.update).toHaveBeenCalledWith({
+      where: { id: 'coupon-1' },
+      data: { deletedAt: expect.any(Date) as Date, isActive: false },
+    });
+  });
+
+  it('checks a code against a price without claiming it, never more than the price', async () => {
+    await expect(service.check('save500', 300)).resolves.toEqual({
+      code: 'SAVE500',
+      discountAmount: 300,
+    });
+    // Priced at pickup: the whole amount, capped later against the weighed price.
+    await expect(service.check('save500', 0)).resolves.toEqual({
+      code: 'SAVE500',
+      discountAmount: 500,
+    });
+    expect(prisma.coupon.updateMany).not.toHaveBeenCalled();
   });
 });

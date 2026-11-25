@@ -22,6 +22,10 @@ export interface MapPoint {
   href?: string;
   /** Marker fill, any CSS colour. */
   color?: string;
+  /** "pin" (default) for a place; "person" for someone's live position, drawn as a ringed dot. */
+  shape?: "pin" | "person";
+  /** Label on the popup's link. */
+  linkLabel?: string;
 }
 
 export interface LatLng {
@@ -165,19 +169,30 @@ export function PickupsMap({
     // ponytail: legacy google.maps.Marker — AdvancedMarkerElement needs a Map ID from Cloud
     // Console. Switch once a Map ID is configured; Google keeps Marker working meanwhile.
     markersRef.current = points.map((point) => {
+      const person = point.shape === "person";
       const marker = new google.maps.Marker({
         map,
         position: { lat: point.lat, lng: point.lng },
         title: point.title,
-        icon: {
-          path: PIN_PATH,
-          scale: 1.15,
-          anchor: new google.maps.Point(0, 0),
-          fillColor: point.color ?? "#dc2626",
-          fillOpacity: 1,
-          strokeColor: "#ffffff",
-          strokeWeight: 2,
-        },
+        zIndex: person ? 900 : undefined,
+        icon: person
+          ? {
+              path: google.maps.SymbolPath.CIRCLE,
+              scale: 9,
+              fillColor: point.color ?? "#0b0b0c",
+              fillOpacity: 1,
+              strokeColor: "#ffffff",
+              strokeWeight: 3,
+            }
+          : {
+              path: PIN_PATH,
+              scale: 1.15,
+              anchor: new google.maps.Point(0, 0),
+              fillColor: point.color ?? "#dc2626",
+              fillOpacity: 1,
+              strokeColor: "#ffffff",
+              strokeWeight: 2,
+            },
       });
       marker.addListener("click", () => {
         // Built from DOM nodes, not an HTML string: titles are customer-typed names.
@@ -195,7 +210,7 @@ export function PickupsMap({
         if (point.href) {
           const open = document.createElement("button");
           open.type = "button";
-          open.textContent = "Open pickup →";
+          open.textContent = point.linkLabel ?? "Open pickup →";
           open.style.cssText =
             "margin-top: 6px; color: #2563eb; font-weight: 600; background: none; border: 0; padding: 0; cursor: pointer";
           open.onclick = () => router.push(point.href!);

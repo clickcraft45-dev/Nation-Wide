@@ -12,6 +12,7 @@ import {
   Warehouse,
   XCircle,
   type LucideIcon,
+  TicketPercent,
 } from "lucide-react";
 import type { PickupRequestDto } from "@nationwide/shared-types";
 import { ProgressTimeline, type ProgressMilestone } from "@/components/ui/progress-timeline";
@@ -126,6 +127,7 @@ export function PickupStatusPipeline({ pickup }: { pickup: PickupRequestDto }) {
   const Icon = current.icon;
   const done = Boolean(pickup.orderId);
   const amount = pickup.verifiedPrice ?? pickup.estimatedPrice;
+  const saved = (pickup.discountAmount ?? 0) + (pickup.doorDiscount?.amount ?? 0);
 
   return (
     <div className="space-y-5">
@@ -171,9 +173,29 @@ export function PickupStatusPipeline({ pickup }: { pickup: PickupRequestDto }) {
         )}
         <Detail
           icon={IndianRupee}
-          label={pickup.verifiedPrice != null ? "Final price" : "Quoted price"}
-          value={amount > 0 ? money(amount, pickup.currency) : "Priced at pickup"}
+          label={
+            saved > 0 && amount > 0
+              ? "You pay"
+              : pickup.verifiedPrice != null
+                ? "Final price"
+                : "Quoted price"
+          }
+          value={
+            amount > 0
+              ? saved > 0
+                ? `${money(pickup.payableAmount, pickup.currency)} (was ${money(amount, pickup.currency)})`
+                : money(amount, pickup.currency)
+              : "Priced at pickup"
+          }
         />
+        {saved > 0 && (
+          <Detail
+            icon={TicketPercent}
+            label={pickup.couponCode ? `Coupon ${pickup.couponCode}` : "Discount"}
+            value={`You saved ${money(saved, pickup.currency)}`}
+            tone="success"
+          />
+        )}
       </div>
 
       <div className="glass rounded-2xl p-5">
@@ -183,13 +205,25 @@ export function PickupStatusPipeline({ pickup }: { pickup: PickupRequestDto }) {
   );
 }
 
-function Detail({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
+function Detail({
+  icon: Icon,
+  label,
+  value,
+  tone,
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: string;
+  tone?: "success";
+}) {
   return (
     <div className="glass flex items-start gap-3 rounded-xl p-3">
       <Icon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
       <div className="min-w-0">
         <p className="text-xs text-muted-foreground">{label}</p>
-        <p className="truncate text-sm font-medium text-foreground">{value}</p>
+        <p className={cn("truncate text-sm font-medium", tone === "success" ? "text-success" : "text-foreground")}>
+          {value}
+        </p>
       </div>
     </div>
   );

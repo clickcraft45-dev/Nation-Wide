@@ -34,7 +34,7 @@ export default function HomePage() {
   return (
     <div className="flex min-h-screen flex-1 flex-col">
       <SmoothScroll />
-      <MarketingNavbar />
+      <MarketingNavbar showContactTab />
       <MarketingHero />
       {/* Renders only while an admin has live "Rolling text" published under Events and offers. */}
       <MarketingTicker />

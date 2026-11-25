@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
   Param,
   Patch,
   Post,
@@ -36,6 +37,11 @@ import { CollectPaymentDto } from '../pickup-requests/dto/collect-payment.dto';
 import { DoorDiscountDto } from '../pickup-requests/dto/door-discount.dto';
 import { AcceptParcelDto } from '../pickup-requests/dto/accept-parcel.dto';
 import { RejectParcelDto } from '../pickup-requests/dto/reject-parcel.dto';
+import {
+  CancelPickupDto,
+  ReschedulePickupDto,
+} from '../pickup-requests/dto/reschedule-pickup.dto';
+import { UpdatePickupAddressDto } from '../pickup-requests/dto/update-pickup-address.dto';
 import { AdminCreatePickupOrderDto } from '../pickup-requests/dto/admin-create-pickup-order.dto';
 import { PhotosUpload, requireFiles } from '../pickup-requests/image-upload';
 import {
@@ -228,6 +234,52 @@ export class AdminPickupRequestsController {
       user.sub,
     );
     return toPickupRequestDto(pickupRequest);
+  }
+
+  // Staff correct the address on any pickup before it becomes an order; the partner is told.
+  @Patch(':id/address')
+  async updateAddress(
+    @Param('id') id: string,
+    @Body() dto: UpdatePickupAddressDto,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<PickupRequestDto> {
+    return toPickupRequestDto(
+      await this.pickupRequestsService.updateAddress(id, dto, user.sub, true),
+    );
+  }
+
+  // Any pickup nobody has reached yet. A partner who had accepted the old time is asked again.
+  @Patch(':id/reschedule')
+  async reschedule(
+    @Param('id') id: string,
+    @Body() dto: ReschedulePickupDto,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<PickupRequestDto> {
+    return toPickupRequestDto(
+      await this.pickupRequestsService.reschedule(id, dto, user.sub, true),
+    );
+  }
+
+  // Before any money is taken. The customer and the partner are told.
+  @Patch(':id/cancel')
+  async cancel(
+    @Param('id') id: string,
+    @Body() dto: CancelPickupDto,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<PickupRequestDto> {
+    return toPickupRequestDto(
+      await this.pickupRequestsService.cancel(id, dto.reason, user.sub),
+    );
+  }
+
+  // Duplicates and mistakes only: refused once anyone has worked on the pickup.
+  @Delete(':id')
+  @HttpCode(204)
+  remove(
+    @Param('id') id: string,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<void> {
+    return this.pickupRequestsService.remove(id, user.sub);
   }
 
   // Warehouse drop-off workflow: received -> verify -> payment -> accept/reject.

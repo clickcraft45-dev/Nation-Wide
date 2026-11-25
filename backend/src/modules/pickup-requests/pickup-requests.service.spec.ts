@@ -80,6 +80,7 @@ describe('PickupRequestsService', () => {
       update: jest.Mock;
       updateMany: jest.Mock;
       count: jest.Mock;
+      delete: jest.Mock;
     };
     adminUser: {
       findUnique: jest.Mock;
@@ -91,9 +92,10 @@ describe('PickupRequestsService', () => {
       createMany: jest.Mock;
       findUnique: jest.Mock;
       delete: jest.Mock;
+      count: jest.Mock;
     };
     order: { update: jest.Mock };
-    receipt: { updateMany: jest.Mock };
+    receipt: { updateMany: jest.Mock; count: jest.Mock };
     auditLog: { create: jest.Mock };
     $transaction: jest.Mock;
   };
@@ -127,6 +129,7 @@ describe('PickupRequestsService', () => {
         update: jest.fn().mockResolvedValue(undefined),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
         count: jest.fn().mockResolvedValue(0),
+        delete: jest.fn().mockResolvedValue(undefined),
       },
       adminUser: {
         findUnique: jest
@@ -144,9 +147,13 @@ describe('PickupRequestsService', () => {
         createMany: jest.fn().mockResolvedValue({ count: 1 }),
         findUnique: jest.fn().mockResolvedValue(null),
         delete: jest.fn().mockResolvedValue(undefined),
+        count: jest.fn().mockResolvedValue(0),
       },
       order: { update: jest.fn().mockResolvedValue(undefined) },
-      receipt: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
+      receipt: {
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+        count: jest.fn().mockResolvedValue(0),
+      },
       auditLog: { create: jest.fn().mockResolvedValue(undefined) },
       // Supports both the array form ($transaction([...])) and the interactive callback form
       // ($transaction(async (tx) => {...})) — create() uses the latter for its atomic claim.
@@ -1020,6 +1027,251 @@ describe('PickupRequestsService', () => {
       await expect(
         service.assignPartner('pr-1', 'x', 'admin-1'),
       ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('acceptAssignment / reschedule', () => {
+    const newlyAssigned = {
+      ...basePickupRequest,
+      status: 'ASSIGNED',
+      arrivedAt: null,
+      dropAtWarehouse: false,
+      pickupContactName: 'Jane',
+      pickupDate: new Date('2099-01-01'),
+      pickupTimeSlot: '09:00-12:00',
+    };
+    const later = {
+      pickupDate: '2099-01-02',
+      pickupTimeSlot: '15:00-18:00',
+      reason: 'Vehicle in for repair',
+    } as never;
+
+    it('accepting moves a new assignment to SCHEDULED', async () => {
+      prisma.pickupRequest.findUnique.mockResolvedValue(newlyAssigned);
+
+      await service.acceptAssignment('pr-1', 'partner-1');
+
+      expect(prisma.pickupRequest.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: 'pr-1',
+          assignedPartnerId: 'partner-1',
+          status: 'ASSIGNED',
+        },
+        data: { status: 'SCHEDULED', acceptedAt: expect.any(Date) as Date },
+      });
+    });
+
+    it('a partner moving a new assignment accepts the new time and tells the customer why', async () => {
+      prisma.pickupRequest.findUnique.mockResolvedValue(newlyAssigned);
+
+      await service.reschedule('pr-1', later, 'partner-1');
+
+      expect(prisma.pickupRequest.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            pickupTimeSlot: '15:00-18:00',
+            rescheduleReason: 'Vehicle in for repair',
+            status: 'SCHEDULED',
+          }) as unknown,
+        }),
+      );
+      expect(notificationsService.enqueue).toHaveBeenCalledWith(
+        'customer-1',
+        'WHATSAPP',
+        'pickup_rescheduled',
+        expect.objectContaining({ reason: 'Vehicle in for repair' }),
+      );
+    });
+
+    it('a partner cannot move a pickup they already accepted', async () => {
+      prisma.pickupRequest.findUnique.mockResolvedValue({
+        ...newlyAssigned,
+        status: 'SCHEDULED',
+      });
+      await expect(
+        service.reschedule('pr-1', later, 'partner-1'),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('staff moving an accepted pickup ask the partner to accept again', async () => {
+      prisma.pickupRequest.findUnique.mockResolvedValue({
+        ...newlyAssigned,
+        status: 'SCHEDULED',
+      });
+
+      await service.reschedule('pr-1', later, 'admin-1', true);
+
+      expect(prisma.pickupRequest.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: 'ASSIGNED',
+            acceptedAt: null,
+          }) as unknown,
+        }),
+      );
+      expect(pushService.sendToAdminUser).toHaveBeenCalledWith(
+        'partner-1',
+        expect.objectContaining({ title: 'Pickup moved: please accept again' }),
+      );
+    });
+
+    it('refuses a day in the past', async () => {
+      prisma.pickupRequest.findUnique.mockResolvedValue(newlyAssigned);
+      await expect(
+        service.reschedule(
+          'pr-1',
+          {
+            pickupDate: '2000-01-01',
+            pickupTimeSlot: '09:00-12:00',
+            reason: 'xyz',
+          } as never,
+          'partner-1',
+        ),
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('cancel / remove', () => {
+    const notStarted = {
+      ...basePickupRequest,
+      status: 'ASSIGNED',
+      arrivedAt: null,
+      orderId: null,
+      paymentDeferredAt: null,
+      pickupContactName: 'Jane',
+    };
+
+    it('cancels before payment, closes the quote and tells customer and partner', async () => {
+      prisma.pickupRequest.findUnique.mockResolvedValue(notStarted);
+
+      await service.cancel('pr-1', 'Customer called to cancel', 'admin-1');
+
+      expect(prisma.pickupRequest.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: 'CANCELLED',
+            cancellationReason: 'Customer called to cancel',
+          }) as unknown,
+        }),
+      );
+      expect(prisma.quote.update).toHaveBeenCalledWith({
+        where: { id: 'quote-1' },
+        data: { status: 'CANCELLED' },
+      });
+      expect(notificationsService.enqueue).toHaveBeenCalledWith(
+        'customer-1',
+        'WHATSAPP',
+        'pickup_cancelled',
+        { reason: 'Customer called to cancel' },
+      );
+      expect(pushService.sendToAdminUser).toHaveBeenCalledWith(
+        'partner-1',
+        expect.objectContaining({ title: 'Pickup cancelled' }),
+      );
+    });
+
+    it('refuses to cancel once money has been taken', async () => {
+      prisma.pickupRequest.findUnique.mockResolvedValue({
+        ...notStarted,
+        paymentCollectedAt: new Date(),
+      });
+      await expect(
+        service.cancel('pr-1', 'Too late', 'admin-1'),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('deletes a pickup nobody worked on, keeping the quote closed', async () => {
+      prisma.pickupRequest.findUnique.mockResolvedValue(notStarted);
+
+      await service.remove('pr-1', 'admin-1');
+
+      expect(prisma.pickupRequest.delete).toHaveBeenCalledWith({
+        where: { id: 'pr-1' },
+      });
+      expect(prisma.quote.update).toHaveBeenCalledWith({
+        where: { id: 'quote-1' },
+        data: { status: 'CANCELLED' },
+      });
+    });
+
+    it('refuses to delete a pickup the partner already reached', async () => {
+      prisma.pickupRequest.findUnique.mockResolvedValue({
+        ...notStarted,
+        arrivedAt: new Date(),
+      });
+      await expect(service.remove('pr-1', 'admin-1')).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(prisma.pickupRequest.delete).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('updateAddress', () => {
+    const live = {
+      ...basePickupRequest,
+      status: 'SCHEDULED',
+      dropAtWarehouse: false,
+      orderId: null,
+      pickupContactName: 'Jane',
+      pickupAddressLine1: 'Old Road 1',
+      pickupCity: 'Hyderabad',
+      pickupLatitude: 17.4,
+      pickupLongitude: 78.4,
+    };
+    const moved = {
+      pickupAddressLine1: ' Shop 4, New Market ',
+      pickupCity: 'Hyderabad',
+      pickupState: 'Telangana',
+      pickupPostalCode: '500001',
+    } as never;
+
+    it('lets the assigned partner correct it, drops the old pin and tells the office', async () => {
+      prisma.pickupRequest.findUnique.mockResolvedValue(live);
+      prisma.adminUser.findMany.mockResolvedValue([{ id: 'admin-1' }]);
+
+      await service.updateAddress('pr-1', moved, 'partner-1');
+
+      expect(prisma.pickupRequest.update).toHaveBeenCalledWith({
+        where: { id: 'pr-1' },
+        data: expect.objectContaining({
+          pickupAddressLine1: 'Shop 4, New Market',
+          pickupLatitude: null,
+          pickupLongitude: null,
+        }) as unknown,
+      });
+      expect(pushService.sendToAdminUser).toHaveBeenCalledWith(
+        'admin-1',
+        expect.objectContaining({ title: 'Partner changed a pickup address' }),
+      );
+    });
+
+    it('refuses a partner the pickup is not assigned to', async () => {
+      prisma.pickupRequest.findUnique.mockResolvedValue(live);
+      await expect(
+        service.updateAddress('pr-1', moved, 'partner-2'),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('staff editing it tell the partner', async () => {
+      prisma.pickupRequest.findUnique.mockResolvedValue(live);
+
+      await service.updateAddress('pr-1', moved, 'admin-1', true);
+
+      expect(pushService.sendToAdminUser).toHaveBeenCalledWith(
+        'partner-1',
+        expect.objectContaining({ title: 'Pickup address changed' }),
+      );
+    });
+
+    it('refuses once the pickup became an order', async () => {
+      prisma.pickupRequest.findUnique.mockResolvedValue({
+        ...live,
+        status: 'COMPLETED',
+        orderId: 'order-1',
+      });
+      await expect(
+        service.updateAddress('pr-1', moved, 'admin-1', true),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 

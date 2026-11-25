@@ -37,6 +37,8 @@ import { OrdersService } from '../orders/orders.service';
 import { InvoicesService } from '../invoices/invoices.service';
 import { ReceiptsService } from '../receipts/receipts.service';
 import { PushService } from '../push/push.service';
+import { ReschedulePickupDto } from './dto/reschedule-pickup.dto';
+import { UpdatePickupAddressDto } from './dto/update-pickup-address.dto';
 import {
   PricingEngineService,
   type ComputedRateOption,
@@ -399,8 +401,12 @@ export class PickupRequestsService {
       : null;
     // Frozen at booking: the code can be retired or re-priced before the parcel is collected,
     // and this is the figure the customer was shown. Never more than the price itself.
+    // A route priced at the door has no price yet (0): the full amount is kept, and payableFor
+    // never lets it take the bill below zero once the partner has weighed the parcel.
     const discountAmount = coupon
-      ? Math.min(coupon.discountAmount, estimatedPrice)
+      ? estimatedPrice > 0
+        ? Math.min(coupon.discountAmount, estimatedPrice)
+        : coupon.discountAmount
       : null;
 
     // Atomic claim-then-create inside one interactive transaction — the earlier version read
@@ -1137,6 +1143,8 @@ export class PickupRequestsService {
         assignedPartnerId: partnerId,
         assignedAt: new Date(),
         status: 'ASSIGNED',
+        // A new partner has not said yes yet, whatever the last one did.
+        acceptedAt: null,
       },
     });
 
@@ -1187,6 +1195,419 @@ export class PickupRequestsService {
       url: `/partner/pickups/${id}`,
       tag: `pickup-${id}`,
     });
+  }
+
+  /**
+   * The partner says they will do an assigned pickup on the day and slot it has. Before this they
+   * may move it instead (reschedule); after it, only staff can.
+   */
+  async acceptAssignment(
+    id: string,
+    partnerId: string,
+  ): Promise<PickupRequestWithDetails> {
+    const pickupRequest = await this.findOneForPartner(id, partnerId);
+    if (pickupRequest.status === 'SCHEDULED') return pickupRequest;
+    if (pickupRequest.status !== 'ASSIGNED') {
+      throw new BadRequestException(
+        `Only a newly assigned pickup can be accepted (this one is ${pickupRequest.status})`,
+      );
+    }
+    const claim = await this.prisma.pickupRequest.updateMany({
+      where: { id, assignedPartnerId: partnerId, status: 'ASSIGNED' },
+      data: { status: 'SCHEDULED', acceptedAt: new Date() },
+    });
+    if (claim.count === 1) {
+      await this.prisma.auditLog.create({
+        data: {
+          actorId: partnerId,
+          action: 'PICKUP_REQUEST_ACCEPTED',
+          entity: 'PickupRequest',
+          entityId: id,
+          before: { status: 'ASSIGNED' },
+          after: { status: 'SCHEDULED' },
+        },
+      });
+    }
+    return this.findOne(id);
+  }
+
+  /**
+   * Move a pickup to another day or slot, with the reason the customer is told.
+   *
+   * The partner may do it only before accepting: it is their answer to "can you do this one?".
+   * Moving it counts as accepting the new time, so it does not come back to them to accept again.
+   * Staff may move any pickup nobody has reached yet; a partner who had accepted the old time is
+   * asked again, because they agreed to a different one.
+   */
+  async reschedule(
+    id: string,
+    dto: ReschedulePickupDto,
+    actorId: string,
+    asAdmin = false,
+  ): Promise<PickupRequestWithDetails> {
+    const pickupRequest = asAdmin
+      ? await this.findOne(id)
+      : await this.findOneForPartner(id, actorId);
+    if (pickupRequest.dropAtWarehouse) {
+      throw new BadRequestException(
+        'A warehouse drop-off has no pickup slot to move',
+      );
+    }
+    if (pickupRequest.arrivedAt) {
+      throw new BadRequestException(
+        'The partner is already at the pickup, so it can no longer be moved',
+      );
+    }
+    const movable: PickupRequestStatusCode[] = asAdmin
+      ? ['PENDING_ASSIGNMENT', 'ASSIGNED', 'SCHEDULED']
+      : ['ASSIGNED'];
+    if (!movable.includes(pickupRequest.status)) {
+      throw new BadRequestException(
+        asAdmin
+          ? `A pickup that is ${pickupRequest.status} cannot be moved`
+          : 'You have already accepted this pickup. Ask the office to move it.',
+      );
+    }
+
+    const day = dto.pickupDate.slice(0, 10);
+    const reason = dto.reason.trim();
+    if (day < localDateIso()) {
+      throw new BadRequestException('Choose today or a later day');
+    }
+    if (day === localDateIso() && !isPickupSlotOpen(dto.pickupTimeSlot, day)) {
+      throw new BadRequestException(
+        `The ${dto.pickupTimeSlot} slot has already closed today. Choose a later slot or another day.`,
+      );
+    }
+
+    const now = new Date();
+    let nextStatus: PickupRequestStatusCode = 'SCHEDULED';
+    if (asAdmin) {
+      nextStatus = pickupRequest.assignedPartnerId
+        ? 'ASSIGNED'
+        : 'PENDING_ASSIGNMENT';
+    }
+    await this.prisma.pickupRequest.update({
+      where: { id },
+      data: {
+        pickupDate: new Date(day),
+        pickupTimeSlot: dto.pickupTimeSlot,
+        rescheduledAt: now,
+        rescheduleReason: reason,
+        status: nextStatus,
+        acceptedAt: asAdmin ? null : now,
+      },
+    });
+
+    await this.prisma.auditLog.create({
+      data: {
+        actorId,
+        action: 'PICKUP_REQUEST_RESCHEDULED',
+        entity: 'PickupRequest',
+        entityId: id,
+        before: {
+          pickupDate:
+            pickupRequest.pickupDate?.toISOString().slice(0, 10) ?? null,
+          pickupTimeSlot: pickupRequest.pickupTimeSlot,
+          status: pickupRequest.status,
+        },
+        after: {
+          pickupDate: day,
+          pickupTimeSlot: dto.pickupTimeSlot,
+          status: nextStatus,
+          reason,
+          by: asAdmin ? 'ADMIN' : 'PARTNER',
+        },
+      },
+    });
+
+    await this.notificationsService.enqueue(
+      pickupRequest.customerId,
+      'WHATSAPP',
+      NOTIFICATION_TEMPLATES.PICKUP_RESCHEDULED,
+      { pickupDate: day, pickupTimeSlot: dto.pickupTimeSlot, reason },
+    );
+
+    const when = `${day} · ${dto.pickupTimeSlot}`;
+    if (asAdmin) {
+      if (pickupRequest.assignedPartnerId) {
+        void this.pushService.sendToAdminUser(pickupRequest.assignedPartnerId, {
+          title: 'Pickup moved: please accept again',
+          body: `${pickupRequest.pickupContactName} · ${when}`,
+          url: `/partner/pickups/${id}`,
+          tag: `pickup-${id}`,
+        });
+      }
+    } else {
+      // Staff need to know a partner moved a pickup: the customer may call them about it.
+      await this.pushToAdmins({
+        title: 'Partner rescheduled a pickup',
+        body: `${pickupRequest.pickupContactName} · ${when} · ${reason}`,
+        url: `/admin/pickup-requests/${id}`,
+        tag: `pickup-${id}`,
+      });
+    }
+    return this.findOne(id);
+  }
+
+  /**
+   * Staff call a pickup off before any money has been taken. The quote is closed with it, and the
+   * customer and the partner (if one was on it) are told. A coupon on it was never redeemed (that
+   * happens with the payment), so there is nothing to give back.
+   */
+  async cancel(
+    id: string,
+    reason: string,
+    actorId: string,
+  ): Promise<PickupRequestWithDetails> {
+    const pickupRequest = await this.findOne(id);
+    this.assertCancellable(pickupRequest);
+    const why = reason.trim();
+
+    const claimed = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.pickupRequest.updateMany({
+        where: {
+          id,
+          status: { in: NON_TERMINAL_STATUSES },
+          paymentCollectedAt: null,
+          paymentDeferredAt: null,
+          orderId: null,
+        },
+        data: {
+          status: 'CANCELLED',
+          cancelledAt: new Date(),
+          cancellationReason: why,
+        },
+      });
+      if (updated.count === 1) {
+        await tx.quote.update({
+          where: { id: pickupRequest.quoteId },
+          data: { status: 'CANCELLED' },
+        });
+      }
+      return updated.count === 1;
+    });
+    if (!claimed) {
+      throw new BadRequestException(
+        'This pickup changed while you were looking at it. Reload and try again.',
+      );
+    }
+
+    await this.prisma.auditLog.create({
+      data: {
+        actorId,
+        action: 'PICKUP_REQUEST_CANCELLED',
+        entity: 'PickupRequest',
+        entityId: id,
+        before: { status: pickupRequest.status },
+        after: { status: 'CANCELLED', reason: why },
+      },
+    });
+    await this.announceCancellation(pickupRequest, why);
+    return this.findOne(id);
+  }
+
+  /**
+   * Remove a pickup request for good: a duplicate, a test, a booking made by mistake. Only one no
+   * money, photo or order ever touched; anything further along is cancelled instead, so its
+   * history stays. The quote is kept and closed, and the audit log keeps what was deleted.
+   */
+  async remove(id: string, actorId: string): Promise<void> {
+    const pickupRequest = await this.findOne(id);
+    if (
+      pickupRequest.orderId ||
+      pickupRequest.paymentCollectedAt ||
+      pickupRequest.paymentDeferredAt ||
+      pickupRequest.arrivedAt
+    ) {
+      throw new BadRequestException(
+        'This pickup has already been worked on, so it can only be cancelled, not deleted',
+      );
+    }
+    const [photos, receipts] = await Promise.all([
+      this.prisma.pickupPhoto.count({ where: { pickupRequestId: id } }),
+      this.prisma.receipt.count({ where: { pickupRequestId: id } }),
+    ]);
+    if (photos + receipts > 0) {
+      throw new BadRequestException(
+        'This pickup has photos or receipts on file, so it can only be cancelled, not deleted',
+      );
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.pickupRequest.delete({ where: { id } });
+      await tx.quote.update({
+        where: { id: pickupRequest.quoteId },
+        data: { status: 'CANCELLED' },
+      });
+    });
+
+    await this.prisma.auditLog.create({
+      data: {
+        actorId,
+        action: 'PICKUP_REQUEST_DELETED',
+        entity: 'PickupRequest',
+        entityId: id,
+        before: {
+          status: pickupRequest.status,
+          quoteId: pickupRequest.quoteId,
+          customerId: pickupRequest.customerId,
+          assignedPartnerId: pickupRequest.assignedPartnerId,
+          pickupContactName: pickupRequest.pickupContactName,
+          pickupDate:
+            pickupRequest.pickupDate?.toISOString().slice(0, 10) ?? null,
+          pickupTimeSlot: pickupRequest.pickupTimeSlot,
+          pickupCity: pickupRequest.pickupCity,
+        },
+      },
+    });
+
+    // Only a live pickup is news to anyone; a cancelled one was announced when it was cancelled.
+    if (NON_TERMINAL_STATUSES.includes(pickupRequest.status)) {
+      await this.announceCancellation(
+        pickupRequest,
+        'Booking removed by our team',
+      );
+    }
+  }
+
+  private assertCancellable(pickupRequest: PickupRequestWithDetails): void {
+    if (!NON_TERMINAL_STATUSES.includes(pickupRequest.status)) {
+      throw new BadRequestException(
+        `This pickup is already ${pickupRequest.status} and cannot be cancelled`,
+      );
+    }
+    if (
+      pickupRequest.orderId ||
+      pickupRequest.paymentCollectedAt ||
+      pickupRequest.paymentDeferredAt
+    ) {
+      throw new BadRequestException(
+        'Payment has already been taken for this pickup. Cancel the order instead.',
+      );
+    }
+  }
+
+  private async announceCancellation(
+    pickupRequest: PickupRequestWithDetails,
+    reason: string,
+  ): Promise<void> {
+    await this.notificationsService.enqueue(
+      pickupRequest.customerId,
+      'WHATSAPP',
+      NOTIFICATION_TEMPLATES.PICKUP_CANCELLED,
+      { reason },
+    );
+    if (pickupRequest.assignedPartnerId) {
+      void this.pushService.sendToAdminUser(pickupRequest.assignedPartnerId, {
+        title: 'Pickup cancelled',
+        body: `${pickupRequest.pickupContactName} · ${reason}`,
+        url: '/partner/pickups',
+        tag: `pickup-${pickupRequest.id}`,
+      });
+    }
+  }
+
+  private async pushToAdmins(payload: {
+    title: string;
+    body: string;
+    url: string;
+    tag: string;
+  }): Promise<void> {
+    const admins = await this.prisma.adminUser.findMany({
+      where: { role: { in: ['ADMIN', 'SUPER_ADMIN'] }, isActive: true },
+      select: { id: true },
+    });
+    for (const admin of admins) {
+      void this.pushService.sendToAdminUser(admin.id, payload);
+    }
+  }
+
+  /**
+   * Correct where a pickup is collected from: the customer gave the wrong building, moved to their
+   * shop, or the pin was off. The assigned partner may do it (they are the one at the door); staff
+   * may do it on any pickup. Not on a warehouse drop-off (no address) and not once the order exists.
+   */
+  async updateAddress(
+    id: string,
+    dto: UpdatePickupAddressDto,
+    actorId: string,
+    asAdmin = false,
+  ): Promise<PickupRequestWithDetails> {
+    const pickupRequest = asAdmin
+      ? await this.findOne(id)
+      : await this.findOneForPartner(id, actorId);
+    if (pickupRequest.dropAtWarehouse) {
+      throw new BadRequestException(
+        'A warehouse drop-off has no pickup address to change',
+      );
+    }
+    if (
+      !NON_TERMINAL_STATUSES.includes(pickupRequest.status) ||
+      pickupRequest.orderId
+    ) {
+      throw new BadRequestException(
+        `The address cannot be changed on a pickup that is ${pickupRequest.status}`,
+      );
+    }
+
+    const pinned = dto.pickupLatitude != null && dto.pickupLongitude != null;
+    const next = {
+      pickupAddressLine1: dto.pickupAddressLine1.trim(),
+      pickupAddressLine2: dto.pickupAddressLine2?.trim() || null,
+      pickupCity: dto.pickupCity.trim(),
+      pickupState: dto.pickupState.trim(),
+      pickupPostalCode: dto.pickupPostalCode.trim(),
+      pickupLatitude: pinned ? dto.pickupLatitude! : null,
+      pickupLongitude: pinned ? dto.pickupLongitude! : null,
+      ...(dto.pickupInstructions !== undefined
+        ? { pickupInstructions: dto.pickupInstructions.trim() || null }
+        : {}),
+    };
+    const before = {
+      pickupAddressLine1: pickupRequest.pickupAddressLine1,
+      pickupAddressLine2: pickupRequest.pickupAddressLine2,
+      pickupCity: pickupRequest.pickupCity,
+      pickupState: pickupRequest.pickupState,
+      pickupPostalCode: pickupRequest.pickupPostalCode,
+      pickupLatitude: pickupRequest.pickupLatitude,
+      pickupLongitude: pickupRequest.pickupLongitude,
+      pickupInstructions: pickupRequest.pickupInstructions,
+    };
+
+    await this.prisma.pickupRequest.update({ where: { id }, data: next });
+    await this.prisma.auditLog.create({
+      data: {
+        actorId,
+        action: 'PICKUP_REQUEST_ADDRESS_UPDATED',
+        entity: 'PickupRequest',
+        entityId: id,
+        before,
+        after: { ...next, by: asAdmin ? 'ADMIN' : 'PARTNER' },
+      },
+    });
+
+    // Whoever did not make the change is told: the partner must not drive to the old address,
+    // and the office must not read the old one out to a customer who calls.
+    const where = `${next.pickupAddressLine1}, ${next.pickupCity}`;
+    if (asAdmin) {
+      if (pickupRequest.assignedPartnerId) {
+        void this.pushService.sendToAdminUser(pickupRequest.assignedPartnerId, {
+          title: 'Pickup address changed',
+          body: `${pickupRequest.pickupContactName} · ${where}`,
+          url: `/partner/pickups/${id}`,
+          tag: `pickup-${id}`,
+        });
+      }
+    } else {
+      await this.pushToAdmins({
+        title: 'Partner changed a pickup address',
+        body: `${pickupRequest.pickupContactName} · ${where}`,
+        url: `/admin/pickup-requests/${id}`,
+        tag: `pickup-${id}`,
+      });
+    }
+    return this.findOne(id);
   }
 
   findAllForPartner(
@@ -1870,10 +2291,12 @@ export class PickupRequestsService {
         data: {
           couponId: pickupRequest.couponId,
           // The coupon and the door discount together: the invoice takes both off the total.
+          // What actually came off, never more than the price: a flat coupon on a parcel that
+          // weighed in cheaper than the code is worth takes the bill to zero, not below it.
           discountAmount:
             round2(
-              (pickupRequest.discountAmount ?? 0) +
-                (pickupRequest.doorDiscountAmount ?? 0),
+              (pickupRequest.verifiedPrice ?? pickupRequest.estimatedPrice) -
+                finalPrice,
             ) || null,
           ...(pickupRequest.paymentDeferredAt
             ? {

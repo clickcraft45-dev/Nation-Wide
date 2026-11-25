@@ -124,6 +124,10 @@ export class PickupPartnersService {
     });
   }
 
+  findOne(id: string): Promise<AdminUser> {
+    return this.findOneOrThrow(id);
+  }
+
   private async findOneOrThrow(id: string): Promise<AdminUser> {
     const partner = await this.prisma.adminUser.findUnique({ where: { id } });
     if (!partner || partner.role !== 'PICKUP_PARTNER') {

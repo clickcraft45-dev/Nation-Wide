@@ -543,6 +543,16 @@ model PickupRequest {
   // the 3-step Arrived -> Verify/Pay -> Complete workflow can't be skipped.
   arrivedAt DateTime? @map("arrived_at")
 
+  /// The partner said they will do this pickup (status SCHEDULED). Before that they may ask for
+  /// another day instead: rescheduledAt / rescheduleReason record the last move, by either side.
+  acceptedAt       DateTime? @map("accepted_at")
+  rescheduledAt    DateTime? @map("rescheduled_at")
+  rescheduleReason String?   @map("reschedule_reason")
+
+  /// Staff called the pickup off (status CANCELLED). The quote goes back to the customer.
+  cancelledAt        DateTime? @map("cancelled_at")
+  cancellationReason String?   @map("cancellation_reason")
+
   // Verification — Pickup Partner entered, at the customer's location.
   verifiedWeightKg        Float?            @map("verified_weight_kg")
   verifiedShipmentType    ShipmentTypeCode? @map("verified_shipment_type")
@@ -1046,6 +1056,8 @@ model Coupon {
   createdByAdminId String?   @map("created_by_admin_id")
   createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt        DateTime  @updatedAt @map("updated_at")
+  /// Deleted by an admin after it had been used: hidden and refused, kept for those bookings.
+  deletedAt        DateTime? @map("deleted_at")
 
   createdBy      AdminUser?      @relation("CouponCreatedBy", fields: [createdByAdminId], references: [id])
   orders         Order[]

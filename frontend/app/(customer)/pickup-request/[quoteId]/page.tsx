@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, CheckCircle2, TicketPercent } from "lucide-react";
 import {
   firstOpenPickupSlot,
   isPickupSlotOpen,
@@ -13,6 +13,7 @@ import {
   type QuoteDto,
   type SavedItemDto,
 } from "@nationwide/shared-types";
+import type { CouponCheckDto, PickupRequestDto } from "@nationwide/shared-types";
 import { apiClient, errorMessage, fieldErrors } from "@/lib/api-client";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -125,6 +126,11 @@ export default function PickupRequestPage() {
   const [itemsError, setItemsError] = useState<string | null>(null);
 
   const [couponCode, setCouponCode] = useState("");
+  // The code as the server last confirmed it, and what it takes off. Cleared as soon as the code
+  // is edited, so the summary never shows a saving for a code that is not the one being sent.
+  const [appliedCoupon, setAppliedCoupon] = useState<CouponCheckDto | null>(null);
+  const [isCheckingCoupon, setIsCheckingCoupon] = useState(false);
+  const [booked, setBooked] = useState<PickupRequestDto | null>(null);
 
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [termsError, setTermsError] = useState<string | null>(null);
@@ -318,7 +324,7 @@ export default function PickupRequestPage() {
 
     setIsSubmitting(true);
     try {
-      await apiClient.post("/pickup-requests", {
+      const created = await apiClient.post<PickupRequestDto>("/pickup-requests", {
         quoteId: quote.id,
         dropAtWarehouse,
         acceptedTerms,
@@ -346,6 +352,7 @@ export default function PickupRequestPage() {
         recipient: addRecipient ? toRecipientPayload(recipient) : undefined,
         items: toItemsPayload(items, quote?.packages?.length ?? 1),
       });
+      setBooked(created);
       setSubmitted(true);
     } catch (err) {
       // Say what was actually wrong. The server rejects per field ("pickupContactPhone must be
@@ -368,6 +375,34 @@ export default function PickupRequestPage() {
       );
     } finally {
       setIsSubmitting(false);
+    }
+  }
+
+  // What the parcel costs before any discount: the chosen carrier's price, or the staff quote.
+  // Zero when the route is priced at the door.
+  const basePrice = quote ? (quote.selectedOption?.finalPrice ?? quote.quotedAmount ?? 0) : 0;
+  const currency = quote?.selectedOption?.currency ?? quote?.quotedCurrency ?? "INR";
+  const money = (n: number) =>
+    `${currency === "INR" ? "₹" : `${currency} `}${Math.round(n).toLocaleString("en-IN")}`;
+
+  async function applyCoupon() {
+    const code = couponCode.trim();
+    if (!code) return;
+    setIsCheckingCoupon(true);
+    setErrors((current) => ({ ...current, couponCode: undefined }));
+    try {
+      const result = await apiClient.get<CouponCheckDto>(
+        `/coupons/check?code=${encodeURIComponent(code)}&amount=${basePrice}`,
+      );
+      setAppliedCoupon(result);
+    } catch (err) {
+      setAppliedCoupon(null);
+      setErrors((current) => ({
+        ...current,
+        couponCode: errorMessage(err, "That code could not be checked. Try again."),
+      }));
+    } finally {
+      setIsCheckingCoupon(false);
     }
   }
 
@@ -402,6 +437,30 @@ export default function PickupRequestPage() {
             ? "Bring your parcel to our warehouse. Our team will weigh it, take payment and ship it."
             : "Our pickup partner will contact you shortly to collect your parcel."}
         </p>
+        {booked?.discountAmount ? (
+          <div className="glass w-full space-y-2 rounded-2xl p-4 text-left text-sm">
+            {booked.estimatedPrice > 0 && (
+              <div className="flex justify-between text-muted-foreground">
+                <span>Shipping price</span>
+                <span className="tabular-nums line-through">{money(booked.estimatedPrice)}</span>
+              </div>
+            )}
+            <div className="flex justify-between text-muted-foreground">
+              <span>Coupon {booked.couponCode}</span>
+              <span className="tabular-nums">−{money(booked.discountAmount)}</span>
+            </div>
+            {booked.estimatedPrice > 0 && (
+              <div className="flex justify-between border-t border-border pt-2 text-base font-semibold text-foreground">
+                <span>You pay at {dropAtWarehouse ? "drop-off" : "pickup"}</span>
+                <span className="tabular-nums">{money(booked.payableAmount)}</span>
+              </div>
+            )}
+            <p className="font-medium text-success">
+              You saved {money(booked.discountAmount)}
+              {booked.estimatedPrice > 0 ? "" : " on the price set when your parcel is weighed"}.
+            </p>
+          </div>
+        ) : null}
         <Button size="lg" onClick={() => router.push(`/quotes/${quote.id}`)}>
           Track this request
         </Button>
@@ -676,22 +735,93 @@ export default function PickupRequestPage() {
           <CardHeader>
             <CardTitle>Discount code</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-1.5">
-            <Input
-              id="coupon-code"
-              placeholder="Enter a code, if you have one"
-              value={couponCode}
-              onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-              autoCapitalize="characters"
-              autoComplete="off"
-              error={Boolean(errors.couponCode)}
-            />
-            {errors.couponCode ? (
-              <FieldError>{errors.couponCode}</FieldError>
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                Optional. The discount comes off what you pay at pickup.
-              </p>
+          <CardContent className="space-y-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="coupon-code" className="sr-only">
+                Discount code
+              </Label>
+              <div className="flex gap-2">
+                <Input
+                  id="coupon-code"
+                  placeholder="Enter a code, if you have one"
+                  value={couponCode}
+                  onChange={(e) => {
+                    setCouponCode(e.target.value.toUpperCase());
+                    setAppliedCoupon(null);
+                    if (errors.couponCode) setErrors((current) => ({ ...current, couponCode: undefined }));
+                  }}
+                  onKeyDown={(e) => {
+                    // Enter applies the code rather than submitting the whole booking.
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      void applyCoupon();
+                    }
+                  }}
+                  autoCapitalize="characters"
+                  autoComplete="off"
+                  error={Boolean(errors.couponCode)}
+                  className="flex-1"
+                />
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={applyCoupon}
+                  isLoading={isCheckingCoupon}
+                  disabled={!couponCode.trim() || appliedCoupon?.code === couponCode.trim()}
+                >
+                  {appliedCoupon?.code === couponCode.trim() ? "Applied" : "Apply"}
+                </Button>
+              </div>
+              {errors.couponCode ? (
+                <FieldError>{errors.couponCode}</FieldError>
+              ) : (
+                !appliedCoupon && (
+                  <p className="text-xs text-muted-foreground">
+                    Optional. The discount comes off what you pay at pickup.
+                  </p>
+                )
+              )}
+            </div>
+
+            {(basePrice > 0 || appliedCoupon) && (
+              <div className="space-y-2 rounded-xl border border-border p-3 text-sm" aria-live="polite">
+                {basePrice > 0 && (
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>Shipping price</span>
+                    <span className={appliedCoupon ? "tabular-nums line-through" : "tabular-nums"}>
+                      {money(basePrice)}
+                    </span>
+                  </div>
+                )}
+                {appliedCoupon && (
+                  <div className="flex justify-between text-muted-foreground">
+                    <span className="inline-flex items-center gap-1.5">
+                      <TicketPercent className="h-4 w-4" aria-hidden />
+                      Coupon {appliedCoupon.code}
+                    </span>
+                    <span className="tabular-nums">−{money(appliedCoupon.discountAmount)}</span>
+                  </div>
+                )}
+                {basePrice > 0 && (
+                  <div className="flex justify-between border-t border-border pt-2 text-base font-semibold text-foreground">
+                    <span>You pay</span>
+                    <span className="tabular-nums">
+                      {money(Math.max(0, basePrice - (appliedCoupon?.discountAmount ?? 0)))}
+                    </span>
+                  </div>
+                )}
+                {appliedCoupon && (
+                  <p className="font-medium text-success">
+                    You save {money(appliedCoupon.discountAmount)}
+                    {basePrice > 0 ? "" : " on the price set when your parcel is weighed"}.
+                  </p>
+                )}
+                {basePrice > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    Final price is confirmed when the partner weighs your parcel.
+                  </p>
+                )}
+              </div>
             )}
           </CardContent>
         </Card>

@@ -14,6 +14,9 @@ import { MobileTabBar } from "@/components/layout/mobile-tab-bar";
 // A dedicated mobile-first shell for the field partner portal — not a responsive collapse of
 // the admin DashboardShell/Sidebar. Single scrollable column, a slim top bar, and the shared
 // floating glass dock sized for a thumb, so the whole app stays operable one-handed outdoors.
+/** How often an open partner app tells the office where it is. */
+const LOCATION_REPORT_MS = 2 * 60_000;
+
 export function PartnerMobileShell({
   user,
   children,
@@ -26,24 +29,34 @@ export function PartnerMobileShell({
   const { logout } = useAuth();
   const current = findNavItemForPath(pathname, PARTNER_NAV_ITEMS);
 
-  // Report where this phone is, once per app session — not tracking — so staff assigning a pickup
-  // by hand can see who is nearby. A refused permission or a failed request is simply skipped.
+  // Report where this phone is while the app is open and on screen: on opening, every couple of
+  // minutes, and on coming back to it. The office sees partners on the pickup map and assigns the
+  // nearest. Nothing is sent while the app is closed or in the background, and a refused
+  // permission is simply skipped.
   useEffect(() => {
-    try {
-      if (sessionStorage.getItem("nw-location-reported") || !("geolocation" in navigator)) return;
-      sessionStorage.setItem("nw-location-reported", "1");
-    } catch {
-      return;
+    if (!("geolocation" in navigator)) return;
+    let denied = false;
+    function report() {
+      if (denied || document.visibilityState !== "visible") return;
+      navigator.geolocation.getCurrentPosition(
+        ({ coords }) => {
+          apiClient
+            .patch("/partner/me/location", { latitude: coords.latitude, longitude: coords.longitude })
+            .catch(() => {});
+        },
+        (err) => {
+          if (err.code === err.PERMISSION_DENIED) denied = true;
+        },
+        { enableHighAccuracy: true, timeout: 20_000, maximumAge: 60_000 },
+      );
     }
-    navigator.geolocation.getCurrentPosition(
-      ({ coords }) => {
-        apiClient
-          .patch("/partner/me/location", { latitude: coords.latitude, longitude: coords.longitude })
-          .catch(() => {});
-      },
-      () => {},
-      { enableHighAccuracy: false, timeout: 15_000, maximumAge: 5 * 60_000 },
-    );
+    report();
+    const timer = setInterval(report, LOCATION_REPORT_MS);
+    document.addEventListener("visibilitychange", report);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", report);
+    };
   }, []);
 
   async function handleLogout() {

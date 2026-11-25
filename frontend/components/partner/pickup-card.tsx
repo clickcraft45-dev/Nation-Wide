@@ -14,9 +14,14 @@ function shipmentLabel(type: PickupRequestDto["shipmentType"]): string {
 /**
  * The step still owed on a pickup the partner already started at the door and then left without
  * finishing — the status badge alone ("OUT FOR PICKUP") doesn't say what's left to do. Null once
- * the pickup is finished, or before it was ever started.
+ * the pickup is finished, or before it was ever started (except a new assignment, which is waiting
+ * on the partner to accept it).
  */
 export function pendingStep(pickup: PickupRequestDto): string | null {
+  // Newly assigned: nothing happens until the partner says yes or asks for another time.
+  if (pickup.arrivedAt === null && pickup.status === "ASSIGNED" && !pickup.dropAtWarehouse) {
+    return "Accept or reschedule";
+  }
   if (pickup.arrivedAt === null) return null;
   if (pickup.status === "COMPLETED" || pickup.status === "CANCELLED" || pickup.status === "REJECTED") {
     return null;

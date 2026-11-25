@@ -31,6 +31,7 @@ import { RateCardsModule } from '../rate-cards/rate-cards.module';
 import { PickupRequestsModule } from '../pickup-requests/pickup-requests.module';
 import { MailModule } from '../mail/mail.module';
 import { InvoicesModule } from '../invoices/invoices.module';
+import { PushModule } from '../push/push.module';
 
 @Module({
   imports: [
@@ -45,6 +46,8 @@ import { InvoicesModule } from '../invoices/invoices.module';
     InvoicesModule,
     // PickupPartnersService emails a new partner their generated credentials.
     MailModule,
+    // "Ask for location" on the admin pickup map nudges the partner's phone.
+    PushModule,
   ],
   controllers: [
     AdminController,

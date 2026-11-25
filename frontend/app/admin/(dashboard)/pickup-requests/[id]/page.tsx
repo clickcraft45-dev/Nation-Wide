@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/ui/page-state";
 import { PickupRequestStatusBadge } from "@/components/ui/status-badge";
+import { EditAddressDialog } from "@/components/pickup-requests/edit-address-dialog";
 
 const PAYMENT_METHOD_LABEL: Record<PaymentMethodCode, string> = {
   CASH: "Cash",
@@ -181,12 +182,38 @@ export default function AdminPickupRequestDetailPage() {
           </CardHeader>
           <CardContent className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
             <div className="sm:col-span-2">
-              <p className="text-muted-foreground">Pickup Address</p>
-              <p className="font-medium text-foreground">
-                {pickup.dropAtWarehouse
-                  ? "Warehouse drop-off"
-                  : `${pickup.pickupAddressLine1}${pickup.pickupAddressLine2 ? `, ${pickup.pickupAddressLine2}` : ""}, ${pickup.pickupCity}, ${pickup.pickupState} ${pickup.pickupPostalCode}`}
-              </p>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-muted-foreground">Pickup Address</p>
+                  <p className="font-medium text-foreground">
+                    {pickup.dropAtWarehouse
+                      ? "Warehouse drop-off"
+                      : `${pickup.pickupAddressLine1}${pickup.pickupAddressLine2 ? `, ${pickup.pickupAddressLine2}` : ""}, ${pickup.pickupCity}, ${pickup.pickupState} ${pickup.pickupPostalCode}`}
+                  </p>
+                </div>
+                {!pickup.dropAtWarehouse &&
+                  !pickup.orderId &&
+                  !["COMPLETED", "CANCELLED", "REJECTED"].includes(pickup.status) && (
+                    <EditAddressDialog
+                      pickup={pickup}
+                      endpoint={`/admin/pickup-requests/${pickup.id}/address`}
+                      onDone={(updated) => {
+                        setPickup(updated);
+                        showToast({
+                          variant: "success",
+                          title: updated.assignedPartnerName
+                            ? `Address saved. ${updated.assignedPartnerName} has been told.`
+                            : "Address saved",
+                        });
+                      }}
+                      trigger={
+                        <Button size="sm" variant="secondary">
+                          Edit address
+                        </Button>
+                      }
+                    />
+                  )}
+              </div>
             </div>
             {pickup.pickupMapsUrl && (
               <div className="sm:col-span-2">

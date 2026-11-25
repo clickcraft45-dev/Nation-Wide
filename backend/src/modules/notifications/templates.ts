@@ -27,6 +27,8 @@ export const NOTIFICATION_TEMPLATES = {
   PAYMENT_COLLECTED: 'payment_collected',
   ORDER_CREATED_FROM_PICKUP: 'order_created_from_pickup',
   PICKUP_REJECTED: 'pickup_rejected',
+  PICKUP_RESCHEDULED: 'pickup_rescheduled',
+  PICKUP_CANCELLED: 'pickup_cancelled',
   // Carries the invoice PDF as a document attachment, so the Meta template must be submitted
   // with a DOCUMENT header — a text-header template will be rejected at send time.
   INVOICE_READY: 'invoice_ready',

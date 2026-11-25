@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, CalendarPlus, Check, MapPinned, Phone } from "lucide-react";
+import { ArrowLeft, CalendarClock, CalendarPlus, Check, MapPinned, Pencil, Phone } from "lucide-react";
 import {
   chargeableWeightKg,
   type CountryDto,
@@ -64,6 +64,8 @@ import {
   type SplitForm,
 } from "@/components/partner/payment-fields";
 import { KycDocumentFields } from "@/components/shipment/kyc-document-fields";
+import { RescheduleDialog, PICKUP_SLOT_LABELS } from "@/components/pickup-requests/reschedule-dialog";
+import { EditAddressDialog } from "@/components/pickup-requests/edit-address-dialog";
 const PARTNER_PAYMENT_METHODS: { value: PaymentMethodCode; label: string }[] = [
   { value: "CASH", label: "Cash" },
   { value: "UPI", label: "UPI" },
@@ -105,6 +107,7 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
   const [error, setError] = useState<string | null>(null);
 
   const [isArriving, setIsArriving] = useState(false);
+  const [isAcceptingAssignment, setIsAcceptingAssignment] = useState(false);
 
   // Verification form state. The boxes are weighed and measured one by one; the price follows
   // their chargeable weight (the greater of actual and volumetric, per box).
@@ -271,6 +274,19 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedWeight, verifiedShipmentType, pickup?.id, editingVerification]);
+
+  async function handleAcceptAssignment() {
+    setIsAcceptingAssignment(true);
+    try {
+      const updated = await apiClient.patch<PickupRequestDto>(`${api}/${id}/accept-assignment`, {});
+      setPickup(updated);
+      showToast({ variant: "success", title: "Pickup accepted" });
+    } catch (err) {
+      showToast({ variant: "error", title: errorMessage(err, "Couldn't accept the pickup. Try again.") });
+    } finally {
+      setIsAcceptingAssignment(false);
+    }
+  }
 
   async function handleArrive() {
     setIsArriving(true);
@@ -478,6 +494,12 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
       !pickup.paymentCollectedAt && !pickup.paymentDeferredAt
       ? "verify"
       : "complete";
+  // A newly assigned doorstep pickup: the partner accepts it, or asks for another time, first.
+  const needsAcceptance =
+    mode === "partner" && pickup.status === "ASSIGNED" && !pickup.arrivedAt && !pickup.dropAtWarehouse;
+  const slotText = pickup.pickupTimeSlot
+    ? (PICKUP_SLOT_LABELS[pickup.pickupTimeSlot as keyof typeof PICKUP_SLOT_LABELS] ?? pickup.pickupTimeSlot)
+    : "—";
   const showVerificationForm = step === "verify" && (!pickup.verifiedAt || editingVerification);
   const showPaymentForm = step === "verify" && !!pickup.verifiedAt && !editingVerification;
 
@@ -531,6 +553,25 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
                       {pickup.pickupState} {pickup.pickupPostalCode}
                     </p>
                     <div className="mt-1 flex flex-wrap gap-x-5">
+                      {mode === "partner" && !isTerminal && (
+                        <EditAddressDialog
+                          pickup={pickup}
+                          endpoint={`${api}/${id}/address`}
+                          onDone={(updated) => {
+                            setPickup(updated);
+                            showToast({ variant: "success", title: "Address saved. The office has been told." });
+                          }}
+                          trigger={
+                            <button
+                              type="button"
+                              className="inline-flex min-h-11 items-center gap-1.5 text-sm font-medium text-primary"
+                            >
+                              <Pencil className="h-3.5 w-3.5" aria-hidden />
+                              Edit address
+                            </button>
+                          }
+                        />
+                      )}
                       <a
                         href={mapsUrl(pickup)}
                         target="_blank"
@@ -570,8 +611,11 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
                 <div>
                   <p className="text-xs text-muted-foreground">Scheduled</p>
                   <p className="font-medium text-foreground">
-                    {pickup.pickupDate ?? "—"} · {pickup.pickupTimeSlot ?? "—"}
+                    {pickup.pickupDate ?? "—"} · {slotText}
                   </p>
+                  {pickup.rescheduleReason && (
+                    <p className="mt-0.5 text-xs text-muted-foreground">Moved: {pickup.rescheduleReason}</p>
+                  )}
                 </div>
               )}
               {pickup.pickupInstructions && (
@@ -628,10 +672,42 @@ export function PickupWorkflow({ id, mode }: { id: string; mode: "partner" | "ad
             </CardContent>
           </Card>
 
-          <Button size="lg" className="w-full" onClick={handleArrive} isLoading={isArriving}>
-            <Check className="h-5 w-5" aria-hidden />
-            {atWarehouse ? "Parcel Received at Warehouse" : "Arrived at Pickup"}
-          </Button>
+          {needsAcceptance ? (
+            <Card>
+              <CardContent className="space-y-3 pt-5">
+                <div>
+                  <p className="text-sm font-semibold text-foreground">Can you do this pickup?</p>
+                  <p className="text-sm text-muted-foreground">
+                    {pickup.pickupDate ?? "No date"} · {slotText}. Accept it, or pick another time and
+                    the customer is told why.
+                  </p>
+                </div>
+                <Button size="lg" className="w-full" onClick={handleAcceptAssignment} isLoading={isAcceptingAssignment}>
+                  <Check className="h-5 w-5" aria-hidden />
+                  Accept pickup
+                </Button>
+                <RescheduleDialog
+                  pickup={pickup}
+                  endpoint={`${api}/${id}/reschedule`}
+                  onDone={(updated) => {
+                    setPickup(updated);
+                    showToast({ variant: "success", title: "Pickup moved. The customer has been told." });
+                  }}
+                  trigger={
+                    <Button type="button" size="lg" variant="secondary" className="w-full" disabled={isAcceptingAssignment}>
+                      <CalendarClock className="h-5 w-5" aria-hidden />
+                      Reschedule
+                    </Button>
+                  }
+                />
+              </CardContent>
+            </Card>
+          ) : (
+            <Button size="lg" className="w-full" onClick={handleArrive} isLoading={isArriving}>
+              <Check className="h-5 w-5" aria-hidden />
+              {atWarehouse ? "Parcel Received at Warehouse" : "Arrived at Pickup"}
+            </Button>
+          )}
         </div>
       )}
 

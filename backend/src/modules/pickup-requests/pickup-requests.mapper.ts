@@ -137,6 +137,11 @@ export function toPickupRequestDto(
     arrivedAt: pickupRequest.arrivedAt
       ? pickupRequest.arrivedAt.toISOString()
       : null,
+    acceptedAt: pickupRequest.acceptedAt?.toISOString() ?? null,
+    rescheduledAt: pickupRequest.rescheduledAt?.toISOString() ?? null,
+    rescheduleReason: pickupRequest.rescheduleReason,
+    cancelledAt: pickupRequest.cancelledAt?.toISOString() ?? null,
+    cancellationReason: pickupRequest.cancellationReason,
 
     verifiedWeightKg: pickupRequest.verifiedWeightKg
       ? pickupRequest.verifiedWeightKg

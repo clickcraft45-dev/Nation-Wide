@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseUUIDPipe,
@@ -20,7 +21,7 @@ import {
   MaxLength,
   MinLength,
 } from 'class-validator';
-import type { CouponDto } from '@nationwide/shared-types';
+import type { CouponDetailDto, CouponDto } from '@nationwide/shared-types';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -77,6 +78,17 @@ export class AdminCouponsController {
     @CurrentUser() user: JwtPayload,
   ): Promise<CouponDto> {
     return this.coupons.create(dto, user.sub);
+  }
+
+  // Who used the code: opened by double-clicking its row.
+  @Get(':id')
+  detail(@Param('id', ParseUUIDPipe) id: string): Promise<CouponDetailDto> {
+    return this.coupons.detail(id);
+  }
+
+  @Delete(':id')
+  remove(@Param('id', ParseUUIDPipe) id: string): Promise<{ hidden: boolean }> {
+    return this.coupons.remove(id);
   }
 
   @Patch(':id/active')

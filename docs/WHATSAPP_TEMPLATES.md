@@ -81,6 +81,8 @@ trimming them.
 | `payment_collected` | We have received your payment of ₹{{1}} for your shipment with NationWide Logistics. Thank you. Your GST invoice will follow separately. | `["amount"]` | 808.00 |
 | `order_created_from_pickup` | Your parcel has been accepted and your order with NationWide Logistics has been created. Your tracking number is {{1}}. We will update you as your shipment moves. | `["trackingNumber"]` | NW-26-000123 |
 | `pickup_rejected` | We were unable to accept your parcel at pickup. Reason: {{1}}. Please reply to this message and our team will help you resolve this and arrange a new pickup. | `["reason"]` | Restricted item |
+| `pickup_rescheduled` | Your NationWide Logistics pickup has been moved to {{1}}, between {{2}}. Reason: {{3}}. Please keep your parcel packed and ready. Reply to this message if the new time does not suit you. | `["pickupDate", "pickupTimeSlot", "reason"]` | 2026-11-28, 15:00-18:00, Vehicle in for repair |
+| `pickup_cancelled` | Your NationWide Logistics pickup request has been cancelled. Reason: {{1}}. No payment was taken. Reply to this message if you would like to book a new pickup. | `["reason"]` | Customer asked to cancel |
 
 ### `invoice_ready` and `receipt_ready` need a document header
 

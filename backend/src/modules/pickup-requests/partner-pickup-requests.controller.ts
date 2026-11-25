@@ -33,6 +33,8 @@ import { AcceptParcelDto } from './dto/accept-parcel.dto';
 import { RejectParcelDto } from './dto/reject-parcel.dto';
 import { PhotosUpload, requireFiles } from './image-upload';
 import { KycDocumentDto, UploadPickupPhotosDto } from './dto/pickup-photos.dto';
+import { ReschedulePickupDto } from './dto/reschedule-pickup.dto';
+import { UpdatePickupAddressDto } from './dto/update-pickup-address.dto';
 
 // Pickup Partner (field executive) surface — everything a partner can do once assigned a pickup:
 // view it, recalculate/verify the parcel's real weight against the pricing engine, collect
@@ -137,6 +139,41 @@ export class PartnerPickupRequestsController {
     @CurrentUser() user: JwtPayload,
   ): Promise<PickupDocumentsDto> {
     return this.pickupRequestsService.documents(id, user.sub);
+  }
+
+  // The partner corrects the address: wrong building, the customer moved, the pin was off.
+  @Patch(':id/address')
+  async updateAddress(
+    @Param('id') id: string,
+    @Body() dto: UpdatePickupAddressDto,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<PickupRequestDto> {
+    return toPickupRequestDto(
+      await this.pickupRequestsService.updateAddress(id, dto, user.sub),
+    );
+  }
+
+  // A newly assigned pickup: the partner takes it on the day and slot it has...
+  @Patch(':id/accept-assignment')
+  async acceptAssignment(
+    @Param('id') id: string,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<PickupRequestDto> {
+    return toPickupRequestDto(
+      await this.pickupRequestsService.acceptAssignment(id, user.sub),
+    );
+  }
+
+  // ...or asks for another one, before accepting. The customer is told the new time and why.
+  @Patch(':id/reschedule')
+  async reschedule(
+    @Param('id') id: string,
+    @Body() dto: ReschedulePickupDto,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<PickupRequestDto> {
+    return toPickupRequestDto(
+      await this.pickupRequestsService.reschedule(id, dto, user.sub),
+    );
   }
 
   // Step 1 of the mobile 3-step workflow — no request body, just an ownership-scoped state

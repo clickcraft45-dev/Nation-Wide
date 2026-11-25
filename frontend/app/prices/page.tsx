@@ -13,7 +13,7 @@ export const metadata: Metadata = {
 export default function PricesPage() {
   return (
     <div className="flex min-h-screen flex-1 flex-col">
-      <MarketingNavbar />
+      <MarketingNavbar showContactTab />
       <main className="flex min-h-svh flex-1 flex-col items-center px-6 py-16">
         <PriceExplorer />
       </main>

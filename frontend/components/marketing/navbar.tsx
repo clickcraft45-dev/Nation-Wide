@@ -11,6 +11,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Logo } from "@/components/brand/logo";
 import { cn } from "@/lib/utils/cn";
 import { SiteBannerStrip, useSiteBanner } from "@/components/marketing/site-banner";
+import { ContactTab } from "@/components/marketing/contact-tab";
 
 // Seven, not nine: "Home" is the logo, and "How it works" is a section of the homepage that the
 // footer links to. "Get a quote" is the button on the right, not a link here as well.
@@ -39,7 +40,10 @@ function dashboardHrefForRole(role: string): string {
   return "/admin/dashboard";
 }
 
-export function MarketingNavbar() {
+/**
+ * @param showContactTab Hang the Call / WhatsApp buttons from the bar (homepage and prices).
+ */
+export function MarketingNavbar({ showContactTab = false }: { showContactTab?: boolean } = {}) {
   const { user } = useAuth();
   const gate = useAuthGate();
   const pathname = usePathname();
@@ -233,6 +237,7 @@ export function MarketingNavbar() {
             </motion.div>
           )}
         </AnimatePresence>
+        {showContactTab && !mobileOpen && <ContactTab />}
       </header>
 
       {/* The 4rem the pinned bar no longer takes in the document. The homepage is exempt: its hero

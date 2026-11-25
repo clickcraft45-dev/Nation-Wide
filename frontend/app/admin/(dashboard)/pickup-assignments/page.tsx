@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Inbox } from "lucide-react";
+import { Ban, CalendarClock, Inbox, MapPinPen, Trash2 } from "lucide-react";
 import type {
   PickupPartnerDto,
   PickupRequestDto,
@@ -24,6 +24,10 @@ import {
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/page-state";
 import { useToast } from "@/components/ui/toast";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { RescheduleDialog, PICKUP_SLOT_LABELS } from "@/components/pickup-requests/reschedule-dialog";
+import { CancelPickupDialog } from "@/components/pickup-requests/cancel-pickup-dialog";
+import { EditAddressDialog } from "@/components/pickup-requests/edit-address-dialog";
 
 /** A new request shows up without a reload, at the partner app's own cadence. */
 const REFRESH_MS = 30_000;
@@ -37,6 +41,23 @@ const ACTIVE_STATUSES: PickupRequestStatusCode[] = [
 ];
 
 type Tab = "unassigned" | "assigned";
+
+function slotLabel(slot: string | null): string {
+  if (!slot) return "no slot";
+  return PICKUP_SLOT_LABELS[slot as keyof typeof PICKUP_SLOT_LABELS] ?? slot;
+}
+
+/** Whether the partner has said yes, for the Assigned tab. */
+function acceptance(p: PickupRequestDto): { text: string; accepted: boolean } {
+  if (p.status === "SCHEDULED") {
+    const moved = p.rescheduledAt != null && p.acceptedAt === p.rescheduledAt;
+    return { text: moved ? "Moved by partner, accepted" : "Accepted", accepted: true };
+  }
+  return { text: "Waiting for partner to accept", accepted: false };
+}
+
+const ICON_BUTTON =
+  "inline-flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:bg-muted disabled:pointer-events-none disabled:opacity-40";
 
 function partnerName(p: PickupPartnerDto): string {
   return p.name ?? p.email;
@@ -161,13 +182,27 @@ export default function AdminPickupAssignmentsPage() {
     }
   }
 
+  function replace(updated: PickupRequestDto) {
+    setRequests((all) => all.map((p) => (p.id === updated.id ? updated : p)));
+  }
+
+  async function remove(pickup: PickupRequestDto) {
+    try {
+      await apiClient.delete(`/admin/pickup-requests/${pickup.id}`);
+      setRequests((all) => all.filter((p) => p.id !== pickup.id));
+      showToast({ variant: "success", title: `Pickup for ${pickup.customerName} deleted` });
+    } catch (err) {
+      showToast({ variant: "error", title: errorMessage(err, "Couldn't delete the pickup.") });
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-xl font-semibold text-foreground">Pickup Assignments</h1>
         <p className="text-sm text-muted-foreground">
-          Every pickup request waits here until you choose the partner who collects it. Partners
-          cannot take requests themselves.
+          Every pickup request waits here until you choose the partner who collects it. The partner
+          accepts it or asks for another time. Reschedule, cancel or delete a pickup from its row.
         </p>
       </div>
 
@@ -216,8 +251,8 @@ export default function AdminPickupAssignmentsPage() {
               <TableHead>Parcel</TableHead>
               <TableHead>{tab === "unassigned" ? "Waiting since" : "Assigned to"}</TableHead>
               <TableHead className="min-w-64">{tab === "unassigned" ? "Partner" : "Reassign to"}</TableHead>
-              <TableHead>
-                <span className="sr-only">Action</span>
+              <TableHead className="text-right">
+                <span className="sr-only">Actions</span>
               </TableHead>
             </TableRow>
           </TableHeader>
@@ -241,9 +276,14 @@ export default function AdminPickupAssignmentsPage() {
                       {p.pickupAddressLine1}, {p.pickupCity}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {p.pickupDate ?? "No date"} · {p.pickupTimeSlot ?? "no slot"}
+                      {p.pickupDate ?? "No date"} · {slotLabel(p.pickupTimeSlot)}
                       {p.pickupLatitude == null && " · no map pin"}
                     </p>
+                    {p.rescheduleReason && (
+                      <p className="truncate text-xs text-muted-foreground" title={p.rescheduleReason}>
+                        Moved: {p.rescheduleReason}
+                      </p>
+                    )}
                   </TableCell>
                   <TableCell className="whitespace-nowrap text-muted-foreground">
                     {p.estimatedWeightKg > 0
@@ -256,7 +296,16 @@ export default function AdminPickupAssignmentsPage() {
                     </p>
                   </TableCell>
                   <TableCell className="whitespace-nowrap text-muted-foreground">
-                    {tab === "unassigned" ? formatDateTime(p.createdAt) : (p.assignedPartnerName ?? "—")}
+                    {tab === "unassigned" ? (
+                      formatDateTime(p.createdAt)
+                    ) : (
+                      <>
+                        {p.assignedPartnerName ?? "—"}
+                        <p className={acceptance(p).accepted ? "text-xs text-success" : "text-xs text-warning"}>
+                          {acceptance(p).text}
+                        </p>
+                      </>
+                    )}
                   </TableCell>
                   <TableCell>
                     <label htmlFor={selectId} className="sr-only">
@@ -286,14 +335,91 @@ export default function AdminPickupAssignmentsPage() {
                     </select>
                   </TableCell>
                   <TableCell>
-                    <Button
-                      size="sm"
-                      onClick={() => assign(p)}
-                      isLoading={assigningId === p.id}
-                      disabled={!choice || (assigningId !== null && assigningId !== p.id)}
-                    >
-                      {tab === "unassigned" ? "Assign" : "Reassign"}
-                    </Button>
+                    <div className="flex items-center justify-end gap-1">
+                      <Button
+                        size="sm"
+                        onClick={() => assign(p)}
+                        isLoading={assigningId === p.id}
+                        disabled={!choice || (assigningId !== null && assigningId !== p.id)}
+                      >
+                        {tab === "unassigned" ? "Assign" : "Reassign"}
+                      </Button>
+                      <RescheduleDialog
+                        pickup={p}
+                        endpoint={`/admin/pickup-requests/${p.id}/reschedule`}
+                        description={
+                          p.assignedPartnerId
+                            ? `${p.customerName}, now ${p.pickupDate ?? "no date"} · ${slotLabel(p.pickupTimeSlot)}. The customer gets the new time on WhatsApp, and ${p.assignedPartnerName ?? "the partner"} is asked to accept it again.`
+                            : undefined
+                        }
+                        onDone={(updated) => {
+                          replace(updated);
+                          showToast({ variant: "success", title: `Pickup for ${updated.customerName} moved` });
+                        }}
+                        trigger={
+                          <button
+                            type="button"
+                            className={ICON_BUTTON}
+                            aria-label={`Reschedule pickup for ${p.customerName}`}
+                            title="Reschedule"
+                          >
+                            <CalendarClock className="h-4 w-4" aria-hidden />
+                          </button>
+                        }
+                      />
+                      <EditAddressDialog
+                        pickup={p}
+                        endpoint={`/admin/pickup-requests/${p.id}/address`}
+                        onDone={(updated) => {
+                          replace(updated);
+                          showToast({ variant: "success", title: `Address saved for ${updated.customerName}` });
+                        }}
+                        trigger={
+                          <button
+                            type="button"
+                            className={ICON_BUTTON}
+                            aria-label={`Edit pickup address for ${p.customerName}`}
+                            title="Edit address"
+                          >
+                            <MapPinPen className="h-4 w-4" aria-hidden />
+                          </button>
+                        }
+                      />
+                      <CancelPickupDialog
+                        pickup={p}
+                        onDone={(updated) => {
+                          setRequests((all) => all.filter((r) => r.id !== updated.id));
+                          showToast({ variant: "success", title: `Pickup for ${updated.customerName} cancelled` });
+                        }}
+                        trigger={
+                          <button
+                            type="button"
+                            className={ICON_BUTTON}
+                            aria-label={`Cancel pickup for ${p.customerName}`}
+                            title="Cancel pickup"
+                          >
+                            <Ban className="h-4 w-4" aria-hidden />
+                          </button>
+                        }
+                      />
+                      <ConfirmDialog
+                        title={`Delete the pickup for ${p.customerName}?`}
+                        description="For duplicates and bookings made by mistake. It is removed for good and the audit log keeps a record. To keep its history, cancel it instead."
+                        confirmLabel="Delete pickup"
+                        variant="danger"
+                        onConfirm={() => remove(p)}
+                        trigger={
+                          <button
+                            type="button"
+                            className={ICON_BUTTON}
+                            aria-label={`Delete pickup for ${p.customerName}`}
+                            title="Delete"
+                          >
+                            <Trash2 className="h-4 w-4" aria-hidden />
+                          </button>
+                        }
+                      />
+                    </div>
                   </TableCell>
                 </TableRow>
               );

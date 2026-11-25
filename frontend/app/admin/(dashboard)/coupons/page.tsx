@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { TicketPercent } from "lucide-react";
+import { TicketPercent, Trash2 } from "lucide-react";
 import type { CouponDto } from "@nationwide/shared-types";
 import { isCouponUsable } from "@nationwide/shared-types";
 import { apiClient, errorMessage } from "@/lib/api-client";
@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/components/ui/toast";
 import { DateField } from "@/components/ui/date-field";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 const rupees = (n: number) => `₹${n.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 
@@ -37,10 +38,11 @@ function statusLabel(coupon: CouponDto): string {
 }
 
 /**
- * Discount codes: create one, hand it out, retire it when it has done its job.
+ * Discount codes: create one, hand it out, retire it when it has done its job, delete it when it
+ * should be gone. Double-click a row to see who used it.
  *
- * Retiring is a deactivation, never a delete — an order that was discounted points back at the
- * coupon that discounted it, and that record has to keep meaning something.
+ * Deleting a code nobody used removes it. Deleting one that discounted a booking hides it and
+ * stops it working, but keeps it, because those bookings still name the code they used.
  */
 export default function AdminCouponsPage() {
   const [coupons, setCoupons] = useState<CouponDto[]>([]);
@@ -107,6 +109,20 @@ export default function AdminCouponsPage() {
     }
   }
 
+  async function remove(coupon: CouponDto) {
+    try {
+      const { hidden } = await apiClient.delete<{ hidden: boolean }>(`/admin/coupons/${coupon.id}`);
+      setCoupons((all) => all.filter((c) => c.id !== coupon.id));
+      showToast({
+        variant: "success",
+        title: `${coupon.code} deleted`,
+        description: hidden ? "It had been used, so it stays on those bookings but no longer works." : undefined,
+      });
+    } catch (err) {
+      showToast({ variant: "error", title: errorMessage(err, "Couldn't delete that coupon.") });
+    }
+  }
+
   const canCreate = code.trim().length >= 3 && Number(discountAmount) > 0;
 
   return (
@@ -114,8 +130,8 @@ export default function AdminCouponsPage() {
       <div>
         <h1 className="text-xl font-semibold text-foreground">Coupons</h1>
         <p className="text-sm text-muted-foreground">
-          Flat-rupee discount codes. Apply one when marking an order paid and it comes off what
-          the customer owes.
+          Flat-rupee discount codes. Customers enter one when booking, or staff apply it when
+          marking an order paid. Double-click a code to see who used it.
         </p>
       </div>
 
@@ -201,7 +217,7 @@ export default function AdminCouponsPage() {
           </TableHeader>
           <TableBody>
             {coupons.map((coupon) => (
-              <TableRow key={coupon.id}>
+              <TableRow key={coupon.id} href={`/admin/coupons/${coupon.id}`}>
                 <TableCell className="font-mono font-medium text-foreground">
                   {coupon.code}
                 </TableCell>
@@ -215,13 +231,36 @@ export default function AdminCouponsPage() {
                     still reads as on in the database and confuses whoever tries it. */}
                 <TableCell>{statusLabel(coupon)}</TableCell>
                 <TableCell className="text-right">
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => setActive(coupon, !coupon.isActive)}
-                  >
-                    {coupon.isActive ? "Retire" : "Reactivate"}
-                  </Button>
+                  <div className="flex items-center justify-end gap-1">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => setActive(coupon, !coupon.isActive)}
+                    >
+                      {coupon.isActive ? "Retire" : "Reactivate"}
+                    </Button>
+                    <ConfirmDialog
+                      title={`Delete ${coupon.code}?`}
+                      description={
+                        coupon.timesUsed > 0
+                          ? "It stops working at once. The bookings it discounted keep showing it."
+                          : "It stops working at once and the code can be created again later."
+                      }
+                      confirmLabel="Delete coupon"
+                      variant="danger"
+                      onConfirm={() => remove(coupon)}
+                      trigger={
+                        <button
+                          type="button"
+                          aria-label={`Delete coupon ${coupon.code}`}
+                          title="Delete"
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:bg-muted"
+                        >
+                          <Trash2 className="h-4 w-4" aria-hidden />
+                        </button>
+                      }
+                    />
+                  </div>
                 </TableCell>
               </TableRow>
             ))}

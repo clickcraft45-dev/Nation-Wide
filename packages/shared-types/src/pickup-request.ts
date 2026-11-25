@@ -24,7 +24,7 @@ export interface PickupPartnerDto {
   name: string | null;
   phone: string | null;
   isActive: boolean;
-  /** Where the partner's phone last reported from (fetched once per app session). */
+  /** Where the partner's phone last reported from: every few minutes while the app is open. */
   lastLatitude: number | null;
   lastLongitude: number | null;
   locationUpdatedAt: string | null; // ISO 8601
@@ -267,6 +267,14 @@ export interface PickupRequestDto {
   // Set when the partner confirms they're physically at the pickup location — required before
   // verifiedAt can be set (see VerifyPickupRequestDto / PickupRequestsService.verify).
   arrivedAt: string | null; // ISO 8601
+  /** The partner said they will do it (status SCHEDULED). Until then they may ask for another day. */
+  acceptedAt: string | null; // ISO 8601
+  /** The last time the date or slot was moved, by the partner or by staff, and why. */
+  rescheduledAt: string | null; // ISO 8601
+  rescheduleReason: string | null;
+  /** Staff called the pickup off. */
+  cancelledAt: string | null; // ISO 8601
+  cancellationReason: string | null;
 
   verifiedWeightKg: number | null;
   verifiedShipmentType: ShipmentTypeCode | null;
@@ -460,4 +468,16 @@ export function kycNumberProblem(type: KycDocumentType, value: string): string |
   return KYC_NUMBER_PATTERNS[type].test(number)
     ? null
     : `A ${KYC_DOCUMENT_LABELS[type].replace(/ Number$/, "")} number is ${KYC_NUMBER_HINTS[type]}.`;
+}
+
+/** Body of PATCH .../:id/reschedule (partner before accepting, or admin before arrival). */
+export interface ReschedulePickupDto {
+  pickupDate: string; // YYYY-MM-DD
+  pickupTimeSlot: string;
+  reason: string;
+}
+
+/** Body of PATCH /admin/pickup-requests/:id/cancel. */
+export interface CancelPickupDto {
+  reason: string;
 }
